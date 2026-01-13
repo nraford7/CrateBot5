@@ -1,0 +1,138 @@
+"""Auto-generated tag lexicon from user definitions."""
+
+TAG_LEXICON_PROMPT = """
+## TAG LEXICON - Use these words with these specific meanings:
+
+### TEXTURE & MOTION
+- **HATS**: Hi-hat prominence - crisp, rhythmic high-frequency percussion with sharp, bright hi-hats as a prominent feature driving the groove
+- **DRIVING**: Relentless forward momentum, insistent energy that pushes the track forward
+- **WALKINGBASS**: Moving bassline that steps through notes in a rising or descending cycle, with the last note acting as the beginning of the next phrase like a continuous loop. Strong jazz/funk influence
+- **BOUNCY**: Playful, springy groove with upward energy, makes you want to move
+- **PUNCHY**: Tight, impactful kick drums and bass or sub bass that hit hard with defined attack and kinetic force
+- **BROKEN**: Non-4/4 or syncopated rhythm, off-grid feel, UK garage/breakbeat influence, also included drum & bass or jungle, dubstep
+- **GRINDYBASS**: Distorted, textured low-end with friction/grit, like an electric saw, a Reese bass
+- **SWEEPS**: Filter sweeps or risers - moving frequency content, builds tension
+- **ARPEGGIATED**: Sequenced notes playing in pattern, mostly as a melody or accompaniment, synth arps, melodic movement
+- **SWUNG**: Shuffled timing, not quantized straight, human groove feel
+- **LOOPY**: Hypnotic repetition, circular patterns that lock you in
+- **CHUGGING**: Relentless mid-tempo pulse, emphasis on repetitive kick, motorik feel
+- **JERKY**: Staccato, choppy rhythm with sudden stops/starts, angular
+- **STOMPING**: Heavy four-on-the-floor kick, marching energy, crowd-moving
+- **SLAMMING**: Maximum impact, hits extremely hard, peak-time energy
+- **FLOATING**: Weightless, suspended feel - pads and atmosphere over groove
+- **HYPNOTIC**: Trance-inducing repetition, locks you into a meditative state
+- **TRIPPY**: Psychedelic, disorienting, unusual sound design or effects
+- **GLITCHY**: Digital artifacts, stutters, granular textures, IDM influence
+- **GRINDY**: A Reese bass, buzzing, distorted, overdriven elements, fuzzy, electronic as a major part of the sound
+- **DUBBY**: Dub influence - heavy delay, echo, space, bass weight, rolled off highs, filtered and loopy
+- **GROOVY**: Like funky but softer
+- **GROOVE**: The rhythmic feel, what makes you move
+- **GRIND**: Grinding rhythm, persistent texture
+### MOOD & QUALITY
+- **DOPE**: Just an amazing, head bobbing, shake your hips, move your ass, positive track that makes you want to dance and scrunch your face up with appreciation
+- **EPIC**: Grand scale, takes you on a journey, emotional peaks, builds to something big
+- **MELODIC**: Strong melodic content, memorable hooks or progressions
+- **FUNKY**: Groove-heavy with syncopation, makes you move, funk influence
+- **DREAMY**: Ethereal, hazy, reverb-soaked atmosphere, otherworldly
+- **TECHY**: Tight, percussive, and minimal, tech house feels like controlled pressure—cool, confident, body-driven groove that hypnotizes rather than emotes, keeping dancers locked into a subtle, rolling flow without ever breaking tension.
+- **MUSICAL**: Rich harmonic content, chord progressions, full live instrumentation, rich variation in melody, rhythm and phrasing
+- **SOULFUL**: Emotional depth, gospel/R&B influence, Chicago or new york city deep house, often with organs, singing, strings, emotional density
+- **CLASSIC**: A legendary, iconic or popular song from a given era. Determined by how popular or iconic the track was.
+- **JAZZY**: Jazz harmony or instrumentation, sophisticated chords, improvisation feel, shuffling
+- **JOYFUL**: Happy, celebratory energy, hands in the air, shouting out loud, climax ecstatic and fun
+- **DIRTY**: Gritty, raw, unpolished, grind, fuzzy, nasty, dissonant, scrunched up bass face
+- **FUN**: Playful, enjoyable, not too serious
+- **SPIRITUAL**: Transcendent, ceremonial, connecting to something higher, often organic instrumentation
+- **WEIRD**: Unconventional, unexpected elements, surprises
+- **GOOFY**: A mix of Weird and Fun
+- **DARK**: Minor key, ominous atmosphere, shadows and tension
+- **DEEP**: Subby, introspective, hypnotic - not aggressive, late-night
+- **EMOTIONAL**: Evokes strong feeling, melancholy or reflection, introspection, sadness
+- **BEAUTIFUL**: Aesthetically pleasing, moving, well-crafted
+- **SICK**: Impressive in an edgy way, makes you react
+- **AWESOME**: Outstanding, impressive, reaction-worthy
+- **HAPPY**: Creates a feeling of joy, a smile, upbeat, emotional, positive,
+- **SOFT**: Gentle, quiet energy, not aggressive
+- **HARD**: Aggressive, intense, demanding, high energy
+- **ROUGH**: Unpolished, raw textures, lo-fi character
+- **SMOOTH**: Polished, no harsh edges, easy on the ears
+- **MOODY**: Atmospheric, emotional, evocative of a feeling state
+- **EDGY**: Tension, dissonance, slightly uncomfortable, aggressive undertones
+- **SPACEY**: Vast reverbs, delays, cosmic atmosphere, outer space feel
+- **MINIMAL**: Stripped down, essential elements only, space between notes
+- **UPBEAT**: Positive energy, major key feel, happy vibes
+- **UPLIFTING**: Builds positive energy, euphoric, hands-in-the-air
+- **BANGING**: Hard-hitting, impactful, loud
+- **AMAZING**: Exceptional quality, impressive
+- **HUGE**: Massive sounds and feeling, big booms, long echos, operatic accompaniment or strings
+- **LIGHT**: A little bit of something, or just a soft touch of that thing
+### GENRE & REGION
+- **AFRO**: African rhythmic influence, polyrhythmic, Afrobeat/Afro-house, African vocals
+- **DISCO**: Disco influence - strings, four-on-the-floor, groove
+- **ELECTRO**: Electro influence, robotic, 808s, breakdance era
+- **LATIN**: Latin American rhythms, congas, timbales, salsa influence
+- **TROPICAL**: Caribbean/island influence, sunny, vacation vibes
+- **ARABIC**: Middle Eastern scales, oud/strings, desert atmosphere
+- **TECHNO**: Literal 4/4 stripped down traditional long format techno
+- **ACID**: 303 squelch, acid house influence, resonant filter
+- **ASIAN**: East or South Asian influence, strings, melodies or tones, pentatonic, traditional instruments
+- **JUNGLE**: Drum and bass, ragga, jump up, genre style with grindy or dubby baselines, amen breaks, fast
+- **MIAMI**: Miami bass influence, booty shake, Latin-tinged, 808s
+- **HOUSE**: House music style - 4/4, soulful, groove-based
+- **FUNK**: Funk influence - syncopation, bass-heavy, James Brown energy
+- **DUB**: Dub influence - heavy delay, echo, space, bass weight, rolled off highs, filtered and loopy
+- **AFRICAN**: African musical influence, polyrhythms, call-response
+- **CHICAGO**: Chicago house influence, jacking, piano, gospel vocals
+- **TRIBAL**: Percussion-heavy, primal rhythms, world music influence
+- **RAGGA**: Ragga/dancehall influence, toasting, digital reggae
+- **SOCA**: Caribbean soca influence, party energy, fast tempo
+- **ZOUK**: Zouk influence - romantic, Caribbean, flowing
+- **SPANISH**: Flamenco influence, acoustic guitar, passionate feel
+- **DESERT**: Sparse, dusty, Middle Eastern/North African feel, open space
+- **POPPY**: Pop sensibility, catchy, accessible hooks, a literally popular song, a remix of a pop song, or using a popular sample or lyric
+- **TECH**: Tight, percussive, and minimal, tech house feels like controlled pressure—cool, confident, body-driven groove that hypnotizes rather than emotes, keeping dancers locked into a subtle, rolling flow without ever breaking tension.
+- **HOUSEY**: Heavy four-on-the-floor kick, marching energy, crowd-moving
+- **RAP**: Rapping, hip hop vocals, beats and vibes
+### SOUND ELEMENTS
+- **BEATS**: Drum pattern prominence, rhythm-focused
+- **SINGING**: Vocal presence with melody, sung parts
+- **CONGAS**: Conga drum presence, Latin percussion
+- **BOOMINGBASS**: Deep, resonant bass that fills the room, often huge sub bass 808’s
+- **GUITAR**: Guitar or plucked stringed instruments presence - acoustic or electric
+- **PADS**: Sustained synth chords, atmospheric background
+- **HORNS**: Brass/horn section presence
+- **ORGAN**: Organ sound, gospel/soul influence
+- **CHANTING**: Repeated vocal phrases, ritualistic
+- **SPOKEN**: Spoken word like poetry, not singing or rapping
+- **PIANO**: Piano presence, keys
+- **STRINGS**: String section - real or synthesized, either persistent or climactic
+- **BASS**: Bass prominence, low-end focused
+- **VOCAL**: Voice present in the track
+- **VOCALS**: Voice/singing present
+- **DRUMS**: Drum prominence, rhythm section
+- **FLUTE**: Flute sound present
+- **SYNTH**: Synthesizer presence
+- **FILTER**: Filter movement, sweeping frequencies
+- **MELODY**: Melodic hook or lead line
+- **ACAPELLA**: Only a vocal, spoken word or singing without any instrumentation
+- **CONGA**: Conga drum presence, Latin percussion
+- **NOODLE**: Meandering melodic improvisation, synth exploration
+### DJ FUNCTION
+- **PEAK**: Peak-time material, high energy, climax moment
+- **BUILD**: Building energy, rising tension, leads somewhere
+- **BUILDER**: Track that builds energy over time
+- **BUILDING**: Energy increasing, tension rising
+- **JOURNEY**: Evolving track that takes you somewhere, progression
+- **RELEASE**: Tension release, drop, payoff moment
+- **CLIMAX**: Peak moment, maximum intensity
+- **SLAMMER**: Hard-hitting track, makes impact
+- **STORMER**: Crowd-destroying track, guaranteed reaction
+- **GROOVER**: Groove-focused track, steady energy maintainer
+- **SUSTAIN**: A track which keeps the energy going at the same level, holding and working a groove on a theme
+- **ENERGY**: A description of how much momentum a track has, how much movement is going on, how dense the instrumentation is.
+- **SICKNESS**: Exceptional quality, standout factor
+- **DOPENESS**: High quality factor, impressive element
+- **VIBES**: Strong atmosphere/feeling
+- **VIBE**: Atmospheric quality, feeling
+- **BEAT**: A description of the rhythm section of the track
+"""

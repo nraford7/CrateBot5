@@ -1,0 +1,413 @@
+import Foundation
+import ID3TagEditor
+
+// MARK: - ID3 Errors
+
+/// Errors that can occur during ID3 tag operations.
+public enum ID3Error: LocalizedError, Equatable {
+    /// The specified file was not found.
+    case fileNotFound(URL)
+
+    /// Failed to read tags from the file.
+    case readFailed(String)
+
+    /// Failed to write tags to the file.
+    case writeFailed(String)
+
+    /// The file format is not supported (not an MP3 file).
+    case invalidFormat(URL)
+
+    public var errorDescription: String? {
+        switch self {
+        case .fileNotFound(let url):
+            return "File not found: \(url.path)"
+        case .readFailed(let reason):
+            return "Failed to read ID3 tags: \(reason)"
+        case .writeFailed(let reason):
+            return "Failed to write ID3 tags: \(reason)"
+        case .invalidFormat(let url):
+            return "Invalid file format (expected MP3): \(url.path)"
+        }
+    }
+}
+
+// MARK: - ID3 Manager
+
+/// Actor for thread-safe ID3 tag reading and writing operations.
+///
+/// Uses the ID3TagEditor library to read and write ID3v2.3 tags.
+/// All operations are isolated to ensure thread safety.
+public actor ID3Manager {
+    /// The underlying ID3TagEditor instance.
+    private let editor: ID3TagEditor
+
+    /// Creates a new ID3Manager instance.
+    public init() {
+        self.editor = ID3TagEditor()
+    }
+
+    // MARK: - Reading Tags
+
+    /// Reads ID3 tags from an MP3 file.
+    ///
+    /// - Parameter url: The URL of the MP3 file to read.
+    /// - Returns: The extracted tags from the file.
+    /// - Throws: `ID3Error` if the file cannot be read.
+    public func readTags(from url: URL) throws -> ExtractedTags {
+        // Check if file exists
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw ID3Error.fileNotFound(url)
+        }
+
+        // Check file extension
+        guard url.pathExtension.lowercased() == "mp3" else {
+            throw ID3Error.invalidFormat(url)
+        }
+
+        do {
+            guard let tag = try editor.read(from: url.path) else {
+                // No tag found - return empty tags
+                return ExtractedTags()
+            }
+
+            let reader = ID3TagContentReader(id3Tag: tag)
+
+            // Read title from TIT2 frame
+            let title = reader.title()
+
+            // Read artist from TPE1 frame
+            let artist = reader.artist()
+
+            // Read album artist from TPE2 frame
+            let albumArtist = reader.albumArtist()
+
+            // Read album from TALB frame
+            let album = reader.album()
+
+            // Read genre from TCON frame
+            var extractedGenre: String?
+            if let genreFrame = reader.genre() {
+                extractedGenre = genreFrame.description
+            }
+
+            // Legacy timing support - keep for backwards compatibility
+            var extractedTiming: String?
+            if let genreFrame = reader.genre() {
+                let genreValue = genreFrame.description ?? ""
+                if !genreValue.isEmpty && !TagMapping.isGenre(genreValue) {
+                    extractedTiming = genreValue
+                }
+            }
+            if extractedTiming == nil, let albumValue = reader.album() {
+                extractedTiming = albumValue
+            }
+
+            // Read mood from content group frame (TIT1)
+            let mood = reader.contentGrouping()
+
+            // Read comments from COMM frame
+            // Try to get the best comment - prefer ones without "ID3v1" in description
+            let commentsArray = reader.comments()
+            var comments: String? = nil
+            for comment in commentsArray {
+                // Skip empty content
+                let content = comment.content
+                guard !content.isEmpty else { continue }
+
+                // Clean up the content - remove ID3v1 prefixes if present
+                var cleanContent = content
+
+                // Remove common ID3v1 description prefixes that might be in content
+                let prefixesToRemove = ["ID3v1 Comment", "ID3v1Comment", "Comment"]
+                for prefix in prefixesToRemove {
+                    if cleanContent.hasPrefix(prefix) {
+                        cleanContent = String(cleanContent.dropFirst(prefix.count))
+                            .trimmingCharacters(in: .whitespaces)
+                    }
+                }
+
+                // Try to decode if it looks like it might be Latin-1 encoded
+                if let latin1Data = cleanContent.data(using: .isoLatin1),
+                   let utf8String = String(data: latin1Data, encoding: .utf8),
+                   utf8String != cleanContent {
+                    cleanContent = utf8String
+                }
+
+                if !cleanContent.isEmpty {
+                    comments = cleanContent
+                    break
+                }
+            }
+
+            // Read vibe short from composer frame (TCOM)
+            let vibeShort = reader.composer()
+
+            // Read vibe description from subtitle frame (TIT3)
+            let vibeDescription = reader.subtitle()
+
+            // Read scene from file owner frame (TOWN)
+            let extractedScene = reader.fileOwner()
+
+            // Read hook from lyricist frame (TEXT)
+            let extractedHook = reader.lyricist()
+
+            // Read BPM from TBPM frame
+            let bpm = reader.beatsPerMinute()
+
+            // Read year from recording date
+            let year: String?
+            if let recordingDate = reader.recordingDateTime() {
+                year = recordingDate.year.map { String($0) }
+            } else {
+                year = nil
+            }
+
+            // Read publisher from TPUB frame
+            let publisher = reader.publisher()
+
+            // Read conductor from TPE3 frame
+            let conductor = reader.conductor()
+
+            // Read encoded by from TENC frame
+            let encodedBy = reader.encodedBy()
+
+            // Read copyright - not directly available in reader, skip for now
+            let copyright: String? = nil
+
+            // Read original artist - not directly available in reader, skip for now
+            let originalArtist: String? = nil
+
+            return ExtractedTags(
+                title: title,
+                artist: artist,
+                albumArtist: albumArtist,
+                album: album,
+                genre: extractedGenre,
+                timing: extractedTiming,
+                mood: mood,
+                comments: comments,
+                vibeShort: vibeShort,
+                vibeDescription: vibeDescription,
+                scene: extractedScene,
+                hook: extractedHook,
+                bpm: bpm.map { String($0) },
+                year: year,
+                publisher: publisher,
+                conductor: conductor,
+                encodedBy: encodedBy,
+                copyright: copyright,
+                originalArtist: originalArtist
+            )
+        } catch {
+            throw ID3Error.readFailed(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Writing Tags
+
+    /// Writes ID3 tags to an MP3 file.
+    ///
+    /// Only non-nil tag values will be written. Existing tags not specified
+    /// in `tags` will be preserved.
+    ///
+    /// When `tags.overwrite` is `true` (default), specified tag values will replace
+    /// existing values. When `false`, tags will only be written for fields that
+    /// don't already have values in the file.
+    ///
+    /// - Parameters:
+    ///   - tags: The tags to write.
+    ///   - url: The URL of the MP3 file to write to.
+    /// - Throws: `ID3Error` if the file cannot be written.
+    public func writeTags(_ tags: TagsToWrite, to url: URL) throws {
+        // Check if file exists
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw ID3Error.fileNotFound(url)
+        }
+
+        // Check file extension
+        guard url.pathExtension.lowercased() == "mp3" else {
+            throw ID3Error.invalidFormat(url)
+        }
+
+        // Skip if no tags to write
+        guard !tags.isEmpty else {
+            return
+        }
+
+        do {
+            // Read existing tags to preserve them
+            let existingTag = try editor.read(from: url.path)
+
+            // Build new tag, starting with existing frames if available
+            var builder = ID32v3TagBuilder()
+
+            // Preserve existing frames and merge with new values
+            if let existing = existingTag {
+                let reader = ID3TagContentReader(id3Tag: existing)
+
+                // Handle genre - write to TCON frame
+                // When overwrite is false, only write if existing is nil
+                let existingGenre = reader.genre()
+                if let genre = tags.genre, tags.overwrite || existingGenre == nil {
+                    builder = builder.genre(frame: ID3FrameGenre(genre: nil, description: genre))
+                } else if let existingGenre {
+                    builder = builder.genre(frame: ID3FrameGenre(
+                        genre: existingGenre.identifier,
+                        description: existingGenre.description
+                    ))
+                }
+
+                // Handle timing - write to album frame (TALB)
+                let existingAlbum = reader.album()
+                if let timing = tags.timing, tags.overwrite || existingAlbum == nil {
+                    builder = builder.album(frame: ID3FrameWithStringContent(content: timing))
+                } else if let existingAlbum {
+                    builder = builder.album(frame: ID3FrameWithStringContent(content: existingAlbum))
+                }
+
+                // Handle mood - write to content group frame (TIT1)
+                let existingGrouping = reader.contentGrouping()
+                if let mood = tags.mood, tags.overwrite || existingGrouping == nil {
+                    builder = builder.contentGrouping(frame: ID3FrameWithStringContent(content: mood))
+                } else if let existingGrouping {
+                    builder = builder.contentGrouping(frame: ID3FrameWithStringContent(content: existingGrouping))
+                }
+
+                // Handle comments - write to COMM frame (only first comment is used)
+                let existingComment = reader.comments().first
+                if let comments = tags.comments, tags.overwrite || existingComment == nil {
+                    builder = builder.comment(
+                        language: .eng,
+                        frame: ID3FrameWithLocalizedContent(
+                            language: .eng,
+                            contentDescription: "",
+                            content: comments
+                        )
+                    )
+                } else if let existingComment {
+                    builder = builder.comment(
+                        language: existingComment.language,
+                        frame: ID3FrameWithLocalizedContent(
+                            language: existingComment.language,
+                            contentDescription: existingComment.contentDescription,
+                            content: existingComment.content
+                        )
+                    )
+                }
+
+                // Handle vibe short - write to composer frame (TCOM)
+                let existingComposer = reader.composer()
+                if let vibeShort = tags.vibeShort, tags.overwrite || existingComposer == nil {
+                    builder = builder.composer(frame: ID3FrameWithStringContent(content: vibeShort))
+                } else if let existingComposer {
+                    builder = builder.composer(frame: ID3FrameWithStringContent(content: existingComposer))
+                }
+
+                // Handle vibe description - write to subtitle frame (TIT3)
+                let existingSubtitle = reader.subtitle()
+                if let vibeDescription = tags.vibeDescription, tags.overwrite || existingSubtitle == nil {
+                    builder = builder.subtitle(frame: ID3FrameWithStringContent(content: vibeDescription))
+                } else if let existingSubtitle {
+                    builder = builder.subtitle(frame: ID3FrameWithStringContent(content: existingSubtitle))
+                }
+
+                // Handle scene - write to file owner frame (TOWN)
+                let existingScene = reader.fileOwner()
+                if let scene = tags.scene, tags.overwrite || existingScene == nil {
+                    builder = builder.fileOwner(frame: ID3FrameWithStringContent(content: scene))
+                } else if let existingScene {
+                    builder = builder.fileOwner(frame: ID3FrameWithStringContent(content: existingScene))
+                }
+
+                // Handle hook - write to lyricist frame (TEXT)
+                let existingHook = reader.lyricist()
+                if let hook = tags.hook, tags.overwrite || existingHook == nil {
+                    builder = builder.lyricist(frame: ID3FrameWithStringContent(content: hook))
+                } else if let existingHook {
+                    builder = builder.lyricist(frame: ID3FrameWithStringContent(content: existingHook))
+                }
+
+                // Handle Essentia genres - write to publisher frame (TPUB)
+                let existingPublisher = reader.publisher()
+                if let essentiaGenres = tags.essentiaGenres, tags.overwrite || existingPublisher == nil {
+                    builder = builder.publisher(frame: ID3FrameWithStringContent(content: essentiaGenres))
+                } else if let existingPublisher {
+                    builder = builder.publisher(frame: ID3FrameWithStringContent(content: existingPublisher))
+                }
+
+                // Handle Essentia moods - write to conductor frame (TPE3)
+                let existingConductor = reader.conductor()
+                if let essentiaMoods = tags.essentiaMoods, tags.overwrite || existingConductor == nil {
+                    builder = builder.conductor(frame: ID3FrameWithStringContent(content: essentiaMoods))
+                } else if let existingConductor {
+                    builder = builder.conductor(frame: ID3FrameWithStringContent(content: existingConductor))
+                }
+
+                // Handle Essentia instruments - write to encoded by frame (TENC)
+                let existingEncodedBy = reader.encodedBy()
+                if let essentiaInstruments = tags.essentiaInstruments, tags.overwrite || existingEncodedBy == nil {
+                    builder = builder.encodedBy(frame: ID3FrameWithStringContent(content: essentiaInstruments))
+                } else if let existingEncodedBy {
+                    builder = builder.encodedBy(frame: ID3FrameWithStringContent(content: existingEncodedBy))
+                }
+
+                // Preserve other common frames
+                if let title = reader.title() {
+                    builder = builder.title(frame: ID3FrameWithStringContent(content: title))
+                }
+                if let artist = reader.artist() {
+                    builder = builder.artist(frame: ID3FrameWithStringContent(content: artist))
+                }
+            } else {
+                // No existing tag - just write new values
+                if let genre = tags.genre {
+                    builder = builder.genre(frame: ID3FrameGenre(genre: nil, description: genre))
+                }
+                if let timing = tags.timing {
+                    builder = builder.album(frame: ID3FrameWithStringContent(content: timing))
+                }
+                if let mood = tags.mood {
+                    builder = builder.contentGrouping(frame: ID3FrameWithStringContent(content: mood))
+                }
+                if let comments = tags.comments {
+                    builder = builder.comment(
+                        language: .eng,
+                        frame: ID3FrameWithLocalizedContent(
+                            language: .eng,
+                            contentDescription: "",
+                            content: comments
+                        )
+                    )
+                }
+                if let vibeShort = tags.vibeShort {
+                    builder = builder.composer(frame: ID3FrameWithStringContent(content: vibeShort))
+                }
+                if let vibeDescription = tags.vibeDescription {
+                    builder = builder.subtitle(frame: ID3FrameWithStringContent(content: vibeDescription))
+                }
+                if let scene = tags.scene {
+                    builder = builder.fileOwner(frame: ID3FrameWithStringContent(content: scene))
+                }
+                if let hook = tags.hook {
+                    builder = builder.lyricist(frame: ID3FrameWithStringContent(content: hook))
+                }
+                if let essentiaGenres = tags.essentiaGenres {
+                    builder = builder.publisher(frame: ID3FrameWithStringContent(content: essentiaGenres))
+                }
+                if let essentiaMoods = tags.essentiaMoods {
+                    builder = builder.conductor(frame: ID3FrameWithStringContent(content: essentiaMoods))
+                }
+                if let essentiaInstruments = tags.essentiaInstruments {
+                    builder = builder.encodedBy(frame: ID3FrameWithStringContent(content: essentiaInstruments))
+                }
+            }
+
+            let newTag = builder.build()
+            try editor.write(tag: newTag, to: url.path)
+        } catch let error as ID3Error {
+            throw error
+        } catch {
+            throw ID3Error.writeFailed(error.localizedDescription)
+        }
+    }
+}

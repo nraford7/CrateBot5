@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-8i559i6SNBc/RfgJAo4UkUWRd1KiRLi8bmLVB3W6QnU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdn.fontshare.com data:; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:8742 ws://127.0.0.1:8742 http://localhost:8742 ws://localhost:8742" />
+    <title>CrateBot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500&display=swap" rel="stylesheet">
+    <style>
+      #app-loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #1a1918;
+        color: #fafaf9;
+        font-family: "DM Sans", system-ui, sans-serif;
+        transition: opacity 300ms ease;
+      }
+      #app-loading.fade-out {
+        opacity: 0;
+      }
+      #app-loading .logo-circle {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: rgba(251, 191, 36, 0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 24px;
+      }
+      #app-loading .logo-circle svg {
+        width: 40px;
+        height: 40px;
+        color: #f59e0b;
+      }
+      #app-loading .brand {
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        color: #fafaf9;
+      }
+      #app-loading .brand span {
+        color: #f59e0b;
+      }
+      #app-loading .tagline {
+        font-size: 12px;
+        font-weight: 500;
+        color: #78716c;
+        letter-spacing: 0.1em;
+        margin-bottom: 24px;
+      }
+      #app-loading .loading-text {
+        font-size: 14px;
+        font-weight: 500;
+        color: #a8a29e;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #app-loading .spinner {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid rgba(245, 158, 11, 0.3);
+        border-top-color: #f59e0b;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body class="bg-sidebar dark:bg-sidebar-dark">
+    <div id="app-loading" aria-label="Loading application">
+      <div class="logo-circle">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="10"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+      <div class="brand">Crate<span>Bot</span></div>
+      <p class="tagline">GENRE - TIMING - MOOD - DESCRIPTION</p>
+      <p class="tagline" style="margin-top: 4px;">YOUR TAGGING BUDDY</p>
+      <div class="loading-text">
+        <div class="spinner" aria-hidden="true"></div>
+        <span id="loading-status">Starting up...</span>
+      </div>
+    </div>
+    <script>
+      // Global function to update loading status
+      window.updateLoadingStatus = function(status) {
+        const el = document.getElementById('loading-status');
+        if (el) el.textContent = status;
+      };
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

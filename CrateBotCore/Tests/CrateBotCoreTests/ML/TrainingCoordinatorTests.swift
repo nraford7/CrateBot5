@@ -1,0 +1,288 @@
+import XCTest
+@testable import CrateBotCore
+
+final class TrainingCoordinatorTests: XCTestCase {
+
+    // MARK: - State Tests
+
+    func testInitialStateIsIdle() async {
+        let coordinator = TrainingCoordinator()
+        let state = await coordinator.state
+        XCTAssertEqual(state, .idle)
+    }
+
+    func testStateEquality() {
+        // Test idle
+        XCTAssertEqual(TrainingCoordinator.State.idle, TrainingCoordinator.State.idle)
+
+        // Test collecting with DetailedProgress
+        let progress50 = TrainingCoordinator.DetailedProgress(processed: 50, total: 100, currentFile: "test.mp3")
+        let progress70 = TrainingCoordinator.DetailedProgress(processed: 70, total: 100, currentFile: "test.mp3")
+        let progress30 = TrainingCoordinator.DetailedProgress(processed: 30, total: 100, currentFile: "test.mp3")
+
+        XCTAssertEqual(
+            TrainingCoordinator.State.collecting(progress: progress50),
+            TrainingCoordinator.State.collecting(progress: progress50)
+        )
+        XCTAssertNotEqual(
+            TrainingCoordinator.State.collecting(progress: progress50),
+            TrainingCoordinator.State.collecting(progress: progress70)
+        )
+
+        // Test extractingFeatures with DetailedProgress
+        XCTAssertEqual(
+            TrainingCoordinator.State.extractingFeatures(progress: progress30),
+            TrainingCoordinator.State.extractingFeatures(progress: progress30)
+        )
+
+        // Test training
+        XCTAssertEqual(
+            TrainingCoordinator.State.training(progress: 0.5, currentTag: "House"),
+            TrainingCoordinator.State.training(progress: 0.5, currentTag: "House")
+        )
+        XCTAssertNotEqual(
+            TrainingCoordinator.State.training(progress: 0.5, currentTag: "House"),
+            TrainingCoordinator.State.training(progress: 0.5, currentTag: "Techno")
+        )
+
+        // Test packaging
+        XCTAssertEqual(TrainingCoordinator.State.packaging, TrainingCoordinator.State.packaging)
+
+        // Test complete
+        XCTAssertEqual(
+            TrainingCoordinator.State.complete(modelName: "TestModel"),
+            TrainingCoordinator.State.complete(modelName: "TestModel")
+        )
+        XCTAssertNotEqual(
+            TrainingCoordinator.State.complete(modelName: "TestModel"),
+            TrainingCoordinator.State.complete(modelName: "OtherModel")
+        )
+
+        // Test failed
+        XCTAssertEqual(
+            TrainingCoordinator.State.failed(error: "Error A"),
+            TrainingCoordinator.State.failed(error: "Error A")
+        )
+        XCTAssertNotEqual(
+            TrainingCoordinator.State.failed(error: "Error A"),
+            TrainingCoordinator.State.failed(error: "Error B")
+        )
+
+        // Test different states
+        XCTAssertNotEqual(TrainingCoordinator.State.idle, TrainingCoordinator.State.packaging)
+        XCTAssertNotEqual(
+            TrainingCoordinator.State.collecting(progress: progress50),
+            TrainingCoordinator.State.extractingFeatures(progress: progress50)
+        )
+    }
+
+    // MARK: - TrainingOptions Tests
+
+    func testTrainingOptionsDefaultValues() {
+        let options = TrainingCoordinator.TrainingOptions()
+
+        XCTAssertEqual(options.modelName, "CustomModel")
+        XCTAssertNil(options.selectedTags)
+        XCTAssertEqual(options.validationSplit, 0.2, accuracy: 0.001)
+        XCTAssertEqual(options.minSamplesPerTag, 50)
+    }
+
+    func testTrainingOptionsCustomValues() {
+        let selectedTags: Set<String> = ["House", "Techno", "Ambient"]
+        let options = TrainingCoordinator.TrainingOptions(
+            modelName: "MyCustomModel",
+            selectedTags: selectedTags,
+            validationSplit: 0.3,
+            minSamplesPerTag: 100
+        )
+
+        XCTAssertEqual(options.modelName, "MyCustomModel")
+        XCTAssertEqual(options.selectedTags, selectedTags)
+        XCTAssertEqual(options.validationSplit, 0.3, accuracy: 0.001)
+        XCTAssertEqual(options.minSamplesPerTag, 100)
+    }
+
+    // MARK: - TrainingSummary Tests
+
+    func testTrainingSummaryInitialization() {
+        let modelURL = URL(fileURLWithPath: "/tmp/models/TestModel")
+        let summary = TrainingCoordinator.TrainingSummary(
+            modelName: "TestModel",
+            trainedTags: ["House", "Techno", "Ambient"],
+            skippedTags: ["Rare Tag"],
+            totalTracks: 1000,
+            averageAccuracy: 0.85,
+            modelURL: modelURL
+        )
+
+        XCTAssertEqual(summary.modelName, "TestModel")
+        XCTAssertEqual(summary.trainedTags, ["House", "Techno", "Ambient"])
+        XCTAssertEqual(summary.skippedTags, ["Rare Tag"])
+        XCTAssertEqual(summary.totalTracks, 1000)
+        XCTAssertEqual(summary.averageAccuracy, 0.85, accuracy: 0.001)
+        XCTAssertEqual(summary.modelURL, modelURL)
+    }
+
+    func testTrainingSummaryEmptyTags() {
+        let modelURL = URL(fileURLWithPath: "/tmp/models/EmptyModel")
+        let summary = TrainingCoordinator.TrainingSummary(
+            modelName: "EmptyModel",
+            trainedTags: [],
+            skippedTags: [],
+            totalTracks: 0,
+            averageAccuracy: 0.0,
+            modelURL: modelURL
+        )
+
+        XCTAssertTrue(summary.trainedTags.isEmpty)
+        XCTAssertTrue(summary.skippedTags.isEmpty)
+        XCTAssertEqual(summary.totalTracks, 0)
+    }
+
+    // MARK: - createModelMetadata Tests
+
+    func testCreateModelMetadataReturnsCorrectStructure() async {
+        let coordinator = TrainingCoordinator()
+        let tags = ["House", "Techno", "Ambient"]
+
+        let metadata = await coordinator.createModelMetadata(
+            name: "TestModel",
+            tags: tags,
+            trainingFileCount: 500,
+            accuracy: 0.92
+        )
+
+        XCTAssertEqual(metadata.name, "TestModel")
+        XCTAssertEqual(metadata.version, "1.0.0")
+        XCTAssertEqual(metadata.trainingFileCount, 500)
+        XCTAssertEqual(metadata.accuracy, 0.92)
+        XCTAssertFalse(metadata.pipelineVersion.isEmpty)
+        XCTAssertFalse(metadata.categories.isEmpty)
+
+        // Check that tags are included
+        let allTagsInMetadata = metadata.tags.values.flatMap { $0 }
+        for tag in tags {
+            XCTAssertTrue(allTagsInMetadata.contains(tag), "Expected tag '\(tag)' in metadata")
+        }
+    }
+
+    func testCreateModelMetadataPipelineVersionHash() async {
+        let coordinator = TrainingCoordinator()
+
+        let metadata1 = await coordinator.createModelMetadata(
+            name: "Model1",
+            tags: ["House"],
+            trainingFileCount: 100,
+            accuracy: 0.9
+        )
+
+        let metadata2 = await coordinator.createModelMetadata(
+            name: "Model2",
+            tags: ["Techno"],
+            trainingFileCount: 200,
+            accuracy: 0.8
+        )
+
+        // Pipeline version should be consistent
+        XCTAssertEqual(metadata1.pipelineVersion, metadata2.pipelineVersion)
+    }
+
+    func testCreateModelMetadataDateIsRecent() async {
+        let coordinator = TrainingCoordinator()
+        let beforeCreation = Date()
+
+        let metadata = await coordinator.createModelMetadata(
+            name: "TestModel",
+            tags: ["House"],
+            trainingFileCount: 100,
+            accuracy: 0.9
+        )
+
+        let afterCreation = Date()
+
+        XCTAssertGreaterThanOrEqual(metadata.trainedAt, beforeCreation)
+        XCTAssertLessThanOrEqual(metadata.trainedAt, afterCreation)
+    }
+
+    // MARK: - Reset Tests
+
+    func testResetReturnsToIdleState() async {
+        let coordinator = TrainingCoordinator()
+
+        // Verify initial state is idle
+        let initialState = await coordinator.state
+        XCTAssertEqual(initialState, .idle)
+
+        // Reset (even from idle) should remain idle
+        await coordinator.reset()
+        let afterReset = await coordinator.state
+        XCTAssertEqual(afterReset, .idle)
+    }
+
+    // MARK: - CoordinatorError Tests
+
+    func testCoordinatorErrorNoDataFoundDescription() {
+        let error = CoordinatorError.noDataFound
+        XCTAssertEqual(
+            error.errorDescription,
+            "No training data found in the specified directories"
+        )
+    }
+
+    func testCoordinatorErrorInsufficientDataDescription() {
+        let error = CoordinatorError.insufficientData(details: "Only 10 samples available")
+        XCTAssertEqual(
+            error.errorDescription,
+            "Insufficient data for training: Only 10 samples available"
+        )
+    }
+
+    func testCoordinatorErrorTrainingFailedDescription() {
+        let error = CoordinatorError.trainingFailed(reason: "Model diverged during training")
+        XCTAssertEqual(
+            error.errorDescription,
+            "Training failed: Model diverged during training"
+        )
+    }
+
+    func testCoordinatorErrorSaveFailedDescription() {
+        let error = CoordinatorError.saveFailed(reason: "Disk full")
+        XCTAssertEqual(
+            error.errorDescription,
+            "Failed to save model: Disk full"
+        )
+    }
+
+    func testCoordinatorErrorIsSendable() {
+        // Verify CoordinatorError conforms to Sendable
+        let error: Sendable = CoordinatorError.noDataFound
+        XCTAssertNotNil(error)
+    }
+
+    // MARK: - Coordinator Initialization Tests
+
+    func testCoordinatorInitialization() async {
+        let coordinator = TrainingCoordinator()
+        XCTAssertNotNil(coordinator)
+
+        let state = await coordinator.state
+        XCTAssertEqual(state, .idle)
+    }
+
+    func testCoordinatorInitializationWithDependencies() async {
+        let dataCollector = TrainingDataCollector()
+        let modelTrainer = ModelTrainer()
+        let modelManager = ModelManager()
+
+        let coordinator = TrainingCoordinator(
+            dataCollector: dataCollector,
+            modelTrainer: modelTrainer,
+            modelManager: modelManager
+        )
+
+        XCTAssertNotNil(coordinator)
+
+        let state = await coordinator.state
+        XCTAssertEqual(state, .idle)
+    }
+}

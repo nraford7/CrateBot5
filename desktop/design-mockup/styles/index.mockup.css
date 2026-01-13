@@ -1,0 +1,756 @@
+/**
+ * CrateBot3 Design System - Stylesheet
+ * "Vinyl Warmth" Theme
+ *
+ * Organized:
+ * 1. Font imports
+ * 2. CSS custom properties
+ * 3. Base resets
+ * 4. Component styles
+ * 5. Utilities
+ * 6. Animations
+ */
+
+/* ═══════════════════════════════════════════════════════════════
+   1. FONT IMPORTS
+   Using: Satoshi (display) + General Sans (body) + JetBrains Mono
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Satoshi - Display font (from Fontshare - free for commercial use) */
+@font-face {
+  font-family: 'Satoshi';
+  src: url('https://cdn.fontshare.com/wf/SATOSHI-VARIABLE.woff2') format('woff2');
+  font-weight: 400 900;
+  font-display: swap;
+}
+
+/* General Sans - Body font (from Fontshare - free for commercial use) */
+@font-face {
+  font-family: 'General Sans';
+  src: url('https://cdn.fontshare.com/wf/GENERALSANS-VARIABLE.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+/* JetBrains Mono - Mono font */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════
+   2. CSS CUSTOM PROPERTIES
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Brand colors */
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-violet-500: #8b5cf6;
+
+  /* Surfaces - Light mode */
+  --surface-primary: #faf9f7;
+  --surface-elevated: #ffffff;
+  --surface-sunken: #f5f3f0;
+  --sidebar-bg: #f0eeeb;
+
+  /* Text - Light mode */
+  --text-primary: #1c1917;
+  --text-secondary: #57534e;
+  --text-muted: #a8a29e;
+
+  /* Borders - Light mode */
+  --border-color: #e7e5e4;
+
+  /* Animation timing */
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+  /* Spacing */
+  --sidebar-width: 14rem;
+  --statusbar-height: 2.25rem;
+}
+
+.dark {
+  /* Surfaces - Dark mode */
+  --surface-primary: #1a1918;
+  --surface-elevated: #242322;
+  --surface-sunken: #121110;
+  --sidebar-bg: #141312;
+
+  /* Text - Dark mode */
+  --text-primary: #fafaf9;
+  --text-secondary: #d6d3d1;
+  --text-muted: #78716c;
+
+  /* Borders - Dark mode */
+  --border-color: #3f3f3f;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   3. BASE RESETS & DEFAULTS
+   ═══════════════════════════════════════════════════════════════ */
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  font-family: 'General Sans', system-ui, sans-serif;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+}
+
+/* Smooth transitions for theme switching */
+html.transitioning,
+html.transitioning *,
+html.transitioning *::before,
+html.transitioning *::after {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease !important;
+}
+
+/* Selection color - branded */
+::selection {
+  background: rgba(245, 158, 11, 0.3);
+  color: inherit;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCROLLBARS - Refined, minimal
+   ═══════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(168, 162, 158, 0.4);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 162, 158, 0.6);
+  background-clip: content-box;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(120, 113, 108, 0.4);
+  background-clip: content-box;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 113, 108, 0.6);
+  background-clip: content-box;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FOCUS STYLES - Accessible and branded
+   ═══════════════════════════════════════════════════════════════ */
+
+*:focus-visible {
+  outline: 2px solid var(--color-amber-500);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ELECTRON SPECIFIC
+   ═══════════════════════════════════════════════════════════════ */
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   4. COMPONENT STYLES
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* ─────────────────────────────────────────────────────────────
+     BUTTONS
+     ───────────────────────────────────────────────────────────── */
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2;
+    @apply px-4 py-2.5 rounded-lg;
+    @apply font-medium text-body-md;
+    @apply transition-all duration-200 ease-smooth;
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply bg-amber-500 text-white;
+    @apply hover:bg-amber-600 hover:shadow-md;
+    @apply active:scale-[0.98] active:shadow-sm;
+  }
+
+  .btn-primary:not(:disabled):hover {
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+  }
+
+  .btn-secondary {
+    @apply bg-surface-sunken text-text-primary border border-border-light;
+    @apply hover:bg-surface-elevated hover:border-amber-300 hover:shadow-sm;
+    @apply active:scale-[0.98];
+    @apply dark:bg-surface-dark-elevated dark:border-border-dark dark:hover:border-amber-600;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-text-secondary;
+    @apply hover:bg-surface-sunken hover:text-text-primary;
+    @apply dark:hover:bg-surface-dark-elevated;
+  }
+
+  .btn-danger {
+    @apply bg-red-500 text-white;
+    @apply hover:bg-red-600;
+    @apply active:scale-[0.98];
+  }
+
+  /* Icon-only button variant */
+  .btn-icon {
+    @apply p-2.5 rounded-lg;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     CARDS
+     ───────────────────────────────────────────────────────────── */
+
+  .card {
+    @apply bg-surface-elevated rounded-xl p-5;
+    @apply shadow-card;
+    @apply transition-shadow duration-200;
+    @apply dark:bg-surface-dark-elevated;
+  }
+
+  .card-interactive {
+    @apply card cursor-pointer;
+    @apply hover:shadow-card-hover hover:-translate-y-0.5;
+    @apply transition-all duration-200;
+  }
+
+  .card-bordered {
+    @apply card border border-border-light dark:border-border-dark;
+    @apply shadow-none;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     INPUTS
+     ───────────────────────────────────────────────────────────── */
+
+  .input {
+    @apply w-full px-3.5 py-2.5 rounded-lg;
+    @apply bg-surface-sunken border border-border-light;
+    @apply text-text-primary placeholder:text-text-muted;
+    @apply transition-all duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500;
+    @apply dark:bg-surface-dark-sunken dark:border-border-dark;
+  }
+
+  .input-group {
+    @apply relative;
+  }
+
+  .input-icon {
+    @apply absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none;
+  }
+
+  .input-with-icon {
+    @apply pl-10;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     BADGES / PILLS
+     ───────────────────────────────────────────────────────────── */
+
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full;
+    @apply text-caption font-medium;
+  }
+
+  .badge-success {
+    @apply bg-emerald-100 text-emerald-700;
+    @apply dark:bg-emerald-900/30 dark:text-emerald-400;
+  }
+
+  .badge-warning {
+    @apply bg-amber-100 text-amber-700;
+    @apply dark:bg-amber-900/30 dark:text-amber-400;
+  }
+
+  .badge-danger {
+    @apply bg-red-100 text-red-700;
+    @apply dark:bg-red-900/30 dark:text-red-400;
+  }
+
+  .badge-info {
+    @apply bg-blue-100 text-blue-700;
+    @apply dark:bg-blue-900/30 dark:text-blue-400;
+  }
+
+  .badge-neutral {
+    @apply bg-stone-100 text-stone-600;
+    @apply dark:bg-stone-800 dark:text-stone-400;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     TAG CHIPS (for comment tags, etc.)
+     ───────────────────────────────────────────────────────────── */
+
+  .tag-chip {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg;
+    @apply text-body-sm font-medium;
+    @apply bg-surface-sunken border border-transparent;
+    @apply cursor-pointer select-none;
+    @apply transition-all duration-150;
+    @apply hover:border-amber-300 hover:bg-amber-50;
+    @apply dark:bg-surface-dark-sunken dark:hover:border-amber-600 dark:hover:bg-amber-900/20;
+  }
+
+  .tag-chip-selected {
+    @apply bg-amber-100 border-amber-400 text-amber-800;
+    @apply dark:bg-amber-900/30 dark:border-amber-600 dark:text-amber-300;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     PROGRESS BARS
+     ───────────────────────────────────────────────────────────── */
+
+  .progress-track {
+    @apply w-full h-2 rounded-full overflow-hidden;
+    @apply bg-surface-sunken dark:bg-surface-dark-sunken;
+  }
+
+  .progress-bar {
+    @apply h-full rounded-full;
+    @apply bg-gradient-to-r from-amber-500 to-amber-400;
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .progress-bar-animated {
+    @apply progress-bar;
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  .progress-bar-success {
+    @apply bg-gradient-to-r from-emerald-500 to-emerald-400;
+  }
+
+  .progress-bar-danger {
+    @apply bg-gradient-to-r from-red-500 to-red-400;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     DROPDOWN / SELECT
+     ───────────────────────────────────────────────────────────── */
+
+  .select {
+    @apply input appearance-none cursor-pointer;
+    @apply pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2378716c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     CHECKBOX / TOGGLE
+     ───────────────────────────────────────────────────────────── */
+
+  .checkbox {
+    @apply w-4.5 h-4.5 rounded;
+    @apply border-2 border-border-light;
+    @apply text-amber-500;
+    @apply focus:ring-amber-500 focus:ring-offset-0;
+    @apply transition-colors duration-150;
+    @apply dark:border-border-dark dark:bg-surface-dark-sunken;
+  }
+
+  .checkbox:checked {
+    @apply bg-amber-500 border-amber-500;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     TOOLTIPS
+     ───────────────────────────────────────────────────────────── */
+
+  .tooltip {
+    @apply px-2.5 py-1.5 rounded-md;
+    @apply bg-stone-900 text-white text-caption;
+    @apply shadow-lg;
+    @apply animate-fade-in;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     DIVIDERS
+     ───────────────────────────────────────────────────────────── */
+
+  .divider {
+    @apply h-px w-full bg-border-light dark:bg-border-dark;
+  }
+
+  .divider-vertical {
+    @apply w-px h-4 bg-border-light dark:bg-border-dark;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   5. SPECIAL COMPONENT STYLES
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────
+   SIDEBAR
+   ───────────────────────────────────────────────────────────── */
+
+.sidebar {
+  background: var(--sidebar-bg);
+  width: var(--sidebar-width);
+}
+
+/* Sidebar active tab indicator */
+.sidebar-nav-item {
+  @apply relative flex items-center gap-3 px-3 py-2.5 rounded-lg;
+  @apply text-body-md font-medium;
+  @apply transition-all duration-200;
+}
+
+.sidebar-nav-item:not(.active) {
+  @apply text-text-secondary;
+  @apply hover:bg-surface-elevated hover:text-text-primary;
+  @apply dark:hover:bg-surface-dark-elevated;
+}
+
+.sidebar-nav-item.active {
+  @apply bg-amber-500 text-white;
+  @apply shadow-md;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+}
+
+/* Sidebar logo */
+.sidebar-logo {
+  @apply flex items-center gap-2.5;
+}
+
+.sidebar-logo-icon {
+  @apply w-8 h-8 rounded-full;
+  @apply bg-gradient-to-br from-amber-400 to-amber-600;
+  @apply flex items-center justify-center;
+  @apply shadow-md;
+}
+
+.sidebar-logo-icon svg {
+  @apply w-4.5 h-4.5 text-white;
+}
+
+.sidebar-logo-text {
+  @apply font-display font-bold text-heading-md;
+  @apply text-text-primary;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   STATUS BAR
+   ───────────────────────────────────────────────────────────── */
+
+.statusbar {
+  height: var(--statusbar-height);
+  @apply bg-surface-sunken border-t border-border-light;
+  @apply dark:bg-surface-dark-sunken dark:border-border-dark;
+}
+
+.statusbar-indicator {
+  @apply flex items-center gap-1.5;
+}
+
+.statusbar-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.statusbar-dot-success {
+  @apply bg-emerald-500;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+}
+
+.statusbar-dot-warning {
+  @apply bg-amber-500 animate-pulse-soft;
+}
+
+.statusbar-dot-danger {
+  @apply bg-red-500;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   AUDIO PLAYER / WAVEFORM
+   ───────────────────────────────────────────────────────────── */
+
+.audio-player {
+  @apply p-5 border-b border-border-light dark:border-border-dark;
+  @apply bg-gradient-to-b from-surface-elevated to-surface-sunken;
+  @apply dark:from-surface-dark-elevated dark:to-surface-dark-sunken;
+}
+
+.audio-transport-btn {
+  @apply btn-icon rounded-full;
+  @apply bg-surface-elevated border border-border-light;
+  @apply hover:border-amber-400 hover:shadow-md;
+  @apply dark:bg-surface-dark-elevated dark:border-border-dark;
+  @apply transition-all duration-200;
+}
+
+.audio-play-btn {
+  @apply w-14 h-14 rounded-full;
+  @apply bg-gradient-to-br from-amber-400 to-amber-600;
+  @apply text-white shadow-lg;
+  @apply hover:shadow-glow-amber hover:scale-105;
+  @apply active:scale-95;
+  @apply transition-all duration-200;
+}
+
+.audio-waveform {
+  @apply h-16 rounded-lg overflow-hidden;
+  @apply bg-surface-sunken dark:bg-surface-dark-sunken;
+}
+
+.audio-time {
+  @apply font-mono text-body-sm text-text-muted;
+  @apply tabular-nums;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   DROP ZONE
+   ───────────────────────────────────────────────────────────── */
+
+.dropzone {
+  @apply relative;
+}
+
+.dropzone-overlay {
+  @apply absolute inset-0 z-20;
+  @apply bg-amber-500/10 backdrop-blur-sm;
+  @apply border-2 border-dashed border-amber-500 rounded-xl;
+  @apply flex flex-col items-center justify-center;
+  @apply animate-fade-in;
+}
+
+.dropzone-overlay-icon {
+  @apply w-16 h-16 mb-4;
+  @apply text-amber-500;
+  @apply animate-bounce;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   FILE QUEUE
+   ───────────────────────────────────────────────────────────── */
+
+.file-queue-item {
+  @apply flex items-center gap-3 px-4 py-3;
+  @apply border-b border-border-light dark:border-border-dark;
+  @apply transition-colors duration-150;
+}
+
+.file-queue-item:hover {
+  @apply bg-surface-sunken dark:bg-surface-dark-elevated;
+}
+
+.file-queue-item.active {
+  @apply bg-amber-50 border-l-2 border-l-amber-500;
+  @apply dark:bg-amber-900/10;
+}
+
+.file-queue-item.processing {
+  @apply bg-amber-50/50 dark:bg-amber-900/5;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MODAL / DIALOG
+   ───────────────────────────────────────────────────────────── */
+
+.modal-backdrop {
+  @apply fixed inset-0 z-50;
+  @apply bg-black/50 backdrop-blur-xs;
+  @apply animate-fade-in;
+}
+
+.modal {
+  @apply bg-surface-elevated rounded-2xl shadow-elevated;
+  @apply animate-scale-in;
+  @apply dark:bg-surface-dark-elevated;
+}
+
+.modal-header {
+  @apply flex items-center justify-between p-5;
+  @apply border-b border-border-light dark:border-border-dark;
+}
+
+.modal-body {
+  @apply p-5;
+}
+
+.modal-footer {
+  @apply flex items-center justify-end gap-3 p-5;
+  @apply border-t border-border-light dark:border-border-dark;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TRAINING CONSOLE
+   ───────────────────────────────────────────────────────────── */
+
+.console {
+  @apply font-mono text-body-sm;
+  @apply bg-stone-900 text-stone-300 rounded-lg p-4;
+  @apply max-h-64 overflow-auto;
+}
+
+.console-line {
+  @apply py-0.5;
+}
+
+.console-line-info {
+  @apply text-blue-400;
+}
+
+.console-line-success {
+  @apply text-emerald-400;
+}
+
+.console-line-warning {
+  @apply text-amber-400;
+}
+
+.console-line-error {
+  @apply text-red-400;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   6. UTILITY CLASSES
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  /* Text utilities */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Noise texture overlay */
+  .noise-overlay {
+    position: relative;
+  }
+
+  .noise-overlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .dark .noise-overlay::before {
+    opacity: 0.05;
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-amber-500 to-amber-600;
+  }
+
+  /* Glow effects */
+  .glow-amber {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+  }
+
+  .glow-amber-intense {
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.5);
+  }
+
+  /* Animation delays for staggering */
+  .animation-delay-75 { animation-delay: 75ms; }
+  .animation-delay-100 { animation-delay: 100ms; }
+  .animation-delay-150 { animation-delay: 150ms; }
+  .animation-delay-200 { animation-delay: 200ms; }
+  .animation-delay-300 { animation-delay: 300ms; }
+  .animation-delay-400 { animation-delay: 400ms; }
+
+  /* Truncate utilities */
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   7. KEYFRAME ANIMATIONS
+   ═══════════════════════════════════════════════════════════════ */
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+}
+
+/* Vinyl rotation for logo */
+@keyframes vinyl-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.vinyl-spin {
+  animation: vinyl-rotate 3s linear infinite;
+}
+
+.vinyl-spin-slow {
+  animation: vinyl-rotate 8s linear infinite;
+}
+
+/* Playing state - subtle pulse */
+.playing-pulse {
+  animation: pulse-ring 2s ease-in-out infinite;
+}
