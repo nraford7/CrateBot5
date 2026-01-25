@@ -102,10 +102,16 @@ public actor TrainingDataCollector {
     /// Configuration for feature augmentation during extraction
     public var augmentationConfig: AudioAugmenter.AugmentationConfig = .default
 
-    /// Lazy-loaded EffNetExtractor - only created when extractFeatures is called
-    private var _effnetExtractor: EffNetExtractor?
-    private var _effnetInitError: Error?
-    private var _effnetInitialized = false
+    // MARK: - Feature Extraction
+
+    /// Configuration for which features to extract (EffNet only, +Genres, or +CLAP)
+    /// Default is .effnetGenresCLAP for the full 2192-dim feature vector
+    public var featureConfig: CombinedFeatureExtractor.FeatureConfig = .effnetGenresCLAP
+
+    /// Lazy-loaded CombinedFeatureExtractor - only created when extractFeatures is called
+    private var _combinedExtractor: CombinedFeatureExtractor?
+    private var _combinedExtractorInitError: Error?
+    private var _combinedExtractorInitialized = false
 
     // MARK: - Initialization
 
@@ -125,29 +131,29 @@ public actor TrainingDataCollector {
         self.embeddingCache = embeddingCache
     }
 
-    /// Get or create the EffNetExtractor (lazy initialization)
-    private func getEffNetExtractor() -> EffNetExtractor? {
-        if !_effnetInitialized {
-            _effnetInitialized = true
+    /// Get or create the CombinedFeatureExtractor (lazy initialization)
+    private func getCombinedExtractor() -> CombinedFeatureExtractor? {
+        if !_combinedExtractorInitialized {
+            _combinedExtractorInitialized = true
             do {
-                _effnetExtractor = try EffNetExtractor()
-                _effnetInitError = nil
-                logger.info("EffNetExtractor initialized successfully (lazy)")
-                Self.debugLog("EffNetExtractor initialized successfully (lazy)")
+                _combinedExtractor = try CombinedFeatureExtractor(config: self.featureConfig)
+                _combinedExtractorInitError = nil
+                logger.info("CombinedFeatureExtractor initialized successfully with config: \(self.featureConfig.description) (lazy)")
+                Self.debugLog("CombinedFeatureExtractor initialized successfully with config: \(self.featureConfig.description) (lazy)")
             } catch {
-                _effnetExtractor = nil
-                _effnetInitError = error
-                logger.error("EffNetExtractor init failed: \(error.localizedDescription)")
-                Self.debugLog("EffNetExtractor init FAILED: \(error.localizedDescription)")
+                _combinedExtractor = nil
+                _combinedExtractorInitError = error
+                logger.error("CombinedFeatureExtractor init failed: \(error.localizedDescription)")
+                Self.debugLog("CombinedFeatureExtractor init FAILED: \(error.localizedDescription)")
             }
         }
-        return _effnetExtractor
+        return _combinedExtractor
     }
 
-    /// Get the EffNetExtractor init error if any
-    private func getEffNetInitError() -> Error? {
-        _ = getEffNetExtractor()  // Ensure initialized
-        return _effnetInitError
+    /// Get the CombinedFeatureExtractor init error if any
+    private func getCombinedExtractorInitError() -> Error? {
+        _ = getCombinedExtractor()  // Ensure initialized
+        return _combinedExtractorInitError
     }
 
     /// Write debug log to file (in app's container for sandbox compatibility)
@@ -571,8 +577,11 @@ public actor TrainingDataCollector {
 
     /// Extracts audio features for tracks that don't already have them.
     ///
-    /// Uses EffNetExtractor to generate 1680-dimensional features from audio
-    /// (1280 embeddings + 400 genre activations).
+    /// Uses CombinedFeatureExtractor to generate features from audio based on featureConfig:
+    /// - .effnetOnly: 1280 dims (EffNet embeddings)
+    /// - .effnetPlusGenres: 1680 dims (1280 embeddings + 400 genre activations)
+    /// - .effnetGenresCLAP: 2192 dims (1280 + 400 + 512 CLAP embeddings)
+    ///
     /// Audio is loaded at 16kHz for EffNet processing.
     /// Uses concurrent batch processing for improved performance.
     ///
@@ -599,8 +608,11 @@ public actor TrainingDataCollector {
 
     /// Extracts audio features with checkpoint support for resumable training.
     ///
-    /// Uses EffNetExtractor to generate 1680-dimensional features from audio
-    /// (1280 embeddings + 400 genre activations).
+    /// Uses CombinedFeatureExtractor to generate features from audio based on featureConfig:
+    /// - .effnetOnly: 1280 dims (EffNet embeddings)
+    /// - .effnetPlusGenres: 1680 dims (1280 embeddings + 400 genre activations)
+    /// - .effnetGenresCLAP: 2192 dims (1280 + 400 + 512 CLAP embeddings)
+    ///
     /// Saves checkpoints every 50 tracks so training can resume if interrupted.
     ///
     /// - Parameters:
@@ -632,8 +644,8 @@ public actor TrainingDataCollector {
         }
 
         // Ensure extractor is initialized before concurrent work
-        guard let extractor = getEffNetExtractor() else {
-            if let initError = getEffNetInitError() {
+        guard let extractor = getCombinedExtractor() else {
+            if let initError = getCombinedExtractorInitError() {
                 Self.debugLog("No extractor available, init error: \(initError)")
             }
             Self.debugLog("No extractor available, returning tracks without features")
@@ -718,8 +730,9 @@ public actor TrainingDataCollector {
                                 from: fileURL,
                                 targetSampleRate: EffNetExtractor.targetSampleRate
                             )
-                            let (embeddings, genreActivations) = try await extractor.extractWithGenres(from: buffer)
-                            let features = embeddings + genreActivations  // 1280 + 400 = 1680
+                            // Use CombinedFeatureExtractor for unified feature extraction
+                            // Dimension depends on featureConfig (1280, 1680, or 2192)
+                            let features = try await extractor.extract(from: buffer)
 
                             // Apply feature-level augmentation for training robustness
                             let augmentedFeatures = AudioAugmenter.augmentFeatures(
