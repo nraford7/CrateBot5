@@ -97,6 +97,11 @@ public actor TrainingDataCollector {
     private let audioAnalyzer: AudioAnalyzer
     private let embeddingCache: EmbeddingCache
 
+    // MARK: - Augmentation
+
+    /// Configuration for feature augmentation during extraction
+    public var augmentationConfig: AudioAugmenter.AugmentationConfig = .default
+
     /// Lazy-loaded EffNetExtractor - only created when extractFeatures is called
     private var _effnetExtractor: EffNetExtractor?
     private var _effnetInitError: Error?
@@ -701,6 +706,8 @@ public actor TrainingDataCollector {
             }
 
             // Process batch concurrently - load audio and extract features in one step
+            // Capture augmentation config for use in task group
+            let augConfig = self.augmentationConfig
             let batchResults = await withTaskGroup(of: (Int, TaggedTrack, [Float]?).self) { group in
                 for (localIndex, track) in batch.enumerated() {
                     group.addTask { [audioAnalyzer, extractor] in
@@ -713,7 +720,14 @@ public actor TrainingDataCollector {
                             )
                             let (embeddings, genreActivations) = try await extractor.extractWithGenres(from: buffer)
                             let features = embeddings + genreActivations  // 1280 + 400 = 1680
-                            return (globalIndex, track, features)
+
+                            // Apply feature-level augmentation for training robustness
+                            let augmentedFeatures = AudioAugmenter.augmentFeatures(
+                                features,
+                                addNoise: augConfig.specAugmentEnabled,
+                                noiseScale: 0.02
+                            )
+                            return (globalIndex, track, augmentedFeatures)
                         } catch {
                             return (globalIndex, track, nil)
                         }
