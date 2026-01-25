@@ -225,6 +225,14 @@ public actor ModelTrainer {
                 }
             logContrastiveLoss(samples: allSamples, tag: tag, config: config)
 
+            // Apply mixup augmentation if enabled
+            var samplesForTraining = allSamples
+            if config.mixupEnabled {
+                let augmented = applyMixupAugmentation(to: allSamples, config: config)
+                samplesForTraining = augmented.map { ($0.features, $0.label) }
+                logger.info("Mixup: \(allSamples.count) → \(samplesForTraining.count) samples")
+            }
+
             // Report training phase
             await progress?(TrainingProgress(
                 phase: .training,
@@ -234,10 +242,9 @@ public actor ModelTrainer {
             ))
 
             do {
-                // Prepare DataFrame
-                let dataFrame = try prepareDataFrame(
-                    for: tag,
-                    from: positive + negative,
+                // Prepare DataFrame from samples (supports mixup augmented data)
+                let dataFrame = try prepareDataFrameFromSamples(
+                    samplesForTraining,
                     featureCount: featureCount
                 )
 
@@ -406,6 +413,98 @@ public actor ModelTrainer {
         dataFrame.append(column: Column(name: "label", contents: labels))
 
         logger.info("DataFrame prepared: \(dataFrame.rows.count) rows, \(featureCount) features")
+
+        return dataFrame
+    }
+
+    /// Prepare a DataFrame from feature samples (used after mixup augmentation)
+    /// - Parameters:
+    ///   - samples: Array of (features, label) tuples
+    ///   - featureCount: Number of features per sample
+    /// - Returns: DataFrame with feature columns and label column
+    private func prepareDataFrameFromSamples(
+        _ samples: [(features: [Float], label: String)],
+        featureCount: Int
+    ) throws -> DataFrame {
+        // Create feature columns
+        var columns: [String: [Double]] = [:]
+
+        for i in 0..<featureCount {
+            columns["f\(i)"] = []
+        }
+
+        var labels: [String] = []
+        var skippedNaN = 0
+        var skippedDimension = 0
+
+        for sample in samples {
+            let features = sample.features
+
+            guard features.count == featureCount else {
+                skippedDimension += 1
+                continue
+            }
+
+            // Skip samples with NaN or Inf values (CreateML will reject them)
+            let hasInvalidValue = features.contains { !$0.isFinite }
+            if hasInvalidValue {
+                skippedNaN += 1
+                continue
+            }
+
+            // Add features to columns
+            for (i, value) in features.enumerated() {
+                columns["f\(i)"]?.append(Double(value))
+            }
+
+            // Add label
+            labels.append(sample.label)
+        }
+
+        if skippedDimension > 0 {
+            logger.warning("Skipped \(skippedDimension) samples with wrong feature dimension")
+        }
+        if skippedNaN > 0 {
+            logger.warning("Skipped \(skippedNaN) samples with NaN/Inf features")
+        }
+
+        // Z-score normalize each feature column to help CreateML optimizer
+        var zeroVarianceCount = 0
+        var totalVariance: Double = 0
+        for i in 0..<featureCount {
+            let columnName = "f\(i)"
+            guard var values = columns[columnName], !values.isEmpty else { continue }
+
+            let mean = values.reduce(0, +) / Double(values.count)
+            let variance = values.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(values.count)
+            let stdDev = sqrt(variance)
+            totalVariance += variance
+
+            // Only normalize if there's variance (avoid division by zero)
+            if stdDev > 1e-10 {
+                values = values.map { ($0 - mean) / stdDev }
+                columns[columnName] = values
+            } else {
+                zeroVarianceCount += 1
+            }
+        }
+        logger.info("Feature stats: \(zeroVarianceCount)/\(featureCount) zero-variance, avg variance: \(totalVariance / Double(featureCount))")
+
+        // Build DataFrame
+        var dataFrame = DataFrame()
+
+        // Add feature columns in order
+        for i in 0..<featureCount {
+            let columnName = "f\(i)"
+            if let values = columns[columnName] {
+                dataFrame.append(column: Column(name: columnName, contents: values))
+            }
+        }
+
+        // Add label column
+        dataFrame.append(column: Column(name: "label", contents: labels))
+
+        logger.info("DataFrame prepared from samples: \(dataFrame.rows.count) rows, \(featureCount) features")
 
         return dataFrame
     }

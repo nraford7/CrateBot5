@@ -340,6 +340,49 @@ final class TrainingPipeline40PercentTests: XCTestCase {
             "Class imbalance ratio \(imbalanceRatio) is too high")
     }
 
+    // MARK: - Binary Training with Mixup Integration
+
+    func testMixupAugmentationAppliedDuringBinaryTraining() async throws {
+        // Create synthetic training data with distinct feature patterns
+        // Need at least 50 positive samples to pass BinaryTrainingDataGenerator's minPositiveExamples
+        var tracks: [TaggedTrack] = []
+        for i in 0..<60 {
+            let positiveFeatures = (0..<100).map { _ in Float.random(in: 0.7...1.0) }
+            let negativeFeatures = (0..<100).map { _ in Float.random(in: 0.0...0.3) }
+            tracks.append(TaggedTrack(id: "pos_\(i)", tags: Set(["TestTag"]), features: positiveFeatures))
+            tracks.append(TaggedTrack(id: "neg_\(i)", tags: Set([]), features: negativeFeatures))
+        }
+
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let trainer = ModelTrainer()
+        // Enable mixup explicitly
+        let config = TrainingConfig(
+            validationSplit: 0.2,
+            minSamplesPerTag: 10,
+            mixupEnabled: true,
+            mixupAlpha: 0.4,
+            mixupRatio: 0.3
+        )
+
+        let results = try await trainer.trainModels(
+            from: tracks,
+            tags: ["TestTag"],
+            outputDirectory: tempDir,
+            config: config
+        )
+
+        // Verify training succeeded
+        XCTAssertEqual(results.count, 1)
+        XCTAssertTrue(results[0].validationAccuracy > 0.5,
+            "Model should achieve > 50% accuracy with well-separated classes")
+
+        // The model file should exist
+        XCTAssertTrue(FileManager.default.fileExists(atPath: results[0].modelURL.path))
+    }
+
     // MARK: - Private Helpers
 
     /// Apply mixup augmentation to a set of tracks
