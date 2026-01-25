@@ -33,6 +33,10 @@ public struct TrainingConfig: Sendable {
     /// For binary: [0, 1] becomes [0.05, 0.95] with factor 0.1
     public let labelSmoothingFactor: Float
 
+    /// Whether to enable contrastive loss diagnostic logging
+    /// Lower loss = better class separation in the embedding space
+    public let contrastiveLearningEnabled: Bool
+
     public init(
         validationSplit: Double = 0.2,
         minSamplesPerTag: Int = 50,
@@ -42,7 +46,8 @@ public struct TrainingConfig: Sendable {
         mixupAlpha: Float = 0.4,
         mixupRatio: Float = 0.3,
         labelSmoothingEnabled: Bool = true,
-        labelSmoothingFactor: Float = 0.1
+        labelSmoothingFactor: Float = 0.1,
+        contrastiveLearningEnabled: Bool = true
     ) {
         self.validationSplit = validationSplit
         self.minSamplesPerTag = minSamplesPerTag
@@ -53,6 +58,7 @@ public struct TrainingConfig: Sendable {
         self.mixupRatio = mixupRatio
         self.labelSmoothingEnabled = labelSmoothingEnabled
         self.labelSmoothingFactor = labelSmoothingFactor
+        self.contrastiveLearningEnabled = contrastiveLearningEnabled
     }
 }
 
@@ -206,6 +212,18 @@ public actor ModelTrainer {
             }
 
             logger.info("Training '\(tag)' with \(positive.count) positive, \(negative.count) negative samples")
+
+            // Log contrastive loss diagnostic before training
+            let allSamples: [(features: [Float], label: String)] =
+                positive.compactMap { track in
+                    guard let features = track.features else { return nil }
+                    return (features: features, label: "positive")
+                } +
+                negative.compactMap { track in
+                    guard let features = track.features else { return nil }
+                    return (features: features, label: "negative")
+                }
+            logContrastiveLoss(samples: allSamples, tag: tag, config: config)
 
             // Report training phase
             await progress?(TrainingProgress(
@@ -682,6 +700,42 @@ public actor ModelTrainer {
         var softLabels = [Float](repeating: smoothingFactor / Float(numClasses), count: numClasses)
         softLabels[hardLabel] = 1.0 - smoothingFactor + smoothingFactor / Float(numClasses)
         return softLabels
+    }
+
+    // MARK: - Contrastive Loss Diagnostic
+
+    /// Log contrastive loss as a diagnostic metric before training
+    /// Lower loss indicates better class separation in the embedding space
+    /// - Parameters:
+    ///   - samples: Training samples with features and labels
+    ///   - tag: The tag being trained (for logging purposes)
+    ///   - config: Training configuration
+    private func logContrastiveLoss(
+        samples: [(features: [Float], label: String)],
+        tag: String,
+        config: TrainingConfig
+    ) {
+        guard config.contrastiveLearningEnabled else { return }
+
+        let embeddings = samples.map { $0.features }
+        let labels = samples.map { $0.label }
+
+        let loss = ContrastiveLoss.compute(
+            embeddings: embeddings,
+            labels: labels,
+            temperature: 0.07
+        )
+
+        logger.info("Contrastive loss for '\(tag)': \(String(format: "%.4f", loss))")
+
+        // Lower loss = better class separation
+        // Use this as a diagnostic: if loss is high, the tag may need more training data
+        // or the embeddings don't capture the concept well
+        if loss > 5.0 {
+            logger.warning("High contrastive loss for '\(tag)' suggests poor feature separation - consider more training data")
+        } else if loss < 1.0 {
+            logger.info("Low contrastive loss for '\(tag)' indicates good feature separation")
+        }
     }
 
     // MARK: - Private Helpers
