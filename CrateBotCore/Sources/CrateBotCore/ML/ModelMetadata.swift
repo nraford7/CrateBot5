@@ -10,6 +10,7 @@ public struct ModelMetadata: Codable, Sendable {
     public let categories: [String]          // Genre, Timing, Mood, Descriptive
     public let tags: [String: [String]]      // Tags per category
     public let accuracy: Double?             // Validation accuracy if available
+    public let featureDimension: Int         // 1280, 1680, or 2192
 
     public init(
         name: String,
@@ -19,7 +20,8 @@ public struct ModelMetadata: Codable, Sendable {
         trainingFileCount: Int,
         categories: [String],
         tags: [String: [String]],
-        accuracy: Double? = nil
+        accuracy: Double? = nil,
+        featureDimension: Int = 1680
     ) {
         self.name = name
         self.version = version
@@ -29,6 +31,27 @@ public struct ModelMetadata: Codable, Sendable {
         self.categories = categories
         self.tags = tags
         self.accuracy = accuracy
+        self.featureDimension = featureDimension
+    }
+
+    // Custom decoder to handle old JSON files without featureDimension
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        version = try container.decode(String.self, forKey: .version)
+        pipelineVersion = try container.decode(String.self, forKey: .pipelineVersion)
+        trainedAt = try container.decode(Date.self, forKey: .trainedAt)
+        trainingFileCount = try container.decode(Int.self, forKey: .trainingFileCount)
+        categories = try container.decode([String].self, forKey: .categories)
+        tags = try container.decode([String: [String]].self, forKey: .tags)
+        accuracy = try container.decodeIfPresent(Double.self, forKey: .accuracy)
+        // Default to 1280 for old models that don't have this field
+        featureDimension = try container.decodeIfPresent(Int.self, forKey: .featureDimension) ?? 1280
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, version, pipelineVersion, trainedAt, trainingFileCount
+        case categories, tags, accuracy, featureDimension
     }
 
     /// Load metadata from JSON sidecar file
