@@ -17,16 +17,31 @@ public struct TrainingConfig: Sendable {
     /// Random seed for reproducible training
     public let randomSeed: Int
 
+    /// Whether to enable Mixup augmentation
+    public let mixupEnabled: Bool
+
+    /// Alpha parameter for Mixup Beta distribution (higher = more mixing)
+    public let mixupAlpha: Float
+
+    /// Fraction of samples to generate via mixup (0.0 - 1.0)
+    public let mixupRatio: Float
+
     public init(
         validationSplit: Double = 0.2,
         minSamplesPerTag: Int = 50,
         maxNegativeRatio: Double = 3.0,
-        randomSeed: Int = 42
+        randomSeed: Int = 42,
+        mixupEnabled: Bool = true,
+        mixupAlpha: Float = 0.4,
+        mixupRatio: Float = 0.3
     ) {
         self.validationSplit = validationSplit
         self.minSamplesPerTag = minSamplesPerTag
         self.maxNegativeRatio = maxNegativeRatio
         self.randomSeed = randomSeed
+        self.mixupEnabled = mixupEnabled
+        self.mixupAlpha = mixupAlpha
+        self.mixupRatio = mixupRatio
     }
 }
 
@@ -679,6 +694,55 @@ public actor ModelTrainer {
             .components(separatedBy: invalidCharacters)
             .joined(separator: "_")
             .replacingOccurrences(of: " ", with: "_")
+    }
+
+    // MARK: - Mixup Augmentation
+
+    /// Apply Mixup augmentation to training samples
+    /// - Parameters:
+    ///   - samples: Original training samples with features and labels
+    ///   - config: Training configuration with mixup parameters
+    /// - Returns: Augmented samples including original and mixed samples
+    /// - Note: MLBoostedTreeClassifier doesn't support soft labels, so we use the dominant label
+    ///         as the hard label but preserve soft labels for potential future use
+    private func applyMixupAugmentation(
+        to samples: [(features: [Float], label: String)],
+        config: TrainingConfig
+    ) -> [(features: [Float], label: String, softLabel: [String: Float]?)] {
+        guard config.mixupEnabled else {
+            return samples.map { ($0.features, $0.label, nil) }
+        }
+
+        var augmented: [(features: [Float], label: String, softLabel: [String: Float]?)] = []
+        let mixupCount = Int(Float(samples.count) * config.mixupRatio)
+
+        // Keep original samples
+        for sample in samples {
+            augmented.append((sample.features, sample.label, nil))
+        }
+
+        // Add mixup samples
+        for _ in 0..<mixupCount {
+            let idx1 = Int.random(in: 0..<samples.count)
+            let idx2 = Int.random(in: 0..<samples.count)
+            guard idx1 != idx2 else { continue }
+
+            let result = AudioAugmenter.mixup(
+                features1: samples[idx1].features,
+                features2: samples[idx2].features,
+                label1: samples[idx1].label,
+                label2: samples[idx2].label,
+                alpha: config.mixupAlpha
+            )
+
+            // Use dominant label for hard label (required for MLBoostedTreeClassifier)
+            let dominantLabel = result.softLabels.max(by: { $0.value < $1.value })?.key ?? samples[idx1].label
+            augmented.append((result.features, dominantLabel, result.softLabels))
+        }
+
+        logger.info("Mixup augmentation: \(samples.count) original + \(augmented.count - samples.count) mixed = \(augmented.count) total samples")
+
+        return augmented
     }
 }
 
