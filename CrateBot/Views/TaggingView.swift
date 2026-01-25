@@ -10,6 +10,7 @@ struct TaggingView: View {
     @State private var lastTaggingResult: TaggingResult?
     @State private var showResultsSheet = false
     @State private var showTaggingSettings = false
+    @State private var taggingStartTime: Date?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,10 +19,10 @@ struct TaggingView: View {
                 dropZoneView
             } else {
                 fileQueueView
-            }
 
-            // Bottom controls
-            controlsBar
+                // Bottom controls (only when files are queued)
+                controlsBar
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.bgWindow)
@@ -31,39 +32,80 @@ struct TaggingView: View {
 
     private var dropZoneView: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: Theme.Radius.lg)
+            // Background with subtle gradient
+            RoundedRectangle(cornerRadius: Theme.Radius.xl)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Theme.Colors.bgSurface,
+                            Theme.Colors.bgElevated.opacity(0.5)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
+            // Dashed border
+            RoundedRectangle(cornerRadius: Theme.Radius.xl)
                 .strokeBorder(
-                    isDropTargeted ? Theme.Colors.accentPrimary : Theme.Colors.textTertiary.opacity(0.3),
-                    style: StrokeStyle(lineWidth: 2, dash: [8])
-                )
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.lg)
-                        .fill(isDropTargeted ? Theme.Colors.accentPrimary.opacity(0.1) : Color.clear)
+                    isDropTargeted ? Theme.Colors.accentPrimary : Theme.Colors.textTertiary.opacity(0.2),
+                    style: StrokeStyle(lineWidth: 2, dash: [10, 6])
                 )
 
-            VStack(spacing: Theme.Spacing.md) {
-                Image(systemName: "arrow.down.doc.fill")
-                    .font(.system(size: 48))
-                    .foregroundStyle(isDropTargeted ? Theme.Colors.accentPrimary : Theme.Colors.textTertiary)
+            // Glow effect when dropping
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: Theme.Radius.xl)
+                    .fill(Theme.Colors.accentPrimary.opacity(0.08))
+                    .shadow(color: Theme.Shadows.glowAmber.opacity(0.3), radius: 20)
+            }
 
-                Text("Drop MP3 Files Here")
-                    .font(Theme.Fonts.heading(20))
-                    .foregroundColor(Theme.Colors.textPrimary)
+            VStack(spacing: Theme.Spacing.lg) {
+                // Animated vinyl icon
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Theme.Colors.accentLight.opacity(0.2), Theme.Colors.accentPrimary.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 100, height: 100)
 
-                Text("Or drag folders to add all MP3s")
-                    .font(Theme.Fonts.body(14))
-                    .foregroundColor(Theme.Colors.textSecondary)
+                    Image(systemName: "opticaldisc.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(
+                            isDropTargeted
+                                ? LinearGradient(colors: [Theme.Colors.accentLight, Theme.Colors.accentPrimary], startPoint: .top, endPoint: .bottom)
+                                : LinearGradient(colors: [Theme.Colors.textTertiary, Theme.Colors.textTertiary.opacity(0.7)], startPoint: .top, endPoint: .bottom)
+                        )
+                        .rotationEffect(.degrees(isDropTargeted ? 45 : 0))
+                        .animation(.easeInOut(duration: 0.3), value: isDropTargeted)
+                }
+                .scaleEffect(isDropTargeted ? 1.05 : 1.0)
+                .animation(.easeOut(duration: 0.2), value: isDropTargeted)
+
+                VStack(spacing: Theme.Spacing.sm) {
+                    Text("Drop MP3 Files Here")
+                        .font(Theme.Fonts.heading(22))
+                        .foregroundColor(isDropTargeted ? Theme.Colors.accentPrimary : Theme.Colors.textPrimary)
+
+                    Text("Or drag folders to add all MP3s")
+                        .font(Theme.Fonts.body(14))
+                        .foregroundColor(Theme.Colors.textSecondary)
+                }
 
                 Button {
                     openFilePicker()
                 } label: {
-                    Label("Browse Files", systemImage: "folder")
+                    Label("Browse Files", systemImage: "folder.fill")
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .padding(.top, Theme.Spacing.sm)
+                .padding(.top, Theme.Spacing.xs)
             }
+            .slideUpAnimation()
         }
-        .padding(Theme.Spacing.lg)
+        .padding(Theme.Spacing.xl)
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             handleDrop(providers: providers)
             return true
@@ -74,6 +116,9 @@ struct TaggingView: View {
 
     private var fileQueueView: some View {
         VStack(spacing: 0) {
+            // Status dashboard (always visible when files are queued)
+            taggingStatusDashboard
+
             // Header
             HStack {
                 Text("\(appState.queuedFiles.count) file\(appState.queuedFiles.count == 1 ? "" : "s") queued")
@@ -235,25 +280,8 @@ struct TaggingView: View {
     // MARK: - Controls Bar
 
     private var controlsBar: some View {
-        VStack(spacing: Theme.Spacing.md) {
-            // Progress bar (only during tagging)
-            if appState.isTagging {
-                VStack(spacing: Theme.Spacing.xs) {
-                    ThemedProgressBar(progress: appState.taggingProgress)
-
-                    HStack {
-                        Text("Processing...")
-                            .font(Theme.Fonts.body(12))
-                            .foregroundColor(Theme.Colors.textSecondary)
-                        Spacer()
-                        Text("\(Int(appState.taggingProgress * 100))%")
-                            .font(Theme.Fonts.mono(12))
-                            .foregroundColor(Theme.Colors.textPrimary)
-                    }
-                }
-            }
-
-            // Action buttons
+        VStack(spacing: 0) {
+            // Action buttons bar
             HStack {
                 if !appState.queuedFiles.isEmpty {
                     Button("Clear All") {
@@ -266,6 +294,14 @@ struct TaggingView: View {
                 Spacer()
 
                 if appState.isTagging {
+                    // Pause/Resume button
+                    Button {
+                        appState.isTaggingPaused.toggle()
+                    } label: {
+                        Label(appState.isTaggingPaused ? "Resume" : "Pause", systemImage: appState.isTaggingPaused ? "play.fill" : "pause.fill")
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+
                     Button("Cancel") {
                         cancelTagging()
                     }
@@ -274,9 +310,166 @@ struct TaggingView: View {
                     startTaggingButton
                 }
             }
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.bgElevated)
         }
-        .padding(Theme.Spacing.md)
-        .background(Theme.Colors.bgElevated)
+    }
+
+    // MARK: - Tagging Status Dashboard (VU Meter Style)
+
+    private var statusLabel: String {
+        if !appState.isTagging {
+            return "READY"
+        } else if appState.isTaggingPaused {
+            return "PAUSED"
+        } else {
+            return "TAGGING"
+        }
+    }
+
+    private var statusLEDColor: Color {
+        if !appState.isTagging {
+            return Theme.Colors.accentPrimary
+        } else if appState.isTaggingPaused {
+            return Theme.Colors.statusWarning
+        } else {
+            return Theme.Colors.statusSuccess
+        }
+    }
+
+    private var taggingStatusDashboard: some View {
+        let completedCount = appState.queuedFiles.filter { $0.status == .complete }.count
+        let errorCount = appState.queuedFiles.filter { $0.status == .error }.count
+        let totalCount = appState.queuedFiles.count
+
+        return VStack(spacing: 0) {
+            // Top gradient accent line
+            LinearGradient(
+                colors: [Theme.Colors.accentPrimary, Theme.Colors.accentLight, Theme.Colors.accentPrimary],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(height: 2)
+            .shadow(color: Theme.Shadows.glowAmber.opacity(0.5), radius: 4)
+
+            VStack(spacing: Theme.Spacing.md) {
+                // Status header with LED indicator
+                HStack(spacing: Theme.Spacing.sm) {
+                    // Status LED
+                    Circle()
+                        .fill(statusLEDColor)
+                        .frame(width: 8, height: 8)
+                        .shadow(color: statusLEDColor.opacity(0.6), radius: 6)
+                        .scaleEffect(appState.isTagging && !appState.isTaggingPaused ? 1.2 : 1.0)
+                        .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: appState.isTagging && !appState.isTaggingPaused)
+
+                    Text(statusLabel)
+                        .font(Theme.Fonts.mono(11))
+                        .fontWeight(.bold)
+                        .foregroundColor(statusLEDColor)
+                        .tracking(1.5)
+
+                    Spacer()
+                }
+
+                // VU Meter style stats row
+                HStack(spacing: Theme.Spacing.sm) {
+                    // Progress meter
+                    VUMeterStat(
+                        label: "PROGRESS",
+                        value: "\(completedCount)/\(totalCount)",
+                        progress: appState.taggingProgress,
+                        color: Theme.Colors.accentPrimary
+                    )
+
+                    // Completed meter (percentage)
+                    VUMeterStat(
+                        label: "COMPLETE",
+                        value: "\(Int(appState.taggingProgress * 100))%",
+                        progress: appState.taggingProgress,
+                        color: Theme.Colors.statusSuccess
+                    )
+
+                    // Errors meter
+                    VUMeterStat(
+                        label: "ERRORS",
+                        value: "\(errorCount)",
+                        progress: totalCount > 0 ? Double(errorCount) / Double(totalCount) : 0,
+                        color: errorCount > 0 ? Theme.Colors.statusError : Theme.Colors.textTertiary
+                    )
+
+                    // Time stats (with placeholder progress for consistent height)
+                    VUMeterStat(
+                        label: "SPEED",
+                        value: calculateAverageTime(),
+                        progress: 0,
+                        color: Theme.Colors.accentSecondary,
+                        showMeter: false
+                    )
+
+                    // ETA (with placeholder progress for consistent height)
+                    VUMeterStat(
+                        label: "ETA",
+                        value: calculateETA(),
+                        progress: 0,
+                        color: Theme.Colors.accentPrimary,
+                        isHighlighted: true,
+                        showMeter: false
+                    )
+                }
+
+                // Main progress bar with LED VU meter
+                VStack(spacing: 4) {
+                    LEDProgressBar(
+                        progress: appState.taggingProgress,
+                        isAnimating: appState.isTagging && !appState.isTaggingPaused,
+                        segmentCount: 20,
+                        height: 10
+                    )
+
+                    // Secondary amber progress indicator (subtle)
+                    ThemedProgressBar(progress: appState.taggingProgress, isAnimating: appState.isTagging && !appState.isTaggingPaused, height: 4)
+                }
+            }
+            .padding(Theme.Spacing.md)
+            .background(
+                LinearGradient(
+                    colors: [Theme.Colors.bgElevated, Theme.Colors.bgSurface],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+        }
+    }
+
+    // Time calculations
+    private func calculateAverageTime() -> String {
+        let completedCount = appState.queuedFiles.filter { $0.status == .complete }.count
+        guard completedCount > 0, let startTime = taggingStartTime else { return "-" }
+        let elapsed = Date().timeIntervalSince(startTime)
+        let avg = elapsed / Double(completedCount)
+        return String(format: "%.1fs", avg)
+    }
+
+    private func calculateETA() -> String {
+        let completedCount = appState.queuedFiles.filter { $0.status == .complete }.count
+        let remainingCount = appState.queuedFiles.count - completedCount
+        guard completedCount > 0, let startTime = taggingStartTime else { return "-" }
+        let elapsed = Date().timeIntervalSince(startTime)
+        let avgPerFile = elapsed / Double(completedCount)
+        let remaining = Double(remainingCount) * avgPerFile
+
+        if remaining < 60 {
+            return "\(Int(remaining))s"
+        } else if remaining < 3600 {
+            let minutes = Int(remaining / 60)
+            let secs = Int(remaining.truncatingRemainder(dividingBy: 60))
+            return "\(minutes)m \(secs)s"
+        } else {
+            let hours = Int(remaining / 3600)
+            let minutes = Int((remaining.truncatingRemainder(dividingBy: 3600)) / 60)
+            return "\(hours)h \(minutes)m"
+        }
     }
 
     @ViewBuilder
@@ -459,6 +652,8 @@ struct TaggingView: View {
     private func startTagging() {
         appState.isTagging = true
         appState.taggingProgress = 0.0
+        appState.isTaggingPaused = false
+        taggingStartTime = Date()
 
         for index in appState.queuedFiles.indices {
             appState.queuedFiles[index].status = .pending
@@ -476,6 +671,8 @@ struct TaggingView: View {
 
         appState.isTagging = false
         appState.taggingProgress = 0.0
+        appState.isTaggingPaused = false
+        taggingStartTime = nil
 
         for index in appState.queuedFiles.indices {
             if appState.queuedFiles[index].status == .processing {
@@ -508,6 +705,14 @@ struct TaggingView: View {
         let overwrite = appState.taggingPreferences.overwrite
 
         for (index, file) in appState.queuedFiles.enumerated() {
+            if Task.isCancelled { break }
+
+            // Wait while paused (check on MainActor since AppState is @Observable)
+            var isPaused = await MainActor.run { appState.isTaggingPaused }
+            while isPaused && !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+                isPaused = await MainActor.run { appState.isTaggingPaused }
+            }
             if Task.isCancelled { break }
 
             await MainActor.run {

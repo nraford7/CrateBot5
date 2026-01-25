@@ -28,20 +28,30 @@ struct MainView: View {
                 switch appState.currentView {
                 case .tagging:
                     TaggingView()
-                        .transition(.opacity)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .offset(y: 8)),
+                            removal: .opacity
+                        ))
                 case .train:
                     TrainView()
-                        .transition(.opacity)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .offset(y: 8)),
+                            removal: .opacity
+                        ))
                 case .refine:
                     RefineView()
-                        .transition(.opacity)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .offset(y: 8)),
+                            removal: .opacity
+                        ))
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: appState.currentView)
+            .animation(Theme.Animation.smooth, value: appState.currentView)
 
             StatusBar()
         }
         .background(Theme.Colors.bgBase)
+        .overlay(NoiseOverlay(opacity: 0.02))
         .sheet(isPresented: $state.settingsOpen) {
             SettingsPanel()
         }
@@ -49,8 +59,10 @@ struct MainView: View {
             if let toast = appState.toast {
                 ToastView(toast: toast)
                     .padding(.bottom, 60)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .animation(Theme.Animation.bounce, value: appState.toast != nil)
     }
 }
 

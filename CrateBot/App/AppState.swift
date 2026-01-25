@@ -31,6 +31,7 @@ final class AppState {
     // Tagging queue state
     var queuedFiles: [QueuedFile] = []
     var isTagging = false
+    var isTaggingPaused = false
     var taggingProgress: Double = 0.0
 
     // Refine queue state

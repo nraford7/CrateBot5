@@ -384,17 +384,32 @@ struct TrainView: View {
         VStack(spacing: Theme.Spacing.lg) {
             Spacer()
 
-            Image(systemName: "folder.badge.plus")
-                .font(.system(size: 64))
-                .foregroundStyle(Theme.Colors.textTertiary)
+            ZStack {
+                Circle()
+                    .fill(Theme.Colors.accentPrimary.opacity(0.1))
+                    .frame(width: 120, height: 120)
+
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 56))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Theme.Colors.accentLight, Theme.Colors.accentPrimary],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            .slideUpAnimation()
 
             Text("Select Training Data")
                 .font(Theme.Fonts.heading(24))
                 .foregroundColor(Theme.Colors.textPrimary)
+                .slideUpAnimation(delay: 0.05)
 
             Text("Choose folders containing your tagged MP3 files")
                 .font(Theme.Fonts.body(14))
                 .foregroundColor(Theme.Colors.textSecondary)
+                .slideUpAnimation(delay: 0.1)
 
             if !viewModel.selectedFolders.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
@@ -441,6 +456,7 @@ struct TrainView: View {
                 .buttonStyle(viewModel.selectedFolders.isEmpty ? AnyButtonStyle(SecondaryButtonStyle()) : AnyButtonStyle(PrimaryButtonStyle()))
                 .disabled(viewModel.selectedFolders.isEmpty)
             }
+            .slideUpAnimation(delay: 0.15)
 
             Spacer()
         }
@@ -537,7 +553,7 @@ struct TrainView: View {
 
                 // Progress bar
                 VStack(alignment: .leading, spacing: 4) {
-                    ThemedProgressBar(progress: progress)
+                    ThemedProgressBar(progress: progress, isAnimating: true)
 
                     HStack {
                         Text("Feature extraction progress")
@@ -1063,17 +1079,18 @@ struct TrainView: View {
             let sortedResults = summary.tagResults.sorted { $0.validationAccuracy > $1.validationAccuracy }
 
             // Header
-            report += String(format: "%-30s %10s %12s %12s\n", "Tag", "Samples", "Train Acc", "Val Acc")
+            report += "Tag".padding(toLength: 30, withPad: " ", startingAt: 0)
+            report += "Samples".padding(toLength: 10, withPad: " ", startingAt: 0)
+            report += "Train Acc".padding(toLength: 12, withPad: " ", startingAt: 0)
+            report += "Val Acc\n"
             report += String(repeating: "-", count: 66) + "\n"
 
             for result in sortedResults {
                 let tag = result.tag.count > 28 ? String(result.tag.prefix(28)) + ".." : result.tag
-                report += String(format: "%-30s %10d %11.1f%% %11.1f%%\n",
-                    tag,
-                    result.positiveCount,
-                    result.trainingAccuracy * 100,
-                    result.validationAccuracy * 100
-                )
+                report += tag.padding(toLength: 30, withPad: " ", startingAt: 0)
+                report += String(result.positiveCount).padding(toLength: 10, withPad: " ", startingAt: 0)
+                report += String(format: "%10.1f%%", result.trainingAccuracy * 100)
+                report += String(format: "%11.1f%%\n", result.validationAccuracy * 100)
             }
         }
 
@@ -1088,16 +1105,16 @@ struct TrainView: View {
             let sortedSkipped = summary.skippedTagDetails.sorted { $0.sampleCount > $1.sampleCount }
 
             // Header
-            report += String(format: "%-30s %10s %s\n", "Tag", "Samples", "Reason")
+            report += "Tag".padding(toLength: 30, withPad: " ", startingAt: 0)
+            report += "Samples".padding(toLength: 10, withPad: " ", startingAt: 0)
+            report += "Reason\n"
             report += String(repeating: "-", count: 66) + "\n"
 
             for skipped in sortedSkipped {
                 let tag = skipped.tag.count > 28 ? String(skipped.tag.prefix(28)) + ".." : skipped.tag
-                report += String(format: "%-30s %10d %s\n",
-                    tag,
-                    skipped.sampleCount,
-                    skipped.reason.description
-                )
+                report += tag.padding(toLength: 30, withPad: " ", startingAt: 0)
+                report += String(skipped.sampleCount).padding(toLength: 10, withPad: " ", startingAt: 0)
+                report += skipped.reason.description + "\n"
             }
         }
 
@@ -1249,7 +1266,7 @@ struct TagSelectionSheet: View {
         VStack(spacing: Theme.Spacing.lg) {
             Spacer()
 
-            ThemedProgressBar(progress: scanProgress)
+            ThemedProgressBar(progress: scanProgress, isAnimating: true)
                 .frame(width: 300)
 
             Text("Scanning for tags...")

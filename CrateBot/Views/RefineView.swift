@@ -53,16 +53,27 @@ struct RefineView: View {
 
     private var emptyFileListView: some View {
         VStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 32))
-                .foregroundStyle(Theme.Colors.textTertiary)
+            ZStack {
+                Circle()
+                    .fill(Theme.Colors.textTertiary.opacity(0.1))
+                    .frame(width: 64, height: 64)
+
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 28))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+            .slideUpAnimation()
+
             Text("No files to review")
                 .font(Theme.Fonts.body(14))
                 .foregroundColor(Theme.Colors.textSecondary)
+                .slideUpAnimation(delay: 0.05)
+
             Text("Tagged files will appear here for refinement")
                 .font(Theme.Fonts.body(12))
                 .foregroundColor(Theme.Colors.textTertiary)
                 .multilineTextAlignment(.center)
+                .slideUpAnimation(delay: 0.1)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
@@ -139,12 +150,27 @@ struct RefineView: View {
 
     private var noSelectionView: some View {
         VStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "music.note.list")
-                .font(.system(size: 48))
-                .foregroundStyle(Theme.Colors.textTertiary)
+            ZStack {
+                Circle()
+                    .fill(Theme.Colors.accentPrimary.opacity(0.1))
+                    .frame(width: 100, height: 100)
+
+                Image(systemName: "music.note.list")
+                    .font(.system(size: 44))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Theme.Colors.accentLight.opacity(0.7), Theme.Colors.accentPrimary.opacity(0.5)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            .slideUpAnimation()
+
             Text("Select a file to review")
                 .font(Theme.Fonts.heading(18))
                 .foregroundColor(Theme.Colors.textSecondary)
+                .slideUpAnimation(delay: 0.05)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.bgWindow)
