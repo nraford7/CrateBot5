@@ -106,11 +106,21 @@ final class TrainingCoordinatorTests: XCTestCase {
 
     func testTrainingSummaryInitialization() {
         let modelURL = URL(fileURLWithPath: "/tmp/models/TestModel")
+        let tagResults = [
+            TrainingCoordinator.TagTrainingResult(tag: "House", trainingAccuracy: 0.90, validationAccuracy: 0.85, positiveCount: 100, negativeCount: 200),
+            TrainingCoordinator.TagTrainingResult(tag: "Techno", trainingAccuracy: 0.92, validationAccuracy: 0.88, positiveCount: 120, negativeCount: 240),
+            TrainingCoordinator.TagTrainingResult(tag: "Ambient", trainingAccuracy: 0.88, validationAccuracy: 0.82, positiveCount: 80, negativeCount: 160)
+        ]
+        let skippedTagDetails = [
+            TrainingCoordinator.SkippedTag(tag: "Rare Tag", reason: .insufficientSamples(required: 50), sampleCount: 5)
+        ]
         let summary = TrainingCoordinator.TrainingSummary(
             modelName: "TestModel",
-            trainedTags: ["House", "Techno", "Ambient"],
-            skippedTags: ["Rare Tag"],
-            totalTracks: 1000,
+            tagResults: tagResults,
+            skippedTagDetails: skippedTagDetails,
+            totalTracksScanned: 1000,
+            tracksUsedForTraining: 800,
+            tracksWithInvalidFeatures: 10,
             averageAccuracy: 0.85,
             modelURL: modelURL
         )
@@ -118,7 +128,7 @@ final class TrainingCoordinatorTests: XCTestCase {
         XCTAssertEqual(summary.modelName, "TestModel")
         XCTAssertEqual(summary.trainedTags, ["House", "Techno", "Ambient"])
         XCTAssertEqual(summary.skippedTags, ["Rare Tag"])
-        XCTAssertEqual(summary.totalTracks, 1000)
+        XCTAssertEqual(summary.totalTracksScanned, 1000)
         XCTAssertEqual(summary.averageAccuracy, 0.85, accuracy: 0.001)
         XCTAssertEqual(summary.modelURL, modelURL)
     }
@@ -127,16 +137,18 @@ final class TrainingCoordinatorTests: XCTestCase {
         let modelURL = URL(fileURLWithPath: "/tmp/models/EmptyModel")
         let summary = TrainingCoordinator.TrainingSummary(
             modelName: "EmptyModel",
-            trainedTags: [],
-            skippedTags: [],
-            totalTracks: 0,
+            tagResults: [],
+            skippedTagDetails: [],
+            totalTracksScanned: 0,
+            tracksUsedForTraining: 0,
+            tracksWithInvalidFeatures: 0,
             averageAccuracy: 0.0,
             modelURL: modelURL
         )
 
         XCTAssertTrue(summary.trainedTags.isEmpty)
         XCTAssertTrue(summary.skippedTags.isEmpty)
-        XCTAssertEqual(summary.totalTracks, 0)
+        XCTAssertEqual(summary.totalTracksScanned, 0)
     }
 
     // MARK: - createModelMetadata Tests

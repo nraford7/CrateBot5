@@ -99,18 +99,50 @@ public actor TrainingCoordinator {
         /// Mapping of ID3 fields to training categories
         public let tagFieldMapping: TrainingDataCollector.TagFieldMapping
 
+        /// Registry of mutually exclusive tag groups for multi-class classification
+        public let tagGroupRegistry: TagGroupRegistry
+
         public init(
             modelName: String = "CustomModel",
             selectedTags: Set<String>? = nil,
             validationSplit: Double = 0.2,
             minSamplesPerTag: Int = 50,
-            tagFieldMapping: TrainingDataCollector.TagFieldMapping = .default
+            tagFieldMapping: TrainingDataCollector.TagFieldMapping = .default,
+            tagGroupRegistry: TagGroupRegistry = .defaultGroups
         ) {
             self.modelName = modelName
             self.selectedTags = selectedTags
             self.validationSplit = validationSplit
             self.minSamplesPerTag = minSamplesPerTag
             self.tagFieldMapping = tagFieldMapping
+            self.tagGroupRegistry = tagGroupRegistry
+        }
+    }
+
+    /// Metadata about a trained tag group (multi-class classifier)
+    public struct TagGroupInfo: Codable, Sendable {
+        /// Name of the tag group (e.g., "BassType", "Vibe")
+        public let groupName: String
+
+        /// Classes included in this group
+        public let classes: [String]
+
+        /// Overall validation accuracy
+        public let accuracy: Double
+
+        /// Per-class accuracy breakdown
+        public let perClassAccuracy: [String: Double]
+
+        public init(
+            groupName: String,
+            classes: [String],
+            accuracy: Double,
+            perClassAccuracy: [String: Double]
+        ) {
+            self.groupName = groupName
+            self.classes = classes
+            self.accuracy = accuracy
+            self.perClassAccuracy = perClassAccuracy
         }
     }
 
@@ -163,8 +195,11 @@ public actor TrainingCoordinator {
         /// Name of the trained model
         public let modelName: String
 
-        /// Detailed results for each trained tag
+        /// Detailed results for each trained tag (binary classifiers)
         public let tagResults: [TagTrainingResult]
+
+        /// Results for multi-class tag groups
+        public let tagGroupResults: [TagGroupInfo]
 
         /// Tags that were skipped with reasons
         public let skippedTagDetails: [SkippedTag]
@@ -202,6 +237,7 @@ public actor TrainingCoordinator {
         public init(
             modelName: String,
             tagResults: [TagTrainingResult],
+            tagGroupResults: [TagGroupInfo] = [],
             skippedTagDetails: [SkippedTag],
             totalTracksScanned: Int,
             tracksUsedForTraining: Int,
@@ -211,6 +247,7 @@ public actor TrainingCoordinator {
         ) {
             self.modelName = modelName
             self.tagResults = tagResults
+            self.tagGroupResults = tagGroupResults
             self.skippedTagDetails = skippedTagDetails
             self.totalTracksScanned = totalTracksScanned
             self.tracksUsedForTraining = tracksUsedForTraining
@@ -450,30 +487,104 @@ public actor TrainingCoordinator {
 
             logger.info("Training models in \(outputDirectory.path)")
 
+            // Phase 4a: Train multi-class classifiers for tag groups
+            var multiClassResults: [MultiClassTrainingResult] = []
+            var tagsHandledByGroups: Set<String> = []
+
+            let multiClassGenerator = MultiClassTrainingDataGenerator(registry: options.tagGroupRegistry)
+            let viableGroupNames = multiClassGenerator.viableGroups(
+                from: validTracks,
+                minSamplesPerClass: options.minSamplesPerTag,
+                minClasses: 2
+            )
+
+            logger.info("Found \(viableGroupNames.count) viable tag groups for multi-class training")
+
+            for groupName in viableGroupNames {
+                guard let trainingData = multiClassGenerator.generateTrainingData(
+                    for: groupName,
+                    from: validTracks,
+                    minSamplesPerClass: options.minSamplesPerTag
+                ) else {
+                    continue
+                }
+
+                logger.info("Training multi-class group '\(groupName)' with classes: \(trainingData.classes.joined(separator: ", "))")
+
+                // Update state to show current group
+                await self.updateState(.training(progress: 0.0, currentTag: "[\(groupName)]"))
+                await stateCallback?(_state)
+
+                do {
+                    let result = try await modelTrainer.trainMultiClassModel(
+                        data: trainingData,
+                        outputDirectory: outputDirectory,
+                        validationSplit: options.validationSplit
+                    )
+                    multiClassResults.append(result)
+
+                    // Track which tags are now handled by this group
+                    for className in result.classes {
+                        tagsHandledByGroups.insert(className)
+                        // Also insert lowercase version for matching
+                        tagsHandledByGroups.insert(className.lowercased())
+                    }
+
+                    logger.info("Multi-class '\(groupName)' trained with accuracy: \(result.accuracy)")
+                } catch {
+                    logger.error("Failed to train multi-class group '\(groupName)': \(error.localizedDescription)")
+                    // Continue with other groups
+                }
+            }
+
+            // Phase 4b: Filter out tags that are covered by multi-class groups
+            let binaryTags = viableTags.filter { tag in
+                // Exclude if the tag is directly in a group
+                if tagsHandledByGroups.contains(tag) || tagsHandledByGroups.contains(tag.lowercased()) {
+                    logger.info("Tag '\(tag)' covered by multi-class group, skipping binary training")
+                    return false
+                }
+                // Also check if the tag belongs to any group via the registry
+                if options.tagGroupRegistry.isGrouped(tag) {
+                    logger.info("Tag '\(tag)' belongs to a tag group, skipping binary training")
+                    return false
+                }
+                return true
+            }
+
+            logger.info("Training \(binaryTags.count) binary classifiers (after filtering \(viableTags.count - binaryTags.count) grouped tags)")
+
+            // Phase 4c: Train binary classifiers for remaining tags
             let trainingResults = try await modelTrainer.trainModels(
                 from: validTracks,
-                tags: viableTags,
+                tags: binaryTags,
                 outputDirectory: outputDirectory,
                 config: trainingConfig
             ) { [weak self] progress in
                 guard let self = self else { return }
+                // Adjust progress to account for multi-class training phase
+                let multiClassWeight = 0.2  // Multi-class gets 20% of progress
+                let binaryProgress = multiClassWeight + (progress.fraction * (1.0 - multiClassWeight))
                 await self.updateState(.training(
-                    progress: progress.fraction,
+                    progress: binaryProgress,
                     currentTag: progress.currentTag
                 ))
                 await stateCallback?(await self.state)
             }
 
-            guard !trainingResults.isEmpty else {
+            // Check that we have at least some trained models (either multi-class or binary)
+            guard !trainingResults.isEmpty || !multiClassResults.isEmpty else {
                 let errorDetails = "No models were successfully trained"
                 _state = .failed(error: errorDetails)
                 await stateCallback?(_state)
                 throw CoordinatorError.trainingFailed(reason: errorDetails)
             }
 
-            // Calculate average accuracy
-            let avgAccuracy = trainingResults.isEmpty ? 0.0 :
-                trainingResults.map { $0.validationAccuracy }.reduce(0, +) / Double(trainingResults.count)
+            // Calculate average accuracy (combining binary and multi-class)
+            var allAccuracies = trainingResults.map { $0.validationAccuracy }
+            allAccuracies.append(contentsOf: multiClassResults.map { $0.accuracy })
+            let avgAccuracy = allAccuracies.isEmpty ? 0.0 :
+                allAccuracies.reduce(0, +) / Double(allAccuracies.count)
 
             // Phase 5: Save metadata
             _state = .packaging
@@ -481,10 +592,23 @@ public actor TrainingCoordinator {
 
             logger.info("Packaging model with metadata")
 
+            // Collect all trained tags (binary classifiers)
             let trainedTagNames = trainingResults.map { $0.tag }
+
+            // Convert multi-class results to TagGroupInfo for metadata
+            let tagGroupInfos = multiClassResults.map { result in
+                TagGroupInfo(
+                    groupName: result.groupName,
+                    classes: result.classes,
+                    accuracy: result.accuracy,
+                    perClassAccuracy: result.perClassAccuracy
+                )
+            }
+
             let metadata = createModelMetadata(
                 name: options.modelName,
                 tags: trainedTagNames,
+                tagGroups: tagGroupInfos,
                 trainingFileCount: validTracks.count,
                 accuracy: avgAccuracy
             )
@@ -512,7 +636,7 @@ public actor TrainingCoordinator {
             _state = .complete(modelName: options.modelName)
             await stateCallback?(_state)
 
-            logger.info("Training complete: \(trainedTagNames.count) models, avg accuracy: \(avgAccuracy)")
+            logger.info("Training complete: \(trainedTagNames.count) binary models, \(multiClassResults.count) multi-class groups, avg accuracy: \(avgAccuracy)")
 
             // Convert training results to detailed tag results
             let tagResults = trainingResults.map { result in
@@ -528,6 +652,7 @@ public actor TrainingCoordinator {
             return TrainingSummary(
                 modelName: options.modelName,
                 tagResults: tagResults,
+                tagGroupResults: tagGroupInfos,
                 skippedTagDetails: skippedTagDetails,
                 totalTracksScanned: collectionResult.scannedCount,
                 tracksUsedForTraining: validTracks.count,
@@ -549,13 +674,15 @@ public actor TrainingCoordinator {
     /// Create model metadata for the trained model
     /// - Parameters:
     ///   - name: Model name
-    ///   - tags: Tags that were trained
+    ///   - tags: Tags that were trained (binary classifiers)
+    ///   - tagGroups: Multi-class tag group info
     ///   - trainingFileCount: Number of files used for training
     ///   - accuracy: Average validation accuracy
     /// - Returns: ModelMetadata instance
     public func createModelMetadata(
         name: String,
         tags: [String],
+        tagGroups: [TagGroupInfo] = [],
         trainingFileCount: Int,
         accuracy: Double
     ) -> ModelMetadata {
@@ -565,6 +692,16 @@ public actor TrainingCoordinator {
         // Get current feature pipeline version
         let pipelineVersion = currentPipelineVersion()
 
+        // Convert TagGroupInfo to TagGroupMetadata
+        let tagGroupMetadata = tagGroups.map { info in
+            TagGroupMetadata(
+                groupName: info.groupName,
+                classes: info.classes,
+                accuracy: info.accuracy,
+                perClassAccuracy: info.perClassAccuracy
+            )
+        }
+
         return ModelMetadata(
             name: name,
             version: "1.0.0",
@@ -573,6 +710,7 @@ public actor TrainingCoordinator {
             trainingFileCount: trainingFileCount,
             categories: Array(tagsByCategory.keys).sorted(),
             tags: tagsByCategory,
+            tagGroups: tagGroupMetadata,
             accuracy: accuracy
         )
     }
