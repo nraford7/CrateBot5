@@ -29,4 +29,32 @@ final class TagGroupRegistryTests: XCTestCase {
 
         XCTAssertEqual(decoded.groups, registry.groups)
     }
+
+    func testPartialMatchingDoesNotOvermatch() {
+        var registry = TagGroupRegistry()
+        registry.addGroup(name: "Energy", tags: ["Low", "Medium", "High", "Peak"])
+
+        // These should NOT match - different concepts
+        XCTAssertNil(registry.groupName(for: "LowPitch"))
+        XCTAssertNil(registry.groupName(for: "HighFidelity"))
+        XCTAssertNil(registry.groupName(for: "MediumRare"))
+
+        // These SHOULD match
+        XCTAssertEqual(registry.groupName(for: "Low"), "Energy")
+        XCTAssertEqual(registry.groupName(for: "LowEnergy"), "Energy")
+        XCTAssertEqual(registry.groupName(for: "High"), "Energy")
+    }
+
+    func testPartialMatchingWithWordBoundaries() {
+        var registry = TagGroupRegistry()
+        registry.addGroup(name: "BassType", tags: ["Walking", "Rolling", "Punchy"])
+
+        // Should match compound tags where class name is a word
+        XCTAssertEqual(registry.groupName(for: "WalkingBass"), "BassType")
+        XCTAssertEqual(registry.groupName(for: "Rolling_Bass"), "BassType")
+        XCTAssertEqual(registry.groupName(for: "punchy-bass"), "BassType")
+
+        // Should NOT match unrelated tags
+        XCTAssertNil(registry.groupName(for: "Stalking"))
+    }
 }
