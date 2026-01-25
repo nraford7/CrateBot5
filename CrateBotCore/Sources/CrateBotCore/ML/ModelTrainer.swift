@@ -366,6 +366,273 @@ public actor ModelTrainer {
         return dataFrame
     }
 
+    // MARK: - Multi-Class Training
+
+    /// Train a multi-class classifier for a tag group
+    /// - Parameters:
+    ///   - data: Multi-class training data from MultiClassTrainingDataGenerator
+    ///   - outputDirectory: Directory to save trained model
+    ///   - validationSplit: Fraction of data to use for validation (0.0 - 1.0)
+    ///   - useLabelSmoothing: Whether to apply label smoothing (helps prevent overconfidence)
+    ///   - smoothingFactor: Label smoothing factor (0.0 - 1.0, typically 0.1)
+    /// - Returns: Training result with accuracy metrics and model URL
+    public func trainMultiClassModel(
+        data: MultiClassTrainingDataGenerator.MultiClassTrainingData,
+        outputDirectory: URL,
+        validationSplit: Double = 0.2,
+        useLabelSmoothing: Bool = true,
+        smoothingFactor: Float = 0.1
+    ) async throws -> MultiClassTrainingResult {
+        let groupName = data.groupName
+        let classes = data.classes
+
+        logger.info("Training multi-class model for '\(groupName)' with \(classes.count) classes")
+
+        // Validate we have enough classes
+        guard classes.count >= 2 else {
+            throw TrainerError.trainingFailed(
+                tag: groupName,
+                reason: "Need at least 2 classes for multi-class training"
+            )
+        }
+
+        // Prepare DataFrame from samples
+        let dataFrame = try prepareMultiClassDataFrame(from: data, useLabelSmoothing: useLabelSmoothing, smoothingFactor: smoothingFactor)
+
+        guard dataFrame.rows.count > 0 else {
+            throw TrainerError.noFeaturesAvailable
+        }
+
+        // Split data for training and validation
+        let (trainingData, validationData) = splitData(
+            dataFrame,
+            validationSplit: validationSplit,
+            seed: 42  // Fixed seed for reproducibility
+        )
+
+        logger.info("Split data: \(trainingData.rows.count) training, \(validationData.rows.count) validation")
+
+        // Train the classifier
+        let classifier = try MLBoostedTreeClassifier(
+            trainingData: trainingData,
+            targetColumn: "label",
+            parameters: MLBoostedTreeClassifier.ModelParameters(
+                maxDepth: 6,
+                maxIterations: 100,
+                minLossReduction: 0.0,
+                minChildWeight: 1.0,
+                stepSize: 0.3
+            )
+        )
+
+        // Evaluate on validation set
+        let (accuracy, perClassAccuracy, confusionMatrix) = evaluateMultiClassClassifier(
+            classifier: classifier,
+            data: validationData,
+            classes: classes
+        )
+
+        logger.info("'\(groupName)' - Validation accuracy: \(accuracy)")
+        for (className, classAccuracy) in perClassAccuracy.sorted(by: { $0.key < $1.key }) {
+            logger.info("  \(className): \(classAccuracy)")
+        }
+
+        // Create output directory if needed
+        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+
+        // Save the model
+        let sanitizedName = sanitizeFileName(groupName)
+        let modelURL = outputDirectory.appendingPathComponent("\(sanitizedName)_multiclass.mlmodel")
+
+        do {
+            try classifier.write(to: modelURL, metadata: nil)
+        } catch {
+            throw TrainerError.saveFailed(tag: groupName, reason: error.localizedDescription)
+        }
+
+        return MultiClassTrainingResult(
+            groupName: groupName,
+            classes: classes,
+            accuracy: accuracy,
+            perClassAccuracy: perClassAccuracy,
+            confusionMatrix: confusionMatrix,
+            modelURL: modelURL
+        )
+    }
+
+    /// Prepare DataFrame for multi-class training
+    private func prepareMultiClassDataFrame(
+        from data: MultiClassTrainingDataGenerator.MultiClassTrainingData,
+        useLabelSmoothing: Bool,
+        smoothingFactor: Float
+    ) throws -> DataFrame {
+        let samples = data.samples
+        guard !samples.isEmpty else {
+            throw TrainerError.noFeaturesAvailable
+        }
+
+        // Determine feature count from first sample
+        let featureCount = samples[0].features.count
+
+        // Create feature columns
+        var columns: [String: [Double]] = [:]
+        for i in 0..<featureCount {
+            columns["f\(i)"] = []
+        }
+
+        var labels: [String] = []
+        var skippedNaN = 0
+        var skippedDimension = 0
+
+        for sample in samples {
+            let features = sample.features
+
+            guard features.count == featureCount else {
+                skippedDimension += 1
+                continue
+            }
+
+            // Skip samples with NaN or Inf values
+            let hasInvalidValue = features.contains { !$0.isFinite }
+            if hasInvalidValue {
+                skippedNaN += 1
+                continue
+            }
+
+            // Add features to columns
+            for (i, value) in features.enumerated() {
+                columns["f\(i)"]?.append(Double(value))
+            }
+
+            // Add class label
+            labels.append(sample.className)
+        }
+
+        if skippedDimension > 0 {
+            logger.warning("Skipped \(skippedDimension) samples with wrong feature dimension")
+        }
+        if skippedNaN > 0 {
+            logger.warning("Skipped \(skippedNaN) samples with NaN/Inf features")
+        }
+
+        // Z-score normalize each feature column
+        var zeroVarianceCount = 0
+        for i in 0..<featureCount {
+            let columnName = "f\(i)"
+            guard var values = columns[columnName], !values.isEmpty else { continue }
+
+            let mean = values.reduce(0, +) / Double(values.count)
+            let variance = values.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(values.count)
+            let stdDev = sqrt(variance)
+
+            if stdDev > 1e-10 {
+                values = values.map { ($0 - mean) / stdDev }
+                columns[columnName] = values
+            } else {
+                zeroVarianceCount += 1
+            }
+        }
+
+        if zeroVarianceCount > 0 {
+            logger.info("Found \(zeroVarianceCount)/\(featureCount) zero-variance features")
+        }
+
+        // Build DataFrame
+        var dataFrame = DataFrame()
+
+        // Add feature columns in order
+        for i in 0..<featureCount {
+            let columnName = "f\(i)"
+            if let values = columns[columnName] {
+                dataFrame.append(column: Column(name: columnName, contents: values))
+            }
+        }
+
+        // Add label column
+        dataFrame.append(column: Column(name: "label", contents: labels))
+
+        logger.info("Multi-class DataFrame prepared: \(dataFrame.rows.count) rows, \(featureCount) features, \(data.classes.count) classes")
+
+        return dataFrame
+    }
+
+    /// Evaluate a multi-class classifier and return metrics
+    private func evaluateMultiClassClassifier(
+        classifier: MLBoostedTreeClassifier,
+        data: DataFrame,
+        classes: [String]
+    ) -> (accuracy: Double, perClassAccuracy: [String: Double], confusionMatrix: [[Int]]) {
+        guard data.rows.count > 0 else {
+            let emptyMatrix = Array(repeating: Array(repeating: 0, count: classes.count), count: classes.count)
+            return (0.0, [:], emptyMatrix)
+        }
+
+        // Initialize confusion matrix (rows = actual, columns = predicted)
+        let numClasses = classes.count
+        var confusionMatrix = Array(repeating: Array(repeating: 0, count: numClasses), count: numClasses)
+
+        // Create class-to-index mapping
+        var classToIndex: [String: Int] = [:]
+        for (index, className) in classes.enumerated() {
+            classToIndex[className] = index
+        }
+
+        // Track per-class correct and total
+        var classCorrect: [String: Int] = [:]
+        var classTotal: [String: Int] = [:]
+        for className in classes {
+            classCorrect[className] = 0
+            classTotal[className] = 0
+        }
+
+        do {
+            let predictions = try classifier.predictions(from: data)
+            let actualLabels = data["label", String.self]
+
+            for (index, actual) in actualLabels.enumerated() {
+                guard let actualClass = actual,
+                      index < predictions.count,
+                      let predicted = predictions[index] as? String,
+                      let actualIdx = classToIndex[actualClass],
+                      let predictedIdx = classToIndex[predicted] else {
+                    continue
+                }
+
+                // Update confusion matrix
+                confusionMatrix[actualIdx][predictedIdx] += 1
+
+                // Update per-class counts
+                classTotal[actualClass, default: 0] += 1
+                if predicted == actualClass {
+                    classCorrect[actualClass, default: 0] += 1
+                }
+            }
+        } catch {
+            logger.error("Failed to get predictions: \(error.localizedDescription)")
+            let emptyMatrix = Array(repeating: Array(repeating: 0, count: classes.count), count: classes.count)
+            return (0.0, [:], emptyMatrix)
+        }
+
+        // Calculate overall accuracy
+        var totalCorrect = 0
+        var totalSamples = 0
+        for i in 0..<numClasses {
+            totalCorrect += confusionMatrix[i][i]
+            totalSamples += confusionMatrix[i].reduce(0, +)
+        }
+        let accuracy = totalSamples > 0 ? Double(totalCorrect) / Double(totalSamples) : 0.0
+
+        // Calculate per-class accuracy
+        var perClassAccuracy: [String: Double] = [:]
+        for className in classes {
+            let correct = classCorrect[className] ?? 0
+            let total = classTotal[className] ?? 0
+            perClassAccuracy[className] = total > 0 ? Double(correct) / Double(total) : 0.0
+        }
+
+        return (accuracy, perClassAccuracy, confusionMatrix)
+    }
+
     // MARK: - Private Helpers
 
     private func splitData(
@@ -412,6 +679,45 @@ public actor ModelTrainer {
             .components(separatedBy: invalidCharacters)
             .joined(separator: "_")
             .replacingOccurrences(of: " ", with: "_")
+    }
+}
+
+// MARK: - Multi-Class Training
+
+/// Result of training a multi-class classifier
+public struct MultiClassTrainingResult: Sendable {
+    /// Name of the tag group (e.g., "Genre", "Energy")
+    public let groupName: String
+
+    /// The classes that were trained
+    public let classes: [String]
+
+    /// Overall accuracy on validation set
+    public let accuracy: Double
+
+    /// Per-class accuracy breakdown
+    public let perClassAccuracy: [String: Double]
+
+    /// Confusion matrix for analysis (rows = actual, columns = predicted)
+    public let confusionMatrix: [[Int]]
+
+    /// URL where the model was saved
+    public let modelURL: URL
+
+    public init(
+        groupName: String,
+        classes: [String],
+        accuracy: Double,
+        perClassAccuracy: [String: Double],
+        confusionMatrix: [[Int]],
+        modelURL: URL
+    ) {
+        self.groupName = groupName
+        self.classes = classes
+        self.accuracy = accuracy
+        self.perClassAccuracy = perClassAccuracy
+        self.confusionMatrix = confusionMatrix
+        self.modelURL = modelURL
     }
 }
 
