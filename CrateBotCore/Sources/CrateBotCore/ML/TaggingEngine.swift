@@ -63,7 +63,12 @@ public struct UserTagPredictions: Sendable {
 
 /// Engine for analyzing audio with dual taxonomy (user + Essentia)
 public actor TaggingEngine {
-    private let effnetExtractor: EffNetExtractor
+    /// Combined feature extractor (lazy-loaded when model is loaded)
+    private var featureExtractor: CombinedFeatureExtractor?
+
+    /// Fallback EffNet extractor for Essentia predictions when no user model loaded
+    private var effnetExtractor: EffNetExtractor?
+
     private let essentiaClassifier: EssentiaClassifier
     private let audioAnalyzer: AudioAnalyzer
     private let logger = Logger(subsystem: "com.cratebot", category: "TaggingEngine")
@@ -76,6 +81,9 @@ public actor TaggingEngine {
 
     /// Loaded model name
     private var loadedModelName: String?
+
+    /// Loaded model metadata (for feature dimension detection)
+    private var loadedMetadata: ModelMetadata?
 
     /// Number of top predictions to keep for each category
     public var topPredictionCount: Int = 5
@@ -90,19 +98,22 @@ public actor TaggingEngine {
     public var fallbackConfig: FallbackMappingConfig = FallbackMappingConfig()
 
     public init() throws {
-        self.effnetExtractor = try EffNetExtractor()
         self.essentiaClassifier = try EssentiaClassifier()
         self.audioAnalyzer = AudioAnalyzer()
+        // Feature extractor is lazy-loaded when model is loaded
+        // This allows matching the feature dimension to the trained model
     }
 
     /// Load all classifiers from a model directory
     /// - Parameters:
     ///   - modelDirectory: Directory containing .mlmodel files and metadata JSON
     ///   - progress: Optional async callback for loading progress (0.0 to 1.0)
+    ///   - featureConfig: Optional feature config override (defaults to auto-detection from metadata)
     /// - Returns: Number of classifiers loaded and the model name
     public func loadModel(
         from modelDirectory: URL,
-        progress: ((Double) async -> Void)? = nil
+        progress: ((Double) async -> Void)? = nil,
+        featureConfig: CombinedFeatureExtractor.FeatureConfig? = nil
     ) async throws -> (classifierCount: Int, modelName: String) {
         let fileManager = FileManager.default
 
@@ -120,6 +131,31 @@ public actor TaggingEngine {
         // Clear existing classifiers
         userClassifiers.removeAll()
         multiClassClassifiers.removeAll()
+
+        // Load metadata first to detect feature dimension
+        let metadataURL = modelDirectory.appendingPathComponent("metadata.json")
+        let metadata = try? ModelMetadata.load(from: metadataURL)
+        loadedMetadata = metadata
+
+        // Detect feature config from metadata if not provided
+        let effectiveConfig: CombinedFeatureExtractor.FeatureConfig
+        if let config = featureConfig {
+            effectiveConfig = config
+        } else if let metadata = metadata {
+            switch metadata.featureDimension {
+            case 1280: effectiveConfig = .effnetOnly
+            case 1680: effectiveConfig = .effnetPlusGenres
+            default: effectiveConfig = .effnetGenresCLAP
+            }
+            logger.info("Detected feature dimension \(metadata.featureDimension), using \(effectiveConfig.description)")
+        } else {
+            // Default to EffNet+Genres for models without metadata
+            effectiveConfig = .effnetPlusGenres
+            logger.info("No metadata found, defaulting to \(effectiveConfig.description)")
+        }
+
+        // Initialize the combined feature extractor with the appropriate config
+        featureExtractor = try CombinedFeatureExtractor(config: effectiveConfig)
 
         // Filter out multi-class model files (they have _multiclass suffix)
         let binaryModelFiles = modelFiles.filter { url in
@@ -145,8 +181,7 @@ public actor TaggingEngine {
         }
 
         // Load multi-class classifiers from metadata
-        let metadataURL = modelDirectory.appendingPathComponent("metadata.json")
-        if let metadata = try? ModelMetadata.load(from: metadataURL) {
+        if let metadata = metadata {
             for groupInfo in metadata.tagGroups {
                 // Try both compiled and uncompiled model paths
                 let modelURLs = [
@@ -194,6 +229,8 @@ public actor TaggingEngine {
         userClassifiers.removeAll()
         multiClassClassifiers.removeAll()
         loadedModelName = nil
+        loadedMetadata = nil
+        featureExtractor = nil
     }
 
     /// Check if user model is loaded
@@ -231,9 +268,35 @@ public actor TaggingEngine {
         // Load audio at 16kHz
         let buffer = try await audioAnalyzer.loadAudio(from: url, targetSampleRate: EffNetExtractor.targetSampleRate)
 
-        // Extract EffNet embeddings and genre activations
-        let (embeddings, genreActivations) = try await effnetExtractor.extractWithGenres(from: buffer)
-        let extendedFeatures = embeddings + genreActivations  // 1680-dim for user classifiers
+        // Extract features using combined extractor if available, otherwise use fallback
+        let extendedFeatures: [Float]
+        let embeddings: [Float]
+        let genreActivations: [Float]
+
+        if let extractor = featureExtractor {
+            // Use combined extractor - this matches the trained model's feature dimension
+            extendedFeatures = try await extractor.extract(from: buffer)
+
+            // For Essentia predictions, we still need the raw embeddings and genre activations
+            // These are always the first 1280 and next 400 dimensions respectively
+            if extendedFeatures.count >= 1680 {
+                embeddings = Array(extendedFeatures.prefix(1280))
+                genreActivations = Array(extendedFeatures.dropFirst(1280).prefix(400))
+            } else if extendedFeatures.count == 1280 {
+                embeddings = extendedFeatures
+                genreActivations = []
+            } else {
+                embeddings = []
+                genreActivations = []
+            }
+        } else {
+            // No model loaded - use fallback EffNet extractor for Essentia predictions only
+            let fallbackExtractor = try getOrCreateEffNetExtractor()
+            let (emb, genres) = try await fallbackExtractor.extractWithGenres(from: buffer)
+            embeddings = emb
+            genreActivations = genres
+            extendedFeatures = embeddings + genreActivations
+        }
 
         // Get Essentia predictions
         let moodPredictions = try await essentiaClassifier.predictMoodTheme(embeddings: embeddings)
@@ -328,8 +391,9 @@ public actor TaggingEngine {
 
     /// Analyze audio buffer directly (for cases where buffer is already loaded)
     public func analyze(buffer: AVAudioPCMBuffer) async throws -> TaggingResult {
-        // Extract EffNet embeddings and genre activations
-        let (embeddings, genreActivations) = try await effnetExtractor.extractWithGenres(from: buffer)
+        // Use fallback EffNet extractor for Essentia predictions
+        let fallbackExtractor = try getOrCreateEffNetExtractor()
+        let (embeddings, genreActivations) = try await fallbackExtractor.extractWithGenres(from: buffer)
 
         // Get Essentia predictions
         let moodPredictions = try await essentiaClassifier.predictMoodTheme(embeddings: embeddings)
@@ -353,6 +417,18 @@ public actor TaggingEngine {
             embeddings: embeddings,
             genreActivations: genreActivations
         )
+    }
+
+    // MARK: - Private Helpers
+
+    /// Get or create the fallback EffNet extractor (lazy initialization)
+    private func getOrCreateEffNetExtractor() throws -> EffNetExtractor {
+        if let extractor = effnetExtractor {
+            return extractor
+        }
+        let extractor = try EffNetExtractor()
+        effnetExtractor = extractor
+        return extractor
     }
 
     // MARK: - Fallback Mapping Support
