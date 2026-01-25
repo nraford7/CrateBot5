@@ -40,6 +40,7 @@ public struct ModelMetadata: Codable, Sendable {
     public let tagGroups: [TagGroupMetadata] // Multi-class classifier groups
     public let accuracy: Double?             // Validation accuracy if available
     public let featureDimension: Int         // 1280, 1680, or 2192
+    public let calibratorTemperature: Float? // Temperature for confidence calibration
 
     public init(
         name: String,
@@ -51,7 +52,8 @@ public struct ModelMetadata: Codable, Sendable {
         tags: [String: [String]],
         tagGroups: [TagGroupMetadata] = [],
         accuracy: Double? = nil,
-        featureDimension: Int = 1680
+        featureDimension: Int = 1680,
+        calibratorTemperature: Float? = nil
     ) {
         self.name = name
         self.version = version
@@ -63,6 +65,7 @@ public struct ModelMetadata: Codable, Sendable {
         self.tagGroups = tagGroups
         self.accuracy = accuracy
         self.featureDimension = featureDimension
+        self.calibratorTemperature = calibratorTemperature
     }
 
     // Custom decoder to handle old JSON files without featureDimension or tagGroups
@@ -80,11 +83,14 @@ public struct ModelMetadata: Codable, Sendable {
         accuracy = try container.decodeIfPresent(Double.self, forKey: .accuracy)
         // Default to 1280 for old models that don't have this field
         featureDimension = try container.decodeIfPresent(Int.self, forKey: .featureDimension) ?? 1280
+        // Calibrator temperature is optional (may not exist in old models)
+        calibratorTemperature = try container.decodeIfPresent(Float.self, forKey: .calibratorTemperature)
     }
 
     private enum CodingKeys: String, CodingKey {
         case name, version, pipelineVersion, trainedAt, trainingFileCount
         case categories, tags, tagGroups, accuracy, featureDimension
+        case calibratorTemperature
     }
 
     /// Load metadata from JSON sidecar file

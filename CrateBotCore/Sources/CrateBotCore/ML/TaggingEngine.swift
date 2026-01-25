@@ -97,6 +97,9 @@ public actor TaggingEngine {
     /// Fallback mappings for tags without trained classifiers
     public var fallbackConfig: FallbackMappingConfig = FallbackMappingConfig()
 
+    /// Confidence calibrator for adjusting raw classifier outputs
+    private var confidenceCalibrator: ConfidenceCalibrator = ConfidenceCalibrator()
+
     public init() throws {
         self.essentiaClassifier = try EssentiaClassifier()
         self.audioAnalyzer = AudioAnalyzer()
@@ -156,6 +159,15 @@ public actor TaggingEngine {
 
         // Initialize the combined feature extractor with the appropriate config
         featureExtractor = try CombinedFeatureExtractor(config: effectiveConfig)
+
+        // Load confidence calibrator if temperature is stored in metadata
+        if let metadata = metadata, let temp = metadata.calibratorTemperature {
+            confidenceCalibrator = ConfidenceCalibrator(temperature: temp, smoothingFactor: 0.1)
+            logger.info("Loaded confidence calibrator with temperature: \(temp)")
+        } else {
+            // Reset to default calibrator if no temperature stored
+            confidenceCalibrator = ConfidenceCalibrator()
+        }
 
         // Filter out multi-class model files (they have _multiclass suffix)
         let binaryModelFiles = modelFiles.filter { url in
@@ -321,16 +333,18 @@ public actor TaggingEngine {
         for classifier in userClassifiers {
             trainedTagNames.insert(classifier.tagName.lowercased())
             do {
-                let (_, confidence) = try classifier.predictWithConfidence(features: extendedFeatures)
+                let (_, rawConfidence) = try classifier.predictWithConfidence(features: extendedFeatures)
+                let confidence = confidenceCalibrator.calibrate(rawConfidence)
 
                 if confidence >= classificationThreshold {
-                    // Confidence meets threshold - apply tag
+                    // Calibrated confidence meets threshold - apply tag
                     predictedTags.append(classifier.tagName)
-                } else if confidence > 0 {
+                } else if rawConfidence > 0 {
                     // Below threshold but non-zero - try hybrid Essentia check
+                    // Use rawConfidence for hybrid check to maintain original logic
                     let shouldApply = checkHybridEssentiaFallback(
                         tagName: classifier.tagName,
-                        userConfidence: confidence,
+                        userConfidence: rawConfidence,
                         moodPredictions: moodPredictions,
                         genrePredictions: genrePredictions,
                         instrumentPredictions: instrumentPredictions

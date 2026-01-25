@@ -383,6 +383,26 @@ final class TrainingPipeline40PercentTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: results[0].modelURL.path))
     }
 
+    // MARK: - ConfidenceCalibrator Tests
+
+    func testConfidenceCalibratorFitAndCalibrate() {
+        var calibrator = ConfidenceCalibrator()
+
+        // Simulate overconfident predictions
+        let predictions: [Float] = [0.9, 0.85, 0.8, 0.1, 0.15, 0.2]
+        let labels: [Bool] = [true, true, false, false, false, true]
+
+        calibrator.fit(predictions: predictions, labels: labels)
+
+        XCTAssertGreaterThan(calibrator.temperature, 0.5)
+        XCTAssertLessThan(calibrator.temperature, 3.0)
+
+        let rawHigh: Float = 0.95
+        let calibrated = calibrator.calibrate(rawHigh)
+        XCTAssertLessThan(calibrated, rawHigh)
+        XCTAssertGreaterThan(calibrated, 0.0)
+    }
+
     // MARK: - Private Helpers
 
     /// Apply mixup augmentation to a set of tracks
