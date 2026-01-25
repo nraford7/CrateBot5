@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import os
 
 /// Errors that can occur in the tagging engine
 public enum TaggingEngineError: Error, LocalizedError {
@@ -65,9 +66,13 @@ public actor TaggingEngine {
     private let effnetExtractor: EffNetExtractor
     private let essentiaClassifier: EssentiaClassifier
     private let audioAnalyzer: AudioAnalyzer
+    private let logger = Logger(subsystem: "com.cratebot", category: "TaggingEngine")
 
     /// User-trained classifiers (one per tag)
     private var userClassifiers: [TagClassifier] = []
+
+    /// Multi-class classifiers (one per tag group)
+    private var multiClassClassifiers: [String: MultiClassClassifier] = [:]
 
     /// Loaded model name
     private var loadedModelName: String?
@@ -114,17 +119,24 @@ public actor TaggingEngine {
 
         // Clear existing classifiers
         userClassifiers.removeAll()
+        multiClassClassifiers.removeAll()
 
-        let totalFiles = modelFiles.count
+        // Filter out multi-class model files (they have _multiclass suffix)
+        let binaryModelFiles = modelFiles.filter { url in
+            let name = url.deletingPathExtension().lastPathComponent
+            return !name.hasSuffix("_multiclass")
+        }
 
-        // Load each classifier
-        for (index, modelURL) in modelFiles.enumerated() {
+        let totalFiles = binaryModelFiles.count
+
+        // Load each binary classifier
+        for (index, modelURL) in binaryModelFiles.enumerated() {
             let tagName = modelURL.deletingPathExtension().lastPathComponent
             do {
                 let classifier = try TagClassifier(tagName: tagName, modelURL: modelURL, threshold: 0.5)
                 userClassifiers.append(classifier)
             } catch {
-                print("Warning: Failed to load classifier for '\(tagName)': \(error)")
+                logger.warning("Failed to load classifier for '\(tagName)': \(error.localizedDescription)")
             }
 
             // Report progress and yield to allow UI updates
@@ -132,11 +144,41 @@ public actor TaggingEngine {
             await Task.yield()
         }
 
+        // Load multi-class classifiers from metadata
+        let metadataURL = modelDirectory.appendingPathComponent("metadata.json")
+        if let metadata = try? ModelMetadata.load(from: metadataURL) {
+            for groupInfo in metadata.tagGroups {
+                // Try both compiled and uncompiled model paths
+                let modelURLs = [
+                    modelDirectory.appendingPathComponent("\(groupInfo.groupName)_multiclass.mlmodelc"),
+                    modelDirectory.appendingPathComponent("\(groupInfo.groupName)_multiclass.mlmodel")
+                ]
+
+                guard let modelURL = modelURLs.first(where: { fileManager.fileExists(atPath: $0.path) }) else {
+                    logger.warning("Multi-class model not found for group '\(groupInfo.groupName)'")
+                    continue
+                }
+
+                do {
+                    let classifier = try MultiClassClassifier(
+                        groupName: groupInfo.groupName,
+                        classes: groupInfo.classes,
+                        modelURL: modelURL,
+                        featureCount: metadata.featureDimension
+                    )
+                    multiClassClassifiers[groupInfo.groupName] = classifier
+                    logger.info("Loaded multi-class classifier: \(groupInfo.groupName)")
+                } catch {
+                    logger.error("Failed to load multi-class '\(groupInfo.groupName)': \(error.localizedDescription)")
+                }
+            }
+        }
+
         // Get model name from directory or metadata
         let modelName = modelDirectory.lastPathComponent
         loadedModelName = modelName
 
-        return (userClassifiers.count, modelName)
+        return (userClassifiers.count + multiClassClassifiers.count, modelName)
     }
 
     /// Load user-trained model (legacy single-classifier support)
@@ -150,12 +192,13 @@ public actor TaggingEngine {
     /// Unload all user models
     public func unloadUserModel() {
         userClassifiers.removeAll()
+        multiClassClassifiers.removeAll()
         loadedModelName = nil
     }
 
     /// Check if user model is loaded
     public var hasUserModel: Bool {
-        !userClassifiers.isEmpty
+        !userClassifiers.isEmpty || !multiClassClassifiers.isEmpty
     }
 
     /// Get loaded model name
@@ -234,7 +277,26 @@ public actor TaggingEngine {
                     }
                 }
             } catch {
-                print("Classifier '\(classifier.tagName)' failed: \(error)")
+                logger.error("Classifier '\(classifier.tagName)' failed: \(error.localizedDescription)")
+            }
+        }
+
+        // Run multi-class predictions
+        var groupPredictions: [MultiClassClassifier.Prediction] = []
+
+        for (_, classifier) in multiClassClassifiers {
+            do {
+                let prediction = try await classifier.predict(features: extendedFeatures)
+                if prediction.confidence >= classificationThreshold {
+                    groupPredictions.append(prediction)
+                    predictedTags.append(prediction.predictedClass)
+                }
+                // Track all classes from this group as trained tags (to avoid fallback duplicates)
+                for className in classifier.classes {
+                    trainedTagNames.insert(className.lowercased())
+                }
+            } catch {
+                logger.error("Multi-class prediction failed: \(error.localizedDescription)")
             }
         }
 

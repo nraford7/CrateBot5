@@ -10,9 +10,9 @@ public actor MultiClassClassifier {
         public let classProbabilities: [String: Float]
     }
 
-    public let groupName: String
-    public let classes: [String]
-    public let featureCount: Int
+    public nonisolated let groupName: String
+    public nonisolated let classes: [String]
+    public nonisolated let featureCount: Int
 
     private let model: MLModel
 
