@@ -566,7 +566,8 @@ public actor TrainingDataCollector {
 
     /// Extracts audio features for tracks that don't already have them.
     ///
-    /// Uses EffNetExtractor to generate 1280-dimensional embeddings from audio.
+    /// Uses EffNetExtractor to generate 1680-dimensional features from audio
+    /// (1280 embeddings + 400 genre activations).
     /// Audio is loaded at 16kHz for EffNet processing.
     /// Uses concurrent batch processing for improved performance.
     ///
@@ -593,7 +594,8 @@ public actor TrainingDataCollector {
 
     /// Extracts audio features with checkpoint support for resumable training.
     ///
-    /// Uses EffNetExtractor to generate 1280-dimensional embeddings from audio.
+    /// Uses EffNetExtractor to generate 1680-dimensional features from audio
+    /// (1280 embeddings + 400 genre activations).
     /// Saves checkpoints every 50 tracks so training can resume if interrupted.
     ///
     /// - Parameters:
@@ -709,7 +711,8 @@ public actor TrainingDataCollector {
                                 from: fileURL,
                                 targetSampleRate: EffNetExtractor.targetSampleRate
                             )
-                            let features = try await extractor.extract(from: buffer)
+                            let (embeddings, genreActivations) = try await extractor.extractWithGenres(from: buffer)
+                            let features = embeddings + genreActivations  // 1280 + 400 = 1680
                             return (globalIndex, track, features)
                         } catch {
                             return (globalIndex, track, nil)
