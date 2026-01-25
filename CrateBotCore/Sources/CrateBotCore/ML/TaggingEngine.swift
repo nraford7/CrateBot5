@@ -190,6 +190,7 @@ public actor TaggingEngine {
 
         // Extract EffNet embeddings and genre activations
         let (embeddings, genreActivations) = try await effnetExtractor.extractWithGenres(from: buffer)
+        let extendedFeatures = embeddings + genreActivations  // 1680-dim for user classifiers
 
         // Get Essentia predictions
         let moodPredictions = try await essentiaClassifier.predictMoodTheme(embeddings: embeddings)
@@ -214,7 +215,7 @@ public actor TaggingEngine {
         for classifier in userClassifiers {
             trainedTagNames.insert(classifier.tagName.lowercased())
             do {
-                let (_, confidence) = try classifier.predictWithConfidence(features: embeddings)
+                let (_, confidence) = try classifier.predictWithConfidence(features: extendedFeatures)
 
                 if confidence >= classificationThreshold {
                     // Confidence meets threshold - apply tag
