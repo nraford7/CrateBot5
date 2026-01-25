@@ -26,6 +26,13 @@ public struct TrainingConfig: Sendable {
     /// Fraction of samples to generate via mixup (0.0 - 1.0)
     public let mixupRatio: Float
 
+    /// Whether to enable label smoothing (reduces overconfidence)
+    public let labelSmoothingEnabled: Bool
+
+    /// Label smoothing factor (typically 0.1, range 0.0-1.0)
+    /// For binary: [0, 1] becomes [0.05, 0.95] with factor 0.1
+    public let labelSmoothingFactor: Float
+
     public init(
         validationSplit: Double = 0.2,
         minSamplesPerTag: Int = 50,
@@ -33,7 +40,9 @@ public struct TrainingConfig: Sendable {
         randomSeed: Int = 42,
         mixupEnabled: Bool = true,
         mixupAlpha: Float = 0.4,
-        mixupRatio: Float = 0.3
+        mixupRatio: Float = 0.3,
+        labelSmoothingEnabled: Bool = true,
+        labelSmoothingFactor: Float = 0.1
     ) {
         self.validationSplit = validationSplit
         self.minSamplesPerTag = minSamplesPerTag
@@ -42,6 +51,8 @@ public struct TrainingConfig: Sendable {
         self.mixupEnabled = mixupEnabled
         self.mixupAlpha = mixupAlpha
         self.mixupRatio = mixupRatio
+        self.labelSmoothingEnabled = labelSmoothingEnabled
+        self.labelSmoothingFactor = labelSmoothingFactor
     }
 }
 
@@ -646,6 +657,31 @@ public actor ModelTrainer {
         }
 
         return (accuracy, perClassAccuracy, confusionMatrix)
+    }
+
+    // MARK: - Label Smoothing
+
+    /// Apply label smoothing to convert hard labels to soft probability distributions
+    /// - Parameters:
+    ///   - hardLabel: The index of the true class (0 or 1 for binary)
+    ///   - numClasses: Total number of classes (2 for binary classification)
+    ///   - smoothingFactor: How much probability mass to redistribute (typically 0.1)
+    /// - Returns: Soft label distribution where hard label gets (1-smoothing) and rest is distributed
+    /// - Note: CreateML MLBoostedTreeClassifier uses hard labels internally, so these soft labels
+    ///         are used for confidence calibration during inference (see ConfidenceCalibrator).
+    ///         For full soft label training, a custom gradient boosting or neural network
+    ///         implementation would be required.
+    public func applySoftLabels(
+        hardLabel: Int,
+        numClasses: Int,
+        smoothingFactor: Float
+    ) -> [Float] {
+        // Distribute smoothingFactor equally among all classes
+        // Then add (1 - smoothingFactor) to the true class
+        // For binary with factor 0.1: [0, 1] becomes [0.05, 0.95]
+        var softLabels = [Float](repeating: smoothingFactor / Float(numClasses), count: numClasses)
+        softLabels[hardLabel] = 1.0 - smoothingFactor + smoothingFactor / Float(numClasses)
+        return softLabels
     }
 
     // MARK: - Private Helpers
