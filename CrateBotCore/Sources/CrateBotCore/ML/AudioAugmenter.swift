@@ -104,12 +104,27 @@ public struct AudioAugmenter: Sendable {
         label2: String,
         alpha: Float = 0.4
     ) -> MixupResult {
+        // Handle empty arrays gracefully
+        let minCount = min(features1.count, features2.count)
+        guard minCount > 0 else {
+            // Return empty features with 50/50 soft labels
+            var softLabels: [String: Float] = [:]
+            if label1 == label2 {
+                softLabels[label1] = 1.0
+            } else {
+                softLabels[label1] = 0.5
+                softLabels[label2] = 0.5
+            }
+            return MixupResult(features: [], softLabels: softLabels)
+        }
+
         // Sample lambda from Beta distribution (approximated)
         let lambda = sampleBeta(alpha: alpha, beta: alpha)
 
         // Mix features: lambda * features1 + (1-lambda) * features2
-        var mixedFeatures = [Float](repeating: 0, count: features1.count)
-        for i in 0..<features1.count {
+        // Use min length to handle mismatched dimensions
+        var mixedFeatures = [Float](repeating: 0, count: minCount)
+        for i in 0..<minCount {
             mixedFeatures[i] = lambda * features1[i] + (1 - lambda) * features2[i]
         }
 
