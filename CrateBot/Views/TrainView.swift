@@ -2,92 +2,100 @@ import SwiftUI
 import CrateBotCore
 import AppKit
 import Combine
+import UniformTypeIdentifiers
 
 // MARK: - ID3 Field Configuration
 
 /// Available ID3 fields that can be mapped to training categories
+/// Names match iTunes/Apple Music column names for user familiarity
 enum ID3Field: String, CaseIterable, Identifiable, Codable {
-    case title = "Title (TIT2)"
-    case artist = "Artist (TPE1)"
-    case albumArtist = "Album Artist (TPE2)"
-    case album = "Album (TALB)"
-    case genre = "Genre (TCON)"
-    case contentGroup = "Grouping (TIT1)"
-    case comments = "Comments (COMM)"
-    case composer = "Composer (TCOM)"
-    case subtitle = "Subtitle (TIT3)"
-    case conductor = "Conductor (TPE3)"
-    case lyricist = "Lyricist (TEXT)"
-    case fileOwner = "File Owner (TOWN)"
-    case bpm = "BPM (TBPM)"
-    case year = "Year (TYER)"
-    case publisher = "Publisher (TPUB)"
-    case encodedBy = "Encoded By (TENC)"
+    // Primary tagging fields (most useful for CrateBot)
+    case genre = "Genre"
+    case grouping = "Grouping"
+    case comments = "Comments"
+    case album = "Album"
+    case composer = "Composer"
+    case trackDescription = "Description"
+
+    // Track metadata (visible in iTunes)
+    case artist = "Artist"
+    case albumArtist = "Album Artist"
+    case bpm = "Beats Per Minute"
+    case category = "Category"
+    case movementName = "Movement Name"
+    case work = "Work"
 
     var id: String { rawValue }
 
-    var shortName: String {
-        switch self {
-        case .title: return "Title"
-        case .artist: return "Artist"
-        case .albumArtist: return "Album Artist"
-        case .album: return "Album"
-        case .genre: return "Genre"
-        case .contentGroup: return "Grouping"
-        case .comments: return "Comments"
-        case .composer: return "Composer"
-        case .subtitle: return "Subtitle"
-        case .conductor: return "Conductor"
-        case .lyricist: return "Lyricist"
-        case .fileOwner: return "File Owner"
-        case .bpm: return "BPM"
-        case .year: return "Year"
-        case .publisher: return "Publisher"
-        case .encodedBy: return "Encoded By"
-        }
-    }
+    var shortName: String { rawValue }
 
-    var description: String {
+    var iTunesDescription: String {
         switch self {
-        case .title: return "Song title"
-        case .artist: return "Artist name"
-        case .albumArtist: return "Album Artist - often repurposed"
+        case .genre: return "Main genre classification"
+        case .grouping: return "Content grouping for organization"
+        case .comments: return "Free-form comments field"
         case .album: return "Album name"
-        case .genre: return "Genre field"
-        case .contentGroup: return "Grouping field"
-        case .comments: return "Comments field"
-        case .composer: return "Composer field"
-        case .subtitle: return "Subtitle/description"
-        case .conductor: return "Conductor field"
-        case .lyricist: return "Lyricist field"
-        case .fileOwner: return "File Owner field"
-        case .bpm: return "Beats per minute"
-        case .year: return "Year"
-        case .publisher: return "Publisher/Label"
-        case .encodedBy: return "Encoded by"
+        case .composer: return "Composer/writer credits"
+        case .trackDescription: return "Track description/subtitle"
+        case .artist: return "Primary artist"
+        case .albumArtist: return "Album artist (compilation support)"
+        case .bpm: return "Tempo in beats per minute"
+        case .category: return "iTunes category field"
+        case .movementName: return "Classical movement name"
+        case .work: return "Work/composition name"
         }
     }
 
-    /// Convert to CrateBotCore's ID3FieldType
-    var coreFieldType: TrainingDataCollector.ID3FieldType {
+    /// Convert to CrateBotCore's ID3FieldType (for training data collection)
+    var coreFieldType: TrainingDataCollector.ID3FieldType? {
         switch self {
-        case .title: return .title
         case .artist: return .artist
         case .albumArtist: return .albumArtist
         case .album: return .album
         case .genre: return .genre
-        case .contentGroup: return .contentGroup
+        case .grouping: return .contentGroup
         case .comments: return .comments
         case .composer: return .composer
-        case .subtitle: return .subtitle
-        case .conductor: return .conductor
-        case .lyricist: return .lyricist
-        case .fileOwner: return .fileOwner
+        case .trackDescription: return .subtitle
         case .bpm: return .bpm
-        case .year: return .year
-        case .publisher: return .publisher
-        case .encodedBy: return .encodedBy
+        case .category, .movementName, .work: return nil
         }
+    }
+
+    /// The ID3v2.3 frame identifier
+    var frameID: String {
+        switch self {
+        case .genre: return "TCON"
+        case .grouping: return "TIT1"
+        case .comments: return "COMM"
+        case .album: return "TALB"
+        case .composer: return "TCOM"
+        case .trackDescription: return "TIT3"
+        case .artist: return "TPE1"
+        case .albumArtist: return "TPE2"
+        case .bpm: return "TBPM"
+        case .category: return "TCAT"           // iTunes Category
+        case .movementName: return "MVNM"       // iTunes Movement Name
+        case .work: return "TXXX:WORK"          // iTunes Work field
+        }
+    }
+
+    /// Create from a frame ID
+    static func from(frameID: String) -> ID3Field? {
+        allCases.first { $0.frameID == frameID }
+    }
+
+    /// Get display name from frame ID (for custom TXXX fields)
+    static func displayName(for frameID: String) -> String {
+        if let field = from(frameID: frameID) {
+            return field.shortName
+        }
+        // Handle TXXX custom fields
+        if frameID.hasPrefix("TXXX:") {
+            let customName = frameID.replacingOccurrences(of: "TXXX:", with: "")
+            return "Custom: \(customName)"
+        }
+        return frameID
     }
 }
 
@@ -95,17 +103,17 @@ enum ID3Field: String, CaseIterable, Identifiable, Codable {
 struct TagMappingConfiguration: Equatable, Codable {
     var genreField: ID3Field = .genre
     var timingField: ID3Field = .album
-    var moodField: ID3Field = .contentGroup
+    var moodField: ID3Field = .grouping
     var descriptiveField: ID3Field = .comments
 
     static let `default` = TagMappingConfiguration()
 
     var coreMapping: TrainingDataCollector.TagFieldMapping {
         .init(
-            genreField: genreField.coreFieldType,
-            timingField: timingField.coreFieldType,
-            moodField: moodField.coreFieldType,
-            descriptiveField: descriptiveField.coreFieldType
+            genreField: genreField.coreFieldType ?? .genre,
+            timingField: timingField.coreFieldType ?? .album,
+            moodField: moodField.coreFieldType ?? .contentGroup,
+            descriptiveField: descriptiveField.coreFieldType ?? .comments
         )
     }
 
@@ -229,7 +237,8 @@ final class TrainingViewModel: ObservableObject {
             modelName: trimmedName,
             selectedTags: selectedTags.allTags,
             validationSplit: 0.2,
-            minSamplesPerTag: minSamplesPerTag
+            minSamplesPerTag: minSamplesPerTag,
+            tagFieldMapping: tagMapping.coreMapping
         )
 
         trainingTask = Task {
@@ -276,6 +285,19 @@ final class TrainingViewModel: ObservableObject {
             await coordinator.reset()
         }
     }
+
+    /// Get current pipeline step index based on training state
+    var currentPipelineStep: Int {
+        switch trainingState {
+        case .idle: return 0
+        case .collecting: return 1
+        case .extractingFeatures: return 1
+        case .training: return 2
+        case .packaging: return 3
+        case .complete: return 4
+        case .failed: return -1
+        }
+    }
 }
 
 // MARK: - TrainView
@@ -283,6 +305,7 @@ final class TrainingViewModel: ObservableObject {
 struct TrainView: View {
     // Use shared view model that persists across tab switches
     @StateObject private var viewModel = TrainingViewModel.shared
+    @Environment(AppState.self) private var appState
 
     // Sheet state (local to view)
     @State private var showTagSelectionSheet = false
@@ -328,6 +351,7 @@ struct TrainView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Colors.bgWindow)
         .sheet(isPresented: $showTagSelectionSheet) {
             TagSelectionSheet(
                 directories: viewModel.selectedFolders,
@@ -338,66 +362,83 @@ struct TrainView: View {
                 onStartTraining: { viewModel.startTraining() }
             )
         }
+        .onChange(of: viewModel.trainingSummary?.modelName) { _, newValue in
+            // Load the trained model after training completes
+            if let summary = viewModel.trainingSummary {
+                Task {
+                    do {
+                        try await appState.loadModel(from: summary.modelURL)
+                        appState.showToast("Model '\(summary.modelName)' loaded", kind: .success)
+                    } catch {
+                        print("Failed to load trained model: \(error)")
+                        appState.showToast("Failed to load model: \(error.localizedDescription)", kind: .error)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Folder Selection View
 
     private var folderSelectionView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: Theme.Spacing.lg) {
             Spacer()
 
             Image(systemName: "folder.badge.plus")
                 .font(.system(size: 64))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textTertiary)
 
             Text("Select Training Data")
-                .font(.title)
-                .fontWeight(.semibold)
+                .font(Theme.Fonts.heading(24))
+                .foregroundColor(Theme.Colors.textPrimary)
 
             Text("Choose folders containing your tagged MP3 files")
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(14))
+                .foregroundColor(Theme.Colors.textSecondary)
 
             if !viewModel.selectedFolders.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     ForEach(viewModel.selectedFolders, id: \.self) { folder in
                         HStack {
                             Image(systemName: "folder.fill")
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(Theme.Colors.accentPrimary)
                             Text(folder.lastPathComponent)
+                                .font(Theme.Fonts.mono(13))
+                                .foregroundColor(Theme.Colors.textPrimary)
                                 .lineLimit(1)
                             Spacer()
                             Button {
                                 viewModel.selectedFolders.removeAll { $0 == folder }
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.Colors.textTertiary)
                             }
                             .buttonStyle(.plain)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color.secondary.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .padding(.horizontal, Theme.Spacing.md)
+                        .padding(.vertical, Theme.Spacing.sm)
+                        .background(Theme.Colors.bgSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
                     }
                 }
                 .frame(maxWidth: 400)
                 .padding(.vertical)
             }
 
-            HStack(spacing: 16) {
+            HStack(spacing: Theme.Spacing.md) {
                 Button {
                     selectFolder()
                 } label: {
                     Label("Add Folder", systemImage: "plus")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(viewModel.selectedFolders.isEmpty ? AnyButtonStyle(PrimaryButtonStyle()) : AnyButtonStyle(SecondaryButtonStyle()))
 
                 Button {
                     showTagSelectionSheet = true
                 } label: {
                     Label("Configure & Scan", systemImage: "slider.horizontal.3")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(viewModel.selectedFolders.isEmpty ? AnyButtonStyle(SecondaryButtonStyle()) : AnyButtonStyle(PrimaryButtonStyle()))
                 .disabled(viewModel.selectedFolders.isEmpty)
             }
 
@@ -416,209 +457,189 @@ struct TrainView: View {
     ) -> some View {
         let progress = detailedProgress.fraction
 
-        return VStack(spacing: 16) {
-            // Header with status and controls
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        if viewModel.isPaused {
-                            Image(systemName: "pause.circle.fill")
-                                .foregroundStyle(.orange)
+        return VStack(spacing: Theme.Spacing.md) {
+            // Pipeline stepper
+            PipelineStepper(
+                steps: ["Select Files", "Extract Features", "Train Model", "Validate"],
+                currentStep: viewModel.currentPipelineStep
+            )
+
+            // Active processing card
+            ThemedCard(accentColor: Theme.Colors.statusWarning) {
+                HStack {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        HStack(spacing: 6) {
+                            if viewModel.isPaused {
+                                Image(systemName: "pause.circle.fill")
+                                    .foregroundStyle(Theme.Colors.statusWarning)
+                            } else {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                    .tint(Theme.Colors.statusWarning)
+                            }
+                            Text(viewModel.isPaused ? "PAUSED" : "PROCESSING")
+                                .font(Theme.Fonts.label(10))
+                                .foregroundColor(Theme.Colors.statusWarning)
+                                .tracking(0.5)
+                        }
+
+                        if let tag = currentTag {
+                            Text("Training: \(tag)")
+                                .font(Theme.Fonts.mono(14))
+                                .fontWeight(.medium)
+                                .foregroundColor(Theme.Colors.textPrimary)
+                        } else if let currentFile = detailedProgress.currentFile {
+                            Text(currentFile)
+                                .font(Theme.Fonts.mono(14))
+                                .fontWeight(.medium)
+                                .foregroundColor(Theme.Colors.textPrimary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         } else {
-                            ProgressView()
-                                .scaleEffect(0.8)
+                            Text(phase)
+                                .font(Theme.Fonts.mono(14))
+                                .fontWeight(.medium)
+                                .foregroundColor(Theme.Colors.textPrimary)
                         }
-                        Text(viewModel.isPaused ? "Paused" : phase)
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                    }
 
-                    if let tag = currentTag {
-                        Text("Training: \(tag)")
-                            .foregroundStyle(.secondary)
-                    } else if let currentFile = detailedProgress.currentFile {
-                        Text(currentFile)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-
-                    if showFeatureInfo {
-                        HStack(spacing: 4) {
-                            Image(systemName: "brain.head.profile")
-                                .font(.caption)
-                            Text("Discogs-EffNet (1280-dim)")
-                                .font(.caption)
+                        if showFeatureInfo {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Theme.Colors.accentPrimary)
+                                    .frame(width: 6, height: 6)
+                                Text("Discogs-EffNet (1280-dim)")
+                                    .font(Theme.Fonts.body(12))
+                                    .foregroundColor(Theme.Colors.textSecondary)
+                            }
                         }
-                        .foregroundStyle(.blue)
-                    }
-                }
-
-                Spacer()
-
-                // Control buttons
-                HStack(spacing: 12) {
-                    if viewModel.isPaused {
-                        Button {
-                            viewModel.isPaused = false
-                        } label: {
-                            Image(systemName: "play.fill")
-                        }
-                        .buttonStyle(.bordered)
-                        .help("Resume")
-                    } else {
-                        Button {
-                            viewModel.isPaused = true
-                        } label: {
-                            Image(systemName: "pause.fill")
-                        }
-                        .buttonStyle(.bordered)
-                        .help("Pause")
                     }
 
-                    Button {
-                        viewModel.cancelTraining()
-                    } label: {
-                        Image(systemName: "stop.fill")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
-                    .help("Cancel")
-                }
-            }
-            .padding()
-            .background(Color.secondary.opacity(0.05))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-
-            // Progress bar
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Progress")
-                        .foregroundStyle(.secondary)
                     Spacer()
-                    Text("\(Int(progress * 100))%")
-                        .fontWeight(.medium)
-                }
-                .font(.subheadline)
 
-                ProgressView(value: progress)
-                    .tint(viewModel.isPaused ? .orange : .blue)
+                    HStack(spacing: Theme.Spacing.sm) {
+                        if viewModel.isPaused {
+                            Button("Resume") {
+                                viewModel.isPaused = false
+                            }
+                            .buttonStyle(SecondaryButtonStyle())
+                        } else {
+                            Button("Pause") {
+                                viewModel.isPaused = true
+                            }
+                            .buttonStyle(SecondaryButtonStyle())
+                        }
+                        Button("Stop") {
+                            viewModel.cancelTraining()
+                        }
+                        .buttonStyle(DangerButtonStyle())
+                    }
+                }
+
+                // Progress bar
+                VStack(alignment: .leading, spacing: 4) {
+                    ThemedProgressBar(progress: progress)
+
+                    HStack {
+                        Text("Feature extraction progress")
+                            .font(Theme.Fonts.body(12))
+                            .foregroundColor(Theme.Colors.textSecondary)
+                        Spacer()
+                        Text("\(detailedProgress.processed) of \(detailedProgress.total) files (\(Int(progress * 100))%)")
+                            .font(Theme.Fonts.mono(12))
+                            .foregroundColor(Theme.Colors.textPrimary)
+                    }
+                }
             }
 
-            // Stats grid
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 12) {
-                StatBox(
-                    title: "Files",
+            // Stats row
+            HStack(spacing: Theme.Spacing.sm) {
+                StatCard(
+                    label: "Completed",
                     value: "\(detailedProgress.processed)",
-                    subtitle: "/ \(detailedProgress.total)"
+                    detail: "\(detailedProgress.total - detailedProgress.processed) remaining"
                 )
-                StatBox(
-                    title: "Tags",
+                StatCard(
+                    label: "Tags",
                     value: "\(viewModel.selectedTags.totalCount)",
-                    subtitle: "selected"
+                    detail: "selected for training"
                 )
-                StatBox(
-                    title: "Time/File",
+                StatCard(
+                    label: "Speed",
                     value: calculateAverageTime(processed: detailedProgress.processed),
-                    subtitle: ""
+                    detail: "per file avg"
                 )
-                StatBox(
-                    title: "ETA",
+                StatCard(
+                    label: "Time Remaining",
                     value: calculateETA(processed: detailedProgress.processed, total: detailedProgress.total),
-                    subtitle: ""
+                    detail: "at current rate",
+                    isHighlighted: true
                 )
             }
 
-            // Track list
-            trackListView(detailedProgress: detailedProgress)
-        }
-        .padding()
-        .onAppear {
-            // Set training start time when progress view appears
-            if viewModel.trainingStartTime == nil {
-                viewModel.trainingStartTime = Date()
-            }
-        }
-    }
-
-    // MARK: - Track List View
-
-    private func trackListView(detailedProgress: TrainingCoordinator.DetailedProgress) -> some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
+            // File list
+            VStack(spacing: 0) {
                 // Header
-                HStack {
-                    Text("\(detailedProgress.total) files")
-                        .font(.headline)
+                ThemedSectionHeader(title: "Files", count: detailedProgress.total)
 
-                    if detailedProgress.processed < detailedProgress.total {
-                        HStack(spacing: 4) {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                            Text("\(detailedProgress.total - detailedProgress.processed) active")
-                                .foregroundStyle(.orange)
-                        }
-                        .font(.caption)
-                    } else if detailedProgress.total > 0 {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                            Text("Complete")
-                                .foregroundStyle(.green)
-                        }
-                        .font(.caption)
-                    }
-
-                    Spacer()
-                }
-
-                Divider()
-
+                // List
                 if detailedProgress.allFiles.isEmpty {
-                    Text("Waiting for files...")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding()
+                    VStack {
+                        Text("Waiting for files...")
+                            .font(Theme.Fonts.body(14))
+                            .foregroundColor(Theme.Colors.textTertiary)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 100)
+                    .background(Theme.Colors.bgSurface)
                 } else {
-                    // Full file list with status
                     ScrollViewReader { proxy in
                         ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 2) {
+                            LazyVStack(spacing: 0) {
                                 ForEach(Array(detailedProgress.allFiles.enumerated()), id: \.offset) { index, fileName in
-                                    FileStatusRow(
-                                        fileName: fileName,
+                                    ThemedFileRow(
+                                        filename: fileName,
+                                        artist: nil,
+                                        duration: nil,
                                         status: fileStatus(for: index, progress: detailedProgress),
-                                        isCurrentFile: detailedProgress.currentFile == fileName
+                                        time: nil
                                     )
                                     .id(index)
+
+                                    if index < detailedProgress.allFiles.count - 1 {
+                                        Divider()
+                                            .background(Theme.Colors.textTertiary.opacity(0.1))
+                                    }
                                 }
                             }
                             .padding(.vertical, 4)
                         }
                         .frame(maxHeight: 300)
                         .onChange(of: detailedProgress.processed) { _, newValue in
-                            // Auto-scroll to keep current file visible
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 proxy.scrollTo(max(0, newValue - 2), anchor: .top)
                             }
                         }
                     }
+                    .background(Theme.Colors.bgSurface)
                 }
             }
-            .padding(8)
+            .cornerRadius(Theme.Radius.md)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.md)
+                    .strokeBorder(Theme.Colors.textTertiary.opacity(0.1), lineWidth: 1)
+            )
+        }
+        .padding()
+        .onAppear {
+            if viewModel.trainingStartTime == nil {
+                viewModel.trainingStartTime = Date()
+            }
         }
     }
 
     /// Determine status for a file based on its index and progress
-    private func fileStatus(for index: Int, progress: TrainingCoordinator.DetailedProgress) -> FileProcessingStatus {
+    private func fileStatus(for index: Int, progress: TrainingCoordinator.DetailedProgress) -> StatusLED.Status {
         if index < progress.processed {
-            return .completed
+            return .complete
         } else if index == progress.processed {
             return .processing
         } else {
@@ -657,18 +678,20 @@ struct TrainView: View {
     }
 
     private var packagingView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: Theme.Spacing.lg) {
             Spacer()
 
             ProgressView()
                 .scaleEffect(1.5)
+                .tint(Theme.Colors.accentPrimary)
 
             Text("Packaging Model...")
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(Theme.Fonts.heading(20))
+                .foregroundColor(Theme.Colors.textPrimary)
 
             Text("Creating model bundle and metadata")
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(14))
+                .foregroundColor(Theme.Colors.textSecondary)
 
             Spacer()
         }
@@ -678,73 +701,277 @@ struct TrainView: View {
     // MARK: - Complete View
 
     private func completeView(modelName: String) -> some View {
-        VStack(spacing: 24) {
-            Spacer()
+        ScrollView {
+            VStack(spacing: Theme.Spacing.lg) {
+                // Success header
+                VStack(spacing: Theme.Spacing.md) {
+                    ZStack {
+                        Circle()
+                            .fill(Theme.Colors.statusSuccess.opacity(0.15))
+                            .frame(width: 80, height: 80)
 
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(.green)
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 48))
+                            .foregroundStyle(Theme.Colors.statusSuccess)
+                    }
 
-            Text("Training Complete!")
-                .font(.title)
-                .fontWeight(.semibold)
+                    Text("Training Complete!")
+                        .font(Theme.Fonts.heading(24))
+                        .foregroundColor(Theme.Colors.textPrimary)
 
-            Text("Model: \(modelName)")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-
-            if let summary = viewModel.trainingSummary {
-                VStack(spacing: 12) {
-                    summaryRow(label: "Trained Tags", value: "\(summary.trainedTags.count)")
-                    summaryRow(label: "Skipped Tags", value: "\(summary.skippedTags.count)")
-                    summaryRow(label: "Total Tracks", value: "\(summary.totalTracks)")
-                    summaryRow(label: "Average Accuracy", value: String(format: "%.1f%%", summary.averageAccuracy * 100))
+                    Text("Model: \(modelName)")
+                        .font(Theme.Fonts.mono(16))
+                        .foregroundColor(Theme.Colors.textSecondary)
                 }
-                .padding()
-                .background(Color.secondary.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .frame(maxWidth: 300)
-            }
+                .padding(.top, Theme.Spacing.lg)
 
-            Button {
-                viewModel.resetState()
-            } label: {
-                Label("Train Another Model", systemImage: "arrow.counterclockwise")
-            }
-            .buttonStyle(.borderedProminent)
-            .padding(.top)
+                if let summary = viewModel.trainingSummary {
+                    // Summary stats
+                    HStack(spacing: Theme.Spacing.md) {
+                        summaryStatCard(
+                            title: "Trained Tags",
+                            value: "\(summary.tagResults.count)",
+                            color: Theme.Colors.statusSuccess
+                        )
+                        summaryStatCard(
+                            title: "Avg Accuracy",
+                            value: String(format: "%.1f%%", summary.averageAccuracy * 100),
+                            color: Theme.Colors.accentPrimary
+                        )
+                        summaryStatCard(
+                            title: "Tracks Used",
+                            value: "\(summary.tracksUsedForTraining)",
+                            color: Theme.Colors.textSecondary
+                        )
+                        if summary.tracksWithInvalidFeatures > 0 {
+                            summaryStatCard(
+                                title: "Invalid Tracks",
+                                value: "\(summary.tracksWithInvalidFeatures)",
+                                color: Theme.Colors.statusWarning
+                            )
+                        }
+                    }
+                    .frame(maxWidth: 600)
 
-            Spacer()
+                    // Trained tags section
+                    if !summary.tagResults.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Theme.Colors.statusSuccess)
+                                Text("Trained Tags (\(summary.tagResults.count))")
+                                    .font(Theme.Fonts.heading(16))
+                                    .foregroundColor(Theme.Colors.textPrimary)
+                            }
+
+                            VStack(spacing: 1) {
+                                // Header row
+                                HStack {
+                                    Text("Tag")
+                                        .frame(width: 150, alignment: .leading)
+                                    Text("Samples")
+                                        .frame(width: 80, alignment: .trailing)
+                                    Text("Train Acc")
+                                        .frame(width: 80, alignment: .trailing)
+                                    Text("Val Acc")
+                                        .frame(width: 80, alignment: .trailing)
+                                }
+                                .font(Theme.Fonts.label(11))
+                                .foregroundColor(Theme.Colors.textTertiary)
+                                .padding(.horizontal, Theme.Spacing.md)
+                                .padding(.vertical, Theme.Spacing.xs)
+                                .background(Theme.Colors.bgElevated)
+
+                                // Tag rows
+                                ForEach(summary.tagResults.sorted(by: { $0.validationAccuracy > $1.validationAccuracy }), id: \.tag) { result in
+                                    trainedTagRow(result)
+                                }
+                            }
+                            .background(Theme.Colors.bgSurface)
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.Radius.md)
+                                    .strokeBorder(Theme.Colors.textTertiary.opacity(0.1), lineWidth: 1)
+                            )
+                        }
+                        .frame(maxWidth: 500)
+                    }
+
+                    // Skipped tags section
+                    if !summary.skippedTagDetails.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(Theme.Colors.statusWarning)
+                                Text("Skipped Tags (\(summary.skippedTagDetails.count))")
+                                    .font(Theme.Fonts.heading(16))
+                                    .foregroundColor(Theme.Colors.textPrimary)
+                            }
+
+                            VStack(spacing: 1) {
+                                ForEach(summary.skippedTagDetails.sorted(by: { $0.sampleCount > $1.sampleCount }), id: \.tag) { skipped in
+                                    skippedTagRow(skipped)
+                                }
+                            }
+                            .background(Theme.Colors.bgSurface)
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.Radius.md)
+                                    .strokeBorder(Theme.Colors.textTertiary.opacity(0.1), lineWidth: 1)
+                            )
+                        }
+                        .frame(maxWidth: 500)
+                    }
+
+                    // Track stats note
+                    if summary.tracksWithInvalidFeatures > 0 {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            Image(systemName: "info.circle")
+                                .foregroundStyle(Theme.Colors.statusWarning)
+                            Text("\(summary.tracksWithInvalidFeatures) tracks had invalid audio features (NaN/Inf) and were excluded from training.")
+                                .font(Theme.Fonts.body(12))
+                                .foregroundColor(Theme.Colors.textSecondary)
+                        }
+                        .padding(Theme.Spacing.md)
+                        .background(Theme.Colors.statusWarning.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+                        .frame(maxWidth: 500)
+                    }
+                }
+
+                HStack(spacing: Theme.Spacing.md) {
+                    Button {
+                        viewModel.resetState()
+                    } label: {
+                        Label("Train Another", systemImage: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+
+                    if let summary = viewModel.trainingSummary {
+                        Button {
+                            exportTrainingStatus(summary)
+                        } label: {
+                            Label("Export Status", systemImage: "square.and.arrow.up")
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                    }
+
+                    Button {
+                        viewModel.resetState()
+                        appState.currentView = .tagging
+                    } label: {
+                        Label("Let's Tag Some Tracks", systemImage: "tag")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                }
+                .padding(.top, Theme.Spacing.md)
+                .padding(.bottom, Theme.Spacing.lg)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
         }
-        .padding()
     }
 
-    private func summaryRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .foregroundStyle(.secondary)
-            Spacer()
+    private func summaryStatCard(title: String, value: String, color: Color) -> some View {
+        VStack(spacing: Theme.Spacing.xs) {
             Text(value)
+                .font(Theme.Fonts.mono(24))
+                .fontWeight(.semibold)
+                .foregroundColor(color)
+            Text(title)
+                .font(Theme.Fonts.label(11))
+                .foregroundColor(Theme.Colors.textTertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(Theme.Spacing.md)
+        .background(Theme.Colors.bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+    }
+
+    private func trainedTagRow(_ result: TrainingCoordinator.TagTrainingResult) -> some View {
+        HStack {
+            Text(result.tag)
+                .font(Theme.Fonts.body(13))
+                .foregroundColor(Theme.Colors.textPrimary)
+                .lineLimit(1)
+                .frame(width: 150, alignment: .leading)
+
+            Text("\(result.positiveCount)")
+                .font(Theme.Fonts.mono(12))
+                .foregroundColor(Theme.Colors.textSecondary)
+                .frame(width: 80, alignment: .trailing)
+
+            Text(String(format: "%.1f%%", result.trainingAccuracy * 100))
+                .font(Theme.Fonts.mono(12))
+                .foregroundColor(Theme.Colors.textSecondary)
+                .frame(width: 80, alignment: .trailing)
+
+            Text(String(format: "%.1f%%", result.validationAccuracy * 100))
+                .font(Theme.Fonts.mono(12))
                 .fontWeight(.medium)
+                .foregroundColor(accuracyColor(result.validationAccuracy))
+                .frame(width: 80, alignment: .trailing)
+        }
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
+        .background(Theme.Colors.bgSurface)
+    }
+
+    private func skippedTagRow(_ skipped: TrainingCoordinator.SkippedTag) -> some View {
+        HStack {
+            Text(skipped.tag)
+                .font(Theme.Fonts.body(13))
+                .foregroundColor(Theme.Colors.textPrimary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Text("\(skipped.sampleCount) samples")
+                .font(Theme.Fonts.mono(12))
+                .foregroundColor(Theme.Colors.textTertiary)
+
+            Text(skipped.reason.description)
+                .font(Theme.Fonts.body(12))
+                .foregroundColor(Theme.Colors.statusWarning)
+        }
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
+        .background(Theme.Colors.bgSurface)
+    }
+
+    private func accuracyColor(_ accuracy: Double) -> Color {
+        if accuracy >= 0.8 {
+            return Theme.Colors.statusSuccess
+        } else if accuracy >= 0.6 {
+            return Theme.Colors.statusWarning
+        } else {
+            return Theme.Colors.statusError
         }
     }
 
     // MARK: - Failed View
 
     private func failedView(error: String) -> some View {
-        VStack(spacing: 24) {
+        VStack(spacing: Theme.Spacing.lg) {
             Spacer()
 
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(.red)
+            ZStack {
+                Circle()
+                    .fill(Theme.Colors.statusError.opacity(0.15))
+                    .frame(width: 100, height: 100)
+
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(Theme.Colors.statusError)
+            }
 
             Text("Training Failed")
-                .font(.title)
-                .fontWeight(.semibold)
+                .font(Theme.Fonts.heading(24))
+                .foregroundColor(Theme.Colors.textPrimary)
 
             Text(error)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(14))
+                .foregroundColor(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 400)
 
@@ -753,7 +980,7 @@ struct TrainView: View {
             } label: {
                 Label("Try Again", systemImage: "arrow.counterclockwise")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PrimaryButtonStyle())
             .padding(.top)
 
             Spacer()
@@ -776,6 +1003,112 @@ struct TrainView: View {
                 }
             }
         }
+    }
+
+    private func exportTrainingStatus(_ summary: TrainingCoordinator.TrainingSummary) {
+        let report = generateTrainingReport(summary)
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = "\(summary.modelName)_training_report.txt"
+        panel.title = "Export Training Status"
+
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try report.write(to: url, atomically: true, encoding: .utf8)
+                appState.showToast("Report exported successfully", kind: .success)
+            } catch {
+                appState.showToast("Failed to export: \(error.localizedDescription)", kind: .error)
+            }
+        }
+    }
+
+    private func generateTrainingReport(_ summary: TrainingCoordinator.TrainingSummary) -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .long
+        dateFormatter.timeStyle = .medium
+
+        var report = """
+        ================================================================================
+        CRATEBOT TRAINING REPORT
+        ================================================================================
+
+        Model Name:       \(summary.modelName)
+        Generated:        \(dateFormatter.string(from: Date()))
+        Model Location:   \(summary.modelURL.path)
+
+        --------------------------------------------------------------------------------
+        SUMMARY
+        --------------------------------------------------------------------------------
+
+        Total Tracks Scanned:      \(summary.totalTracksScanned)
+        Tracks Used for Training:  \(summary.tracksUsedForTraining)
+        Tracks with Invalid Data:  \(summary.tracksWithInvalidFeatures)
+
+        Tags Trained:              \(summary.tagResults.count)
+        Tags Skipped:              \(summary.skippedTagDetails.count)
+
+        Average Validation Accuracy: \(String(format: "%.1f%%", summary.averageAccuracy * 100))
+
+        """
+
+        if !summary.tagResults.isEmpty {
+            report += """
+
+        --------------------------------------------------------------------------------
+        TRAINED TAGS
+        --------------------------------------------------------------------------------
+
+        """
+            let sortedResults = summary.tagResults.sorted { $0.validationAccuracy > $1.validationAccuracy }
+
+            // Header
+            report += String(format: "%-30s %10s %12s %12s\n", "Tag", "Samples", "Train Acc", "Val Acc")
+            report += String(repeating: "-", count: 66) + "\n"
+
+            for result in sortedResults {
+                let tag = result.tag.count > 28 ? String(result.tag.prefix(28)) + ".." : result.tag
+                report += String(format: "%-30s %10d %11.1f%% %11.1f%%\n",
+                    tag,
+                    result.positiveCount,
+                    result.trainingAccuracy * 100,
+                    result.validationAccuracy * 100
+                )
+            }
+        }
+
+        if !summary.skippedTagDetails.isEmpty {
+            report += """
+
+        --------------------------------------------------------------------------------
+        SKIPPED TAGS
+        --------------------------------------------------------------------------------
+
+        """
+            let sortedSkipped = summary.skippedTagDetails.sorted { $0.sampleCount > $1.sampleCount }
+
+            // Header
+            report += String(format: "%-30s %10s %s\n", "Tag", "Samples", "Reason")
+            report += String(repeating: "-", count: 66) + "\n"
+
+            for skipped in sortedSkipped {
+                let tag = skipped.tag.count > 28 ? String(skipped.tag.prefix(28)) + ".." : skipped.tag
+                report += String(format: "%-30s %10d %s\n",
+                    tag,
+                    skipped.sampleCount,
+                    skipped.reason.description
+                )
+            }
+        }
+
+        report += """
+
+        --------------------------------------------------------------------------------
+        END OF REPORT
+        --------------------------------------------------------------------------------
+        """
+
+        return report
     }
 }
 
@@ -810,6 +1143,7 @@ struct TagSelectionSheet: View {
                     fieldMappingView
                 }
             }
+            .background(Theme.Colors.bgWindow)
             .navigationTitle("Select Training Tags")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -834,47 +1168,46 @@ struct TagSelectionSheet: View {
 
     private var fieldMappingView: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: Theme.Spacing.lg) {
                 // Header
-                VStack(spacing: 12) {
+                VStack(spacing: Theme.Spacing.md) {
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 50))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Theme.Colors.accentPrimary)
 
                     Text("Configure ID3 Field Mapping")
-                        .font(.title2)
-                        .fontWeight(.semibold)
+                        .font(Theme.Fonts.heading(20))
+                        .foregroundColor(Theme.Colors.textPrimary)
 
                     Text("Tell CrateBot which ID3 fields contain your Genre, Timing, Mood, and Descriptive tags.")
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(14))
+                        .foregroundColor(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 450)
                 }
                 .padding(.top, 30)
 
                 // Field Mapping Configuration
-                GroupBox {
-                    VStack(spacing: 16) {
-                        fieldMappingRow("Genre", selection: $tagMapping.genreField, color: .purple)
-                        Divider()
-                        fieldMappingRow("Timing", selection: $tagMapping.timingField, color: .blue)
-                        Divider()
-                        fieldMappingRow("Mood", selection: $tagMapping.moodField, color: .orange)
-                        Divider()
-                        fieldMappingRow("Descriptive", selection: $tagMapping.descriptiveField, color: .green)
-                    }
-                    .padding()
+                VStack(spacing: Theme.Spacing.md) {
+                    fieldMappingRow("Genre", selection: $tagMapping.genreField, color: Theme.Colors.categoryGenre)
+                    Divider().background(Theme.Colors.textTertiary.opacity(0.2))
+                    fieldMappingRow("Timing", selection: $tagMapping.timingField, color: Theme.Colors.categoryTiming)
+                    Divider().background(Theme.Colors.textTertiary.opacity(0.2))
+                    fieldMappingRow("Mood", selection: $tagMapping.moodField, color: Theme.Colors.categoryMood)
+                    Divider().background(Theme.Colors.textTertiary.opacity(0.2))
+                    fieldMappingRow("Descriptive", selection: $tagMapping.descriptiveField, color: Theme.Colors.categoryDescriptive)
                 }
+                .padding(Theme.Spacing.md)
+                .background(Theme.Colors.bgSurface)
+                .cornerRadius(Theme.Radius.md)
                 .frame(maxWidth: 550)
 
                 Button {
                     scanDirectory()
                 } label: {
                     Label("Scan for Tags", systemImage: "magnifyingglass")
-                        .frame(minWidth: 150)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(PrimaryButtonStyle())
                 .padding(.top)
                 .padding(.bottom, 30)
             }
@@ -884,13 +1217,14 @@ struct TagSelectionSheet: View {
     }
 
     private func fieldMappingRow(_ label: String, selection: Binding<ID3Field>, color: Color) -> some View {
-        HStack(spacing: 16) {
-            HStack(spacing: 8) {
+        HStack(spacing: Theme.Spacing.md) {
+            HStack(spacing: Theme.Spacing.sm) {
                 Circle()
                     .fill(color)
                     .frame(width: 10, height: 10)
                 Text(label)
-                    .fontWeight(.medium)
+                    .font(Theme.Fonts.label(14))
+                    .foregroundColor(Theme.Colors.textPrimary)
             }
             .frame(width: 120, alignment: .leading)
 
@@ -902,9 +1236,9 @@ struct TagSelectionSheet: View {
             .labelsHidden()
             .frame(width: 150)
 
-            Text(selection.wrappedValue.description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(selection.wrappedValue.iTunesDescription)
+                .font(Theme.Fonts.body(12))
+                .foregroundColor(Theme.Colors.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -912,24 +1246,24 @@ struct TagSelectionSheet: View {
     // MARK: - Scanning View
 
     private var scanningView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: Theme.Spacing.lg) {
             Spacer()
 
-            ProgressView(value: scanProgress)
-                .progressViewStyle(.linear)
+            ThemedProgressBar(progress: scanProgress)
                 .frame(width: 300)
 
             Text("Scanning for tags...")
-                .font(.title3)
-                .fontWeight(.medium)
+                .font(Theme.Fonts.heading(18))
+                .foregroundColor(Theme.Colors.textPrimary)
 
             Text("\(filesScanned) / \(totalFiles) files")
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.mono(14))
+                .foregroundColor(Theme.Colors.textSecondary)
 
             if let file = currentFile {
                 Text(file)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.mono(12))
+                    .foregroundColor(Theme.Colors.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: 400)
@@ -952,105 +1286,109 @@ struct TagSelectionSheet: View {
                 } label: {
                     Label("Change Mapping", systemImage: "chevron.left")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(SecondaryButtonStyle())
 
                 Spacer()
 
                 Text("Found \(discovered.totalFiles) files")
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(14))
+                    .foregroundColor(Theme.Colors.textSecondary)
             }
-            .padding()
-            .background(Color.secondary.opacity(0.05))
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.bgElevated)
 
             // Model name
             HStack {
                 Text("Model Name:")
-                    .fontWeight(.medium)
+                    .font(Theme.Fonts.label(14))
+                    .foregroundColor(Theme.Colors.textPrimary)
                 TextField("Enter model name", text: $modelName)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 300)
             }
-            .padding()
+            .padding(Theme.Spacing.md)
 
-            Divider()
+            Divider().background(Theme.Colors.textTertiary.opacity(0.2))
 
             // Tag categories
             ScrollView {
-                VStack(spacing: 20) {
-                    tagSection("Genre", color: .purple, tags: discovered.genre, selection: $selectedTags.genre)
-                    tagSection("Timing", color: .blue, tags: discovered.timing, selection: $selectedTags.timing)
-                    tagSection("Mood", color: .orange, tags: discovered.mood, selection: $selectedTags.mood)
-                    tagSection("Descriptive", color: .green, tags: discovered.descriptive, selection: $selectedTags.descriptive)
+                VStack(spacing: Theme.Spacing.lg) {
+                    tagSection("Genre", color: Theme.Colors.categoryGenre, tags: discovered.genre, selection: $selectedTags.genre)
+                    tagSection("Timing", color: Theme.Colors.categoryTiming, tags: discovered.timing, selection: $selectedTags.timing)
+                    tagSection("Mood", color: Theme.Colors.categoryMood, tags: discovered.mood, selection: $selectedTags.mood)
+                    tagSection("Descriptive", color: Theme.Colors.categoryDescriptive, tags: discovered.descriptive, selection: $selectedTags.descriptive)
                 }
-                .padding()
+                .padding(Theme.Spacing.md)
             }
 
-            Divider()
+            Divider().background(Theme.Colors.textTertiary.opacity(0.2))
 
             // Footer
             HStack {
                 Text("\(selectedTags.totalCount) tags selected")
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(14))
+                    .foregroundColor(Theme.Colors.textSecondary)
                 Spacer()
             }
-            .padding()
-            .background(Color.secondary.opacity(0.05))
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.bgElevated)
         }
     }
 
     private func tagSection(_ title: String, color: Color, tags: [String: Int], selection: Binding<Set<String>>) -> some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Circle()
-                        .fill(color)
-                        .frame(width: 10, height: 10)
-                    Text(title)
-                        .font(.headline)
-                    Text("(\(selection.wrappedValue.count)/\(tags.count) selected)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack {
+                Circle()
+                    .fill(color)
+                    .frame(width: 10, height: 10)
+                Text(title)
+                    .font(Theme.Fonts.heading(16))
+                    .foregroundColor(Theme.Colors.textPrimary)
+                Text("(\(selection.wrappedValue.count)/\(tags.count) selected)")
+                    .font(Theme.Fonts.body(12))
+                    .foregroundColor(Theme.Colors.textTertiary)
+                Spacer()
 
-                    if !tags.isEmpty {
-                        Button(selection.wrappedValue.count == tags.count ? "Deselect All" : "Select All") {
-                            if selection.wrappedValue.count == tags.count {
-                                selection.wrappedValue = []
-                            } else {
-                                selection.wrappedValue = Set(tags.keys)
-                            }
+                if !tags.isEmpty {
+                    Button(selection.wrappedValue.count == tags.count ? "Deselect All" : "Select All") {
+                        if selection.wrappedValue.count == tags.count {
+                            selection.wrappedValue = []
+                        } else {
+                            selection.wrappedValue = Set(tags.keys)
                         }
-                        .font(.caption)
-                        .buttonStyle(.bordered)
                     }
+                    .font(Theme.Fonts.label(12))
+                    .buttonStyle(SecondaryButtonStyle())
                 }
+            }
 
-                if tags.isEmpty {
-                    Text("No tags found in this field")
-                        .foregroundStyle(.secondary)
-                        .font(.callout)
-                        .padding(.vertical, 8)
-                } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 8) {
-                        ForEach(tags.sorted(by: { $0.value > $1.value }), id: \.key) { tag, count in
-                            TagToggleButton(
-                                tag: tag,
-                                count: count,
-                                isSelected: selection.wrappedValue.contains(tag),
-                                color: color
-                            ) {
-                                if selection.wrappedValue.contains(tag) {
-                                    selection.wrappedValue.remove(tag)
-                                } else {
-                                    selection.wrappedValue.insert(tag)
-                                }
+            if tags.isEmpty {
+                Text("No tags found in this field")
+                    .font(Theme.Fonts.body(14))
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .padding(.vertical, Theme.Spacing.sm)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: Theme.Spacing.sm) {
+                    ForEach(tags.sorted(by: { $0.value > $1.value }), id: \.key) { tag, count in
+                        TagToggleButton(
+                            tag: tag,
+                            count: count,
+                            isSelected: selection.wrappedValue.contains(tag),
+                            color: color
+                        ) {
+                            if selection.wrappedValue.contains(tag) {
+                                selection.wrappedValue.remove(tag)
+                            } else {
+                                selection.wrappedValue.insert(tag)
                             }
                         }
                     }
                 }
             }
-            .padding()
         }
+        .padding(Theme.Spacing.md)
+        .background(Theme.Colors.bgSurface)
+        .cornerRadius(Theme.Radius.md)
     }
 
     // MARK: - Actions
@@ -1106,9 +1444,11 @@ struct TagToggleButton: View {
         Button(action: action) {
             HStack {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? color : .secondary)
+                    .foregroundStyle(isSelected ? color : Theme.Colors.textTertiary)
 
                 Text(tag)
+                    .font(Theme.Fonts.body(13))
+                    .foregroundColor(Theme.Colors.textPrimary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
                     .multilineTextAlignment(.leading)
@@ -1116,128 +1456,20 @@ struct TagToggleButton: View {
                 Spacer()
 
                 Text("\(count)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.mono(11))
+                    .foregroundColor(Theme.Colors.textTertiary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(isSelected ? color.opacity(0.15) : Color.secondary.opacity(0.08))
-            .cornerRadius(8)
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
+            .background(isSelected ? color.opacity(0.15) : Theme.Colors.bgElevated)
+            .cornerRadius(Theme.Radius.sm)
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: Theme.Radius.sm)
                     .stroke(isSelected ? color.opacity(0.5) : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
         .help(tag)
-    }
-}
-
-// MARK: - Stat Box Component
-
-struct StatBox: View {
-    let title: String
-    let value: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(alignment: .lastTextBaseline, spacing: 2) {
-                Text(value)
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                if !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Color.secondary.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-}
-
-// MARK: - File Processing Status
-
-enum FileProcessingStatus {
-    case pending
-    case processing
-    case completed
-    case failed
-}
-
-// MARK: - File Status Row
-
-struct FileStatusRow: View {
-    let fileName: String
-    let status: FileProcessingStatus
-    let isCurrentFile: Bool
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Status indicator
-            statusIcon
-                .frame(width: 20, height: 20)
-
-            // File name
-            Text(fileName)
-                .font(.system(.caption, design: .monospaced))
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Spacer()
-
-            // Status text
-            Text(statusText)
-                .font(.caption)
-                .foregroundStyle(statusColor)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(isCurrentFile ? Color.orange.opacity(0.1) : Color.clear)
-        .background(status == .completed ? Color.green.opacity(0.05) : Color.clear)
-    }
-
-    @ViewBuilder
-    private var statusIcon: some View {
-        switch status {
-        case .pending:
-            Circle()
-                .stroke(Color.secondary.opacity(0.3), lineWidth: 2)
-        case .processing:
-            ProgressView()
-                .scaleEffect(0.6)
-        case .completed:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-        case .failed:
-            Image(systemName: "xmark.circle.fill")
-                .foregroundStyle(.red)
-        }
-    }
-
-    private var statusText: String {
-        switch status {
-        case .pending: return "Pending"
-        case .processing: return "Processing"
-        case .completed: return "Complete"
-        case .failed: return "Failed"
-        }
-    }
-
-    private var statusColor: Color {
-        switch status {
-        case .pending: return .secondary
-        case .processing: return .orange
-        case .completed: return .green
-        case .failed: return .red
-        }
     }
 }
 

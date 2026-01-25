@@ -2,20 +2,21 @@ import AVFoundation
 import Accelerate
 
 /// Generates mel spectrograms compatible with Discogs-EffNet model
-/// Output shape: [128 mel bands, 96 time frames]
+/// Output shape: [96 mel bands, 128 time frames] - NOTE: EffNet input is [batch, 128, 96] = [batch, time, mels]
 public final class MelSpectrogramGenerator: @unchecked Sendable {
 
-    // EffNet parameters (based on Essentia preprocessing)
+    // EffNet parameters (based on Essentia MusiCNN preprocessing)
+    // See: https://essentia.upf.edu/models.html
     private let targetSampleRate: Float = 16000
-    private let frameSize = 400      // 25ms at 16kHz
-    private let hopSize = 160        // 10ms at 16kHz
-    private let numMelBands = 128
-    private let numTimeFrames = 96
+    private let frameSize = 512      // MusiCNN uses 512
+    private let hopSize = 256        // MusiCNN uses 256
+    private let numMelBands = 96     // MusiCNN uses 96 mel bands
+    private let numTimeFrames = 128  // EffNet uses 128 time frames
     private let fMin: Float = 0
     private let fMax: Float = 8000   // Nyquist for 16kHz
 
     // FFT setup
-    private let fftSize = 512        // Next power of 2 >= frameSize
+    private let fftSize = 512        // Same as frameSize for MusiCNN
     private let fftSetup: FFTSetup?
     private let log2n: vDSP_Length
 
@@ -86,11 +87,18 @@ public final class MelSpectrogramGenerator: @unchecked Sendable {
     }
 
     /// Convert 2D mel spectrogram to flat array for CoreML input
+    /// Model expects [time_frames, mel_bands] so we transpose from [mel_bands][time_frames]
     public func flatten(_ melSpec: [[Float]]) -> [Float] {
         var flat = [Float]()
         flat.reserveCapacity(numMelBands * numTimeFrames)
-        for band in melSpec {
-            flat.append(contentsOf: band)
+
+        // Transpose: iterate time_frames first, then mel_bands
+        // Input melSpec is [numMelBands][numTimeFrames]
+        // Output should be [numTimeFrames * numMelBands] in row-major order for [time, mels]
+        for t in 0..<numTimeFrames {
+            for m in 0..<numMelBands {
+                flat.append(melSpec[m][t])
+            }
         }
         return flat
     }

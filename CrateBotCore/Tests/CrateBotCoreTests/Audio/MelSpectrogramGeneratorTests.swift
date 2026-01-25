@@ -7,9 +7,10 @@ final class MelSpectrogramGeneratorTests: XCTestCase {
     func testOutputShape() async throws {
         let generator = MelSpectrogramGenerator()
 
-        // Create 1 second of 16kHz audio (sine wave)
+        // Create 3 seconds of 16kHz audio (sine wave) - need ~2.1s for 128 frames
+        // Required: (128 - 1) * 256 + 512 = 33,024 samples = 2.064s
         let sampleRate: Double = 16000
-        let duration: Double = 1.0
+        let duration: Double = 3.0
         let frequency: Double = 440.0
         let samples = (0..<Int(sampleRate * duration)).map { i in
             Float(sin(2.0 * .pi * frequency * Double(i) / sampleRate))
@@ -18,14 +19,16 @@ final class MelSpectrogramGeneratorTests: XCTestCase {
         let buffer = try createBuffer(samples: samples, sampleRate: sampleRate)
         let melSpec = try generator.generate(from: buffer)
 
-        // EffNet expects [128, 96] - 128 mel bands, 96 time frames
-        XCTAssertEqual(melSpec.count, 128, "Should have 128 mel bands")
-        XCTAssertEqual(melSpec[0].count, 96, "Should have 96 time frames")
+        // EffNet expects input [batch, 128 time_frames, 96 mel_bands]
+        // Generator produces [96 mel_bands][128 time_frames]
+        XCTAssertEqual(melSpec.count, 96, "Should have 96 mel bands")
+        XCTAssertEqual(melSpec[0].count, 128, "Should have 128 time frames")
     }
 
     func testValuesNormalized() async throws {
         let generator = MelSpectrogramGenerator()
-        let samples = [Float](repeating: 0.5, count: 16000)
+        // Need at least 33,024 samples (2.1s at 16kHz) for 128 time frames
+        let samples = [Float](repeating: 0.5, count: 48000)  // 3 seconds
         let buffer = try createBuffer(samples: samples, sampleRate: 16000)
 
         let melSpec = try generator.generate(from: buffer)

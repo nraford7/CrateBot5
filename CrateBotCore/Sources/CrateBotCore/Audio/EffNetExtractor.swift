@@ -73,7 +73,8 @@ public final class EffNetExtractor: FeatureExtractor, @unchecked Sendable {
         let melSpec = try melGenerator.generate(from: buffer)
         let flatMelSpec = melGenerator.flatten(melSpec)
 
-        // Create MLMultiArray input [1, 128, 96]
+        // Create MLMultiArray input [1, 128, 96] = [batch, time_frames, mel_bands]
+        // MelSpectrogramGenerator now produces 128 time frames x 96 mel bands, flattened in correct order
         let inputArray = try MLMultiArray(shape: [1, 128, 96], dataType: .float32)
         for (i, value) in flatMelSpec.enumerated() {
             inputArray[i] = NSNumber(value: value)
@@ -111,6 +112,72 @@ public final class EffNetExtractor: FeatureExtractor, @unchecked Sendable {
         }
 
         return (embeddings, genreActivations)
+    }
+
+    // MARK: - Batch Extraction
+
+    /// Extract embeddings from multiple mel spectrograms in a single batch for improved performance.
+    /// Batching maximizes Neural Engine utilization on Apple Silicon.
+    ///
+    /// - Parameter melSpectrograms: Array of flattened mel spectrograms (each 128*96 = 12288 floats)
+    /// - Returns: Array of 1280-dimensional embeddings, one per input
+    public func extractBatch(from melSpectrograms: [[Float]]) async throws -> [[Float]] {
+        guard !melSpectrograms.isEmpty else { return [] }
+
+        let batchSize = melSpectrograms.count
+        let melSize = 128 * 96  // Expected size per spectrogram
+
+        // Create batched MLMultiArray input [batchSize, 128, 96]
+        let inputArray = try MLMultiArray(shape: [NSNumber(value: batchSize), 128, 96], dataType: .float32)
+
+        // Fill the batch array
+        for (batchIdx, melSpec) in melSpectrograms.enumerated() {
+            guard melSpec.count == melSize else {
+                throw EffNetError.invalidOutput("mel spectrogram size mismatch: expected \(melSize), got \(melSpec.count)")
+            }
+
+            let offset = batchIdx * melSize
+            for (i, value) in melSpec.enumerated() {
+                inputArray[offset + i] = NSNumber(value: value)
+            }
+        }
+
+        // Create feature provider
+        let provider = try MLDictionaryFeatureProvider(dictionary: [
+            Self.inputName: MLFeatureValue(multiArray: inputArray)
+        ])
+
+        // Run batched inference
+        let output = try await model.prediction(from: provider)
+
+        // Extract embeddings
+        guard let embeddingsOutput = output.featureValue(for: Self.embeddingsOutputName),
+              let embeddingsArray = embeddingsOutput.multiArrayValue else {
+            throw EffNetError.invalidOutput("embeddings")
+        }
+
+        // Parse batched output - shape should be [batchSize, 1280]
+        var results: [[Float]] = []
+        for batchIdx in 0..<batchSize {
+            var embeddings = [Float](repeating: 0, count: featureCount)
+            let offset = batchIdx * featureCount
+            for i in 0..<featureCount {
+                embeddings[i] = embeddingsArray[offset + i].floatValue
+            }
+            results.append(embeddings)
+        }
+
+        return results
+    }
+
+    /// Preprocess audio buffer to mel spectrogram without running inference.
+    /// Use this to prepare batches for `extractBatch`.
+    ///
+    /// - Parameter buffer: Audio buffer at 16kHz mono
+    /// - Returns: Flattened mel spectrogram ready for batched inference
+    public func prepareMelSpectrogram(from buffer: AVAudioPCMBuffer) throws -> [Float] {
+        let melSpec = try melGenerator.generate(from: buffer)
+        return melGenerator.flatten(melSpec)
     }
 }
 

@@ -12,13 +12,21 @@ final class AppState {
     var modelLoaded = false
     var modelName: String?
     var availableTags: AvailableTags?
+    var loadedTagNames: [String] = []
+    var isLoadingModel = false
+    var modelLoadingProgress: Double = 0.0
 
     // Navigation
     var currentView: AppView = .tagging
     var settingsOpen = false
 
-    // Tagging preferences
-    var taggingPreferences = TaggingPreferences.load()
+    // Tagging preferences (auto-saves on change)
+    var taggingPreferences = TaggingPreferences.load() {
+        didSet { taggingPreferences.save() }
+    }
+
+    // Fallback mappings for tags without trained classifiers
+    var fallbackMappingConfig: FallbackMappingConfig = FallbackMappingManager().load()
 
     // Tagging queue state
     var queuedFiles: [QueuedFile] = []
@@ -32,6 +40,160 @@ final class AppState {
     // Services
     let bookmarkManager = BookmarkManager()
     let audioPlayer = AudioPlayer()
+    private(set) var taggingEngine: TaggingEngine?
+    private let modelManager = ModelManager()
+
+    // MARK: - Model Loading
+
+    /// Load a trained model from a directory
+    @MainActor
+    func loadModel(from modelDirectory: URL) async throws {
+        // Set loading state
+        isLoadingModel = true
+        modelLoadingProgress = 0.0
+
+        defer {
+            isLoadingModel = false
+        }
+
+        // Initialize tagging engine if needed
+        if taggingEngine == nil {
+            taggingEngine = try TaggingEngine()
+        }
+
+        guard let engine = taggingEngine else {
+            throw NSError(domain: "AppState", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to initialize tagging engine"])
+        }
+
+        // Load model with progress reporting
+        let (count, name) = try await engine.loadModel(from: modelDirectory) { @MainActor [weak self] progress in
+            self?.modelLoadingProgress = progress
+        }
+
+        // Sync fallback config and strictness threshold to engine
+        await engine.setFallbackConfig(fallbackMappingConfig)
+        await engine.setClassificationThreshold(taggingPreferences.strictness.threshold)
+
+        // Update state on main actor
+        modelLoaded = true
+        modelName = name
+        loadedTagNames = await engine.loadedTags
+
+        // Save as default model (copy into Application Support if needed)
+        var pathToPersist = modelDirectory.path
+        do {
+            let modelsDir = try await modelManager.modelsDirectory()
+            let modelsRoot = modelsDir.standardizedFileURL.path
+            let modelPath = modelDirectory.standardizedFileURL.path
+            if !modelPath.hasPrefix(modelsRoot + "/") {
+                let destURL = modelsDir.appendingPathComponent(modelDirectory.lastPathComponent)
+                if !FileManager.default.fileExists(atPath: destURL.path) {
+                    try FileManager.default.copyItem(at: modelDirectory, to: destURL)
+                }
+                pathToPersist = destURL.path
+            }
+        } catch {
+            print("Failed to copy model into default location: \(error)")
+        }
+
+        UserDefaults.standard.set(pathToPersist, forKey: "lastLoadedModelPath")
+        do {
+            try await modelManager.saveDefaultModelPath(pathToPersist)
+        } catch {
+            print("Failed to persist default model path: \(error)")
+        }
+        await modelManager.setDefaultModel(name: URL(fileURLWithPath: pathToPersist).lastPathComponent)
+
+        print("Loaded model '\(name)' with \(count) classifiers: \(loadedTagNames)")
+    }
+
+    /// Load the default/bundled model on app startup
+    @MainActor
+    func loadDefaultModel() async {
+        // Try loading last used model
+        if let lastPath = UserDefaults.standard.string(forKey: "lastLoadedModelPath") {
+            let url = URL(fileURLWithPath: lastPath)
+            if FileManager.default.fileExists(atPath: lastPath) {
+                do {
+                    try await loadModel(from: url)
+                    return
+                } catch {
+                    print("Failed to load last model: \(error)")
+                }
+            }
+        }
+        if let fallbackPath = await modelManager.loadDefaultModelPath() {
+            let url = URL(fileURLWithPath: fallbackPath)
+            if FileManager.default.fileExists(atPath: fallbackPath) {
+                do {
+                    try await loadModel(from: url)
+                    return
+                } catch {
+                    print("Failed to load persisted default model: \(error)")
+                }
+            }
+        }
+
+        // Try most recently trained model in default models directory
+        if let latestModelDir = await modelManager.latestTrainedModelDirectory() {
+            do {
+                try await loadModel(from: latestModelDir)
+                return
+            } catch {
+                print("Failed to load latest trained model: \(error)")
+            }
+        }
+
+        // Try loading bundled model from app resources
+        if let bundledModelURL = Bundle.main.url(forResource: "DefaultModel", withExtension: nil, subdirectory: "Models") {
+            do {
+                try await loadModel(from: bundledModelURL)
+                return
+            } catch {
+                print("Failed to load bundled model: \(error)")
+            }
+        }
+
+        // Try finding any available model in Application Support
+        do {
+            let modelsDir = try await modelManager.modelsDirectory()
+            let contents = try FileManager.default.contentsOfDirectory(at: modelsDir, includingPropertiesForKeys: nil)
+            let modelDirs = contents.filter { url in
+                var isDir: ObjCBool = false
+                return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+            }
+
+            if let firstModel = modelDirs.first {
+                try await loadModel(from: firstModel)
+            }
+        } catch {
+            print("No models available: \(error)")
+        }
+    }
+
+    /// Unload current model
+    @MainActor
+    func unloadModel() async {
+        await taggingEngine?.unloadUserModel()
+        modelLoaded = false
+        modelName = nil
+        loadedTagNames = []
+    }
+
+    // MARK: - Fallback Mappings
+
+    /// Save and sync fallback mapping configuration
+    @MainActor
+    func saveFallbackMappings() async {
+        FallbackMappingManager().save(fallbackMappingConfig)
+        await taggingEngine?.setFallbackConfig(fallbackMappingConfig)
+    }
+
+    /// Sync tagging preferences to engine (call before tagging)
+    @MainActor
+    func syncTaggingPreferences() async {
+        await taggingEngine?.setClassificationThreshold(taggingPreferences.strictness.threshold)
+    }
 
     // Toasts
     var toast: Toast?
@@ -40,6 +202,14 @@ final class AppState {
         case tagging
         case train
         case refine
+
+        var displayName: String {
+            switch self {
+            case .tagging: return "Tag"
+            case .train: return "Train"
+            case .refine: return "Refine"
+            }
+        }
     }
 
     struct AvailableTags {
@@ -63,12 +233,86 @@ final class AppState {
         var status: Status = .pending
         var error: String?
 
+        /// Security-scoped bookmark data for file access
+        var bookmarkData: Data?
+
+        /// Whether security-scoped access is currently active for this file
+        var securityAccessActive: Bool = false
+
         /// Tags written to the file (populated after successful tagging)
         var writtenTags: WrittenTags?
 
         enum Status { case pending, processing, complete, error }
 
         var fileName: String { url.lastPathComponent }
+
+        /// Create a QueuedFile and optionally start security-scoped access immediately
+        /// - Parameters:
+        ///   - url: The file URL (should be from NSOpenPanel for security scope)
+        ///   - startAccessImmediately: If true, starts security-scoped access now
+        init(url: URL, startAccessImmediately: Bool = false, status: Status = .pending, error: String? = nil) {
+            self.url = url
+            self.status = status
+            self.error = error
+
+            if startAccessImmediately {
+                // Start security-scoped access immediately while NSOpenPanel's grant is active
+                self.securityAccessActive = url.startAccessingSecurityScopedResource()
+                print("QueuedFile startAccessImmediately: \(securityAccessActive) for \(url.path)")
+
+                // Create bookmark while we have access
+                if self.securityAccessActive {
+                    self.bookmarkData = try? url.bookmarkData(
+                        options: .withSecurityScope,
+                        includingResourceValuesForKeys: nil,
+                        relativeTo: nil
+                    )
+                }
+            }
+        }
+
+        /// Start security-scoped access for this file (call before file operations)
+        mutating func startAccess() -> Bool {
+            if securityAccessActive {
+                return true
+            }
+
+            // Try resolving from bookmark
+            if let bookmarkData = bookmarkData {
+                var isStale = false
+                if let resolvedURL = try? URL(
+                    resolvingBookmarkData: bookmarkData,
+                    options: .withSecurityScope,
+                    relativeTo: nil,
+                    bookmarkDataIsStale: &isStale
+                ) {
+                    let started = resolvedURL.startAccessingSecurityScopedResource()
+                    print("QueuedFile startAccess (bookmark): \(started) for \(url.path)")
+                    if started {
+                        securityAccessActive = true
+                        return true
+                    }
+                }
+            }
+
+            // Try direct access
+            let started = url.startAccessingSecurityScopedResource()
+            print("QueuedFile startAccess (direct): \(started) for \(url.path)")
+            if started {
+                securityAccessActive = true
+                return true
+            }
+
+            return false
+        }
+
+        /// Stop security-scoped access for this file
+        mutating func stopAccess() {
+            if securityAccessActive {
+                url.stopAccessingSecurityScopedResource()
+                securityAccessActive = false
+            }
+        }
 
         /// Summary of tags that were written
         var tagsSummary: String? {
@@ -93,6 +337,7 @@ final class AppState {
         var essentiaGenres: [String] = []
         var essentiaMoods: [String] = []
         var essentiaInstruments: [String] = []
+        var essentiaSubGenre: String?
     }
 
     struct RefineFile: Identifiable, Equatable {
@@ -148,25 +393,108 @@ final class AppState {
     }
 }
 
+/// How strict the tagging threshold should be
+enum TaggingStrictness: String, Codable, CaseIterable {
+    case strict = "strict"      // 0.7 threshold
+    case average = "average"    // 0.5 threshold
+    case loose = "loose"        // 0.3 threshold
+
+    var threshold: Float {
+        switch self {
+        case .strict: return 0.7
+        case .average: return 0.5
+        case .loose: return 0.3
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .strict: return "Strict (70%)"
+        case .average: return "Average (50%)"
+        case .loose: return "Loose (30%)"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .strict: return "Fewer tags, higher confidence"
+        case .average: return "Balanced tagging"
+        case .loose: return "More tags, may include uncertain matches"
+        }
+    }
+}
+
 struct TaggingPreferences: Codable {
     var genre = FieldPreference(enabled: true, targetField: "TCON")
+    var subGenre = FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_SUBGENRE")
     var album = FieldPreference(enabled: true, targetField: "TALB")
     var mood = FieldPreference(enabled: true, targetField: "TIT1")
     var comments = FieldPreference(enabled: true, targetField: "COMM")
     var likeness = FieldPreference(enabled: true, targetField: "TIT1")
-    var vibes = VibesPreference(enabled: false, shortTargetField: "TXXX:CRATEBOT_VIBE_SHORT", longTargetField: "COMM")
+    var vibesShort = FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_VIBE_SHORT")
+    var vibesLong = FieldPreference(enabled: false, targetField: "COMM")
     var hooks = FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_HOOK")
     var overwrite = true
+    var strictness: TaggingStrictness = .average
 
     struct FieldPreference: Codable {
         var enabled: Bool
         var targetField: String
     }
 
-    struct VibesPreference: Codable {
+    // Legacy support for migration
+    private enum CodingKeys: String, CodingKey {
+        case genre, subGenre, album, mood, comments, likeness, vibesShort, vibesLong, hooks, overwrite, strictness
+        case vibes // Legacy key
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        genre = try container.decodeIfPresent(FieldPreference.self, forKey: .genre) ?? FieldPreference(enabled: true, targetField: "TCON")
+        subGenre = try container.decodeIfPresent(FieldPreference.self, forKey: .subGenre) ?? FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_SUBGENRE")
+        album = try container.decodeIfPresent(FieldPreference.self, forKey: .album) ?? FieldPreference(enabled: true, targetField: "TALB")
+        mood = try container.decodeIfPresent(FieldPreference.self, forKey: .mood) ?? FieldPreference(enabled: true, targetField: "TIT1")
+        comments = try container.decodeIfPresent(FieldPreference.self, forKey: .comments) ?? FieldPreference(enabled: true, targetField: "COMM")
+        likeness = try container.decodeIfPresent(FieldPreference.self, forKey: .likeness) ?? FieldPreference(enabled: true, targetField: "TIT1")
+        hooks = try container.decodeIfPresent(FieldPreference.self, forKey: .hooks) ?? FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_HOOK")
+        overwrite = try container.decodeIfPresent(Bool.self, forKey: .overwrite) ?? true
+        strictness = try container.decodeIfPresent(TaggingStrictness.self, forKey: .strictness) ?? .average
+
+        // Try new keys first, fall back to legacy vibes structure
+        if let short = try? container.decodeIfPresent(FieldPreference.self, forKey: .vibesShort),
+           let long = try? container.decodeIfPresent(FieldPreference.self, forKey: .vibesLong) {
+            vibesShort = short
+            vibesLong = long
+        } else if let legacyVibes = try? container.decodeIfPresent(LegacyVibesPreference.self, forKey: .vibes) {
+            vibesShort = FieldPreference(enabled: legacyVibes.enabled, targetField: legacyVibes.shortTargetField)
+            vibesLong = FieldPreference(enabled: legacyVibes.enabled, targetField: legacyVibes.longTargetField)
+        } else {
+            vibesShort = FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_VIBE_SHORT")
+            vibesLong = FieldPreference(enabled: false, targetField: "COMM")
+        }
+    }
+
+    private struct LegacyVibesPreference: Codable {
         var enabled: Bool
         var shortTargetField: String
         var longTargetField: String
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(genre, forKey: .genre)
+        try container.encode(subGenre, forKey: .subGenre)
+        try container.encode(album, forKey: .album)
+        try container.encode(mood, forKey: .mood)
+        try container.encode(comments, forKey: .comments)
+        try container.encode(likeness, forKey: .likeness)
+        try container.encode(vibesShort, forKey: .vibesShort)
+        try container.encode(vibesLong, forKey: .vibesLong)
+        try container.encode(hooks, forKey: .hooks)
+        try container.encode(overwrite, forKey: .overwrite)
+        try container.encode(strictness, forKey: .strictness)
     }
 
     private static let storageKey = "taggingPreferences"

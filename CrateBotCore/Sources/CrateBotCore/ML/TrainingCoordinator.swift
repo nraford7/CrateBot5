@@ -96,16 +96,65 @@ public actor TrainingCoordinator {
         /// Minimum samples required per tag
         public let minSamplesPerTag: Int
 
+        /// Mapping of ID3 fields to training categories
+        public let tagFieldMapping: TrainingDataCollector.TagFieldMapping
+
         public init(
             modelName: String = "CustomModel",
             selectedTags: Set<String>? = nil,
             validationSplit: Double = 0.2,
-            minSamplesPerTag: Int = 50
+            minSamplesPerTag: Int = 50,
+            tagFieldMapping: TrainingDataCollector.TagFieldMapping = .default
         ) {
             self.modelName = modelName
             self.selectedTags = selectedTags
             self.validationSplit = validationSplit
             self.minSamplesPerTag = minSamplesPerTag
+            self.tagFieldMapping = tagFieldMapping
+        }
+    }
+
+    /// Detailed result for a single trained tag
+    public struct TagTrainingResult: Sendable {
+        public let tag: String
+        public let trainingAccuracy: Double
+        public let validationAccuracy: Double
+        public let positiveCount: Int
+        public let negativeCount: Int
+
+        public init(tag: String, trainingAccuracy: Double, validationAccuracy: Double, positiveCount: Int, negativeCount: Int) {
+            self.tag = tag
+            self.trainingAccuracy = trainingAccuracy
+            self.validationAccuracy = validationAccuracy
+            self.positiveCount = positiveCount
+            self.negativeCount = negativeCount
+        }
+    }
+
+    /// Reason why a tag was skipped
+    public struct SkippedTag: Sendable {
+        public let tag: String
+        public let reason: SkipReason
+        public let sampleCount: Int
+
+        public enum SkipReason: Sendable {
+            case insufficientSamples(required: Int)
+            case trainingFailed(error: String)
+
+            public var description: String {
+                switch self {
+                case .insufficientSamples(let required):
+                    return "Needs \(required)+ samples"
+                case .trainingFailed(let error):
+                    return "Training failed: \(error)"
+                }
+            }
+        }
+
+        public init(tag: String, reason: SkipReason, sampleCount: Int) {
+            self.tag = tag
+            self.reason = reason
+            self.sampleCount = sampleCount
         }
     }
 
@@ -114,14 +163,20 @@ public actor TrainingCoordinator {
         /// Name of the trained model
         public let modelName: String
 
-        /// Tags that were successfully trained
-        public let trainedTags: [String]
+        /// Detailed results for each trained tag
+        public let tagResults: [TagTrainingResult]
 
-        /// Tags that were skipped (insufficient data)
-        public let skippedTags: [String]
+        /// Tags that were skipped with reasons
+        public let skippedTagDetails: [SkippedTag]
 
-        /// Total number of tracks used
-        public let totalTracks: Int
+        /// Total number of tracks scanned
+        public let totalTracksScanned: Int
+
+        /// Number of tracks used for training (after filtering)
+        public let tracksUsedForTraining: Int
+
+        /// Number of tracks skipped due to invalid features (NaN/Inf)
+        public let tracksWithInvalidFeatures: Int
 
         /// Average validation accuracy across all trained models
         public let averageAccuracy: Double
@@ -129,18 +184,37 @@ public actor TrainingCoordinator {
         /// URL where the model was saved
         public let modelURL: URL
 
+        /// Tags that were successfully trained (convenience accessor)
+        public var trainedTags: [String] {
+            tagResults.map { $0.tag }
+        }
+
+        /// Tags that were skipped (convenience accessor)
+        public var skippedTags: [String] {
+            skippedTagDetails.map { $0.tag }
+        }
+
+        /// Total number of tracks (for backwards compatibility)
+        public var totalTracks: Int {
+            tracksUsedForTraining
+        }
+
         public init(
             modelName: String,
-            trainedTags: [String],
-            skippedTags: [String],
-            totalTracks: Int,
+            tagResults: [TagTrainingResult],
+            skippedTagDetails: [SkippedTag],
+            totalTracksScanned: Int,
+            tracksUsedForTraining: Int,
+            tracksWithInvalidFeatures: Int,
             averageAccuracy: Double,
             modelURL: URL
         ) {
             self.modelName = modelName
-            self.trainedTags = trainedTags
-            self.skippedTags = skippedTags
-            self.totalTracks = totalTracks
+            self.tagResults = tagResults
+            self.skippedTagDetails = skippedTagDetails
+            self.totalTracksScanned = totalTracksScanned
+            self.tracksUsedForTraining = tracksUsedForTraining
+            self.tracksWithInvalidFeatures = tracksWithInvalidFeatures
             self.averageAccuracy = averageAccuracy
             self.modelURL = modelURL
         }
@@ -196,7 +270,8 @@ public actor TrainingCoordinator {
             logger.info("Starting data collection from \(directories.count) directories")
 
             let collectionResult = await dataCollector.collectTrainingData(
-                from: directories
+                from: directories,
+                mapping: options.tagFieldMapping
             ) { [weak self] progress in
                 guard let self = self else { return }
                 let detailed = DetailedProgress(
@@ -232,7 +307,7 @@ public actor TrainingCoordinator {
 
             // Filter tags based on selection and minimum samples
             var viableTags: [String] = []
-            var skippedTags: [String] = []
+            var skippedTagDetails: [SkippedTag] = []
 
             for (tag, count) in discoveredTags {
                 // Check if tag is in selected set (or if no selection, include all)
@@ -242,7 +317,11 @@ public actor TrainingCoordinator {
                     if count >= options.minSamplesPerTag {
                         viableTags.append(tag)
                     } else {
-                        skippedTags.append(tag)
+                        skippedTagDetails.append(SkippedTag(
+                            tag: tag,
+                            reason: .insufficientSamples(required: options.minSamplesPerTag),
+                            sampleCount: count
+                        ))
                         logger.info("Skipping tag '\(tag)': \(count) samples < \(options.minSamplesPerTag) required")
                     }
                 }
@@ -255,7 +334,7 @@ public actor TrainingCoordinator {
                 throw CoordinatorError.insufficientData(details: errorDetails)
             }
 
-            logger.info("Training \(viableTags.count) tags, skipping \(skippedTags.count)")
+            logger.info("Training \(viableTags.count) tags, skipping \(skippedTagDetails.count)")
 
             // Phase 3: Extract features (with checkpoint support)
 
@@ -346,6 +425,7 @@ public actor TrainingCoordinator {
 
             // Filter to only tracks with features
             let validTracks = tracksWithFeatures.filter { $0.features != nil && !$0.features!.isEmpty }
+            let tracksWithInvalidFeatures = tracksWithFeatures.count - validTracks.count
 
             guard !validTracks.isEmpty else {
                 let errorDetails = "Feature extraction failed for all tracks"
@@ -354,7 +434,7 @@ public actor TrainingCoordinator {
                 throw CoordinatorError.insufficientData(details: errorDetails)
             }
 
-            logger.info("Extracted features for \(validTracks.count) tracks")
+            logger.info("Extracted features for \(validTracks.count) tracks (\(tracksWithInvalidFeatures) had invalid features)")
 
             // Phase 4: Train models
             _state = .training(progress: 0.0, currentTag: nil)
@@ -434,11 +514,24 @@ public actor TrainingCoordinator {
 
             logger.info("Training complete: \(trainedTagNames.count) models, avg accuracy: \(avgAccuracy)")
 
+            // Convert training results to detailed tag results
+            let tagResults = trainingResults.map { result in
+                TagTrainingResult(
+                    tag: result.tag,
+                    trainingAccuracy: result.trainingAccuracy,
+                    validationAccuracy: result.validationAccuracy,
+                    positiveCount: result.positiveCount,
+                    negativeCount: result.negativeCount
+                )
+            }
+
             return TrainingSummary(
                 modelName: options.modelName,
-                trainedTags: trainedTagNames,
-                skippedTags: skippedTags,
-                totalTracks: validTracks.count,
+                tagResults: tagResults,
+                skippedTagDetails: skippedTagDetails,
+                totalTracksScanned: collectionResult.scannedCount,
+                tracksUsedForTraining: validTracks.count,
+                tracksWithInvalidFeatures: tracksWithInvalidFeatures,
                 averageAccuracy: avgAccuracy,
                 modelURL: outputDirectory
             )

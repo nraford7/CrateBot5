@@ -88,6 +88,54 @@ public actor ModelManager {
         logger.info("Set default model to: \(name)")
     }
 
+    /// Persist the last loaded model path in Application Support.
+    public func saveDefaultModelPath(_ path: String) throws {
+        let url = try defaultModelPathURL()
+        try path.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// Load the last saved model path from Application Support.
+    public func loadDefaultModelPath() -> String? {
+        guard let url = try? defaultModelPathURL(),
+              let path = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Find the most recently modified trained model directory.
+    public func latestTrainedModelDirectory() -> URL? {
+        guard let modelsDir = try? modelsDirectory(),
+              let contents = try? fileManager.contentsOfDirectory(
+                at: modelsDir,
+                includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
+                options: [.skipsHiddenFiles]
+              ) else {
+            return nil
+        }
+
+        let candidateDirs = contents.filter { url in
+            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else {
+                return false
+            }
+            let modelFiles = (try? fileManager.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: nil
+            ))?.filter { $0.pathExtension == "mlmodel" || $0.pathExtension == "mlmodelc" } ?? []
+            return !modelFiles.isEmpty
+        }
+
+        return candidateDirs
+            .compactMap { url -> (URL, Date)? in
+                let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                return date.map { (url, $0) }
+            }
+            .sorted { $0.1 > $1.1 }
+            .first?
+            .0
+    }
+
     /// Get the models directory (creating if needed)
     public func modelsDirectory() throws -> URL {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
@@ -134,5 +182,16 @@ public actor ModelManager {
         try? fileManager.removeItem(at: metadataURL)
 
         logger.info("Deleted model: \(name)")
+    }
+
+    private func defaultModelPathURL() throws -> URL {
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw ModelError.loadFailed("Cannot access Application Support directory")
+        }
+        let baseDir = appSupport.appendingPathComponent("CrateBot")
+        if !fileManager.fileExists(atPath: baseDir.path) {
+            try fileManager.createDirectory(at: baseDir, withIntermediateDirectories: true)
+        }
+        return baseDir.appendingPathComponent("default_model_path.txt")
     }
 }

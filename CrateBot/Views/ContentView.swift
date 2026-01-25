@@ -41,6 +41,7 @@ struct MainView: View {
 
             StatusBar()
         }
+        .background(Theme.Colors.bgBase)
         .sheet(isPresented: $state.settingsOpen) {
             SettingsPanel()
         }

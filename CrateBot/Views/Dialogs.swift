@@ -99,36 +99,39 @@ struct InputDialog: View {
     @FocusState private var isTextFieldFocused: Bool
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: Theme.Spacing.lg) {
             Text(title)
-                .font(.headline)
+                .font(Theme.Fonts.heading(18))
+                .foregroundColor(Theme.Colors.textPrimary)
 
             Text(prompt)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(14))
+                .foregroundColor(Theme.Colors.textSecondary)
 
             TextField("", text: $text)
                 .textFieldStyle(.roundedBorder)
+                .font(Theme.Fonts.body(14))
                 .focused($isTextFieldFocused)
                 .onSubmit {
                     submitIfValid()
                 }
 
-            HStack(spacing: 12) {
+            HStack(spacing: Theme.Spacing.md) {
                 Button("Cancel") {
                     dismiss()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(SecondaryButtonStyle())
 
                 Button("Submit") {
                     submitIfValid()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryButtonStyle())
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(24)
+        .padding(Theme.Spacing.lg)
         .frame(minWidth: 300)
+        .background(Theme.Colors.bgWindow)
         .onAppear {
             isTextFieldFocused = true
         }
@@ -152,28 +155,29 @@ struct ProgressDialog: View {
     var onCancel: (() -> Void)?
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: Theme.Spacing.lg) {
             Text(title)
-                .font(.headline)
+                .font(Theme.Fonts.heading(18))
+                .foregroundColor(Theme.Colors.textPrimary)
 
-            VStack(spacing: 8) {
-                ProgressView(value: progress, total: 1.0)
-                    .progressViewStyle(.linear)
+            VStack(spacing: Theme.Spacing.sm) {
+                ThemedProgressBar(progress: progress)
 
                 Text(status)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(12))
+                    .foregroundColor(Theme.Colors.textSecondary)
             }
 
             if let onCancel = onCancel {
                 Button("Cancel") {
                     onCancel()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(SecondaryButtonStyle())
             }
         }
-        .padding(24)
+        .padding(Theme.Spacing.lg)
         .frame(minWidth: 300)
+        .background(Theme.Colors.bgWindow)
         .interactiveDismissDisabled(onCancel == nil)
     }
 }
@@ -190,6 +194,7 @@ struct ProgressDialog: View {
         }
     }
     .frame(width: 300, height: 200)
+    .background(Theme.Colors.bgWindow)
     .confirmDestructiveAction(
         "Clear Queue",
         message: "This will remove all files from the queue.",
@@ -209,6 +214,7 @@ struct ProgressDialog: View {
         }
     }
     .frame(width: 300, height: 200)
+    .background(Theme.Colors.bgWindow)
     .alertDialog(
         "Error",
         message: "Failed to load the model. Please check your configuration.",

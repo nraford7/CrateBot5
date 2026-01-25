@@ -10,24 +10,66 @@ struct SettingsPanel: View {
         @Bindable var appState = appState
 
         NavigationStack {
-            Form {
-                taggingOptionsSection
-                musicFoldersSection
-                modelSection
-                aboutSection
+            ScrollView {
+                VStack(spacing: Theme.Spacing.lg) {
+                    strictnessSection
+                    taggingOptionsSection
+                    fallbackMappingsSection
+                    musicFoldersSection
+                    modelSection
+                    aboutSection
+                }
+                .padding(Theme.Spacing.lg)
             }
-            .formStyle(.grouped)
+            .background(Theme.Colors.bgWindow)
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         appState.taggingPreferences.save()
+                        Task {
+                            await appState.saveFallbackMappings()
+                            await appState.syncTaggingPreferences()
+                        }
                         dismiss()
                     }
+                    .buttonStyle(PrimaryButtonStyle())
                 }
             }
         }
         .frame(minWidth: 550, minHeight: 500)
+    }
+
+    // MARK: - Strictness Section
+
+    private var strictnessSection: some View {
+        @Bindable var appState = appState
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            sectionHeader("Tagging Strictness")
+
+            VStack(spacing: Theme.Spacing.sm) {
+                Picker("Strictness", selection: $appState.taggingPreferences.strictness) {
+                    ForEach(TaggingStrictness.allCases, id: \.self) { level in
+                        Text(level.displayName).tag(level)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                Text(appState.taggingPreferences.strictness.description)
+                    .font(Theme.Fonts.body(12))
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.bgSurface)
+            .cornerRadius(Theme.Radius.md)
+
+            Text("Controls the confidence threshold for applying tags. Lower values apply more tags but may include uncertain matches. Essentia predictions are used to validate low-confidence tags.")
+                .font(Theme.Fonts.body(12))
+                .foregroundColor(Theme.Colors.textTertiary)
+        }
     }
 
     // MARK: - Tagging Options Section
@@ -35,148 +77,238 @@ struct SettingsPanel: View {
     private var taggingOptionsSection: some View {
         @Bindable var appState = appState
 
-        return Section {
-            // Genre
-            fieldToggleRow(
-                label: "Genre",
-                enabled: $appState.taggingPreferences.genre.enabled,
-                targetField: appState.taggingPreferences.genre.targetField
-            )
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            sectionHeader("Tagging Options")
 
-            // Album
-            fieldToggleRow(
-                label: "Album",
-                enabled: $appState.taggingPreferences.album.enabled,
-                targetField: appState.taggingPreferences.album.targetField
-            )
+            VStack(spacing: Theme.Spacing.sm) {
+                fieldToggleRow(
+                    label: "Genre",
+                    enabled: $appState.taggingPreferences.genre.enabled,
+                    targetField: appState.taggingPreferences.genre.targetField
+                )
 
-            // Mood
-            fieldToggleRow(
-                label: "Mood",
-                enabled: $appState.taggingPreferences.mood.enabled,
-                targetField: appState.taggingPreferences.mood.targetField
-            )
+                fieldToggleRow(
+                    label: "Sub Genre",
+                    enabled: $appState.taggingPreferences.subGenre.enabled,
+                    targetField: appState.taggingPreferences.subGenre.targetField
+                )
 
-            // Comments
-            fieldToggleRow(
-                label: "Comments",
-                enabled: $appState.taggingPreferences.comments.enabled,
-                targetField: appState.taggingPreferences.comments.targetField
-            )
+                fieldToggleRow(
+                    label: "Timing",
+                    enabled: $appState.taggingPreferences.album.enabled,
+                    targetField: appState.taggingPreferences.album.targetField
+                )
 
-            // Likeness
-            fieldToggleRow(
-                label: "Likeness",
-                enabled: $appState.taggingPreferences.likeness.enabled,
-                targetField: appState.taggingPreferences.likeness.targetField
-            )
+                fieldToggleRow(
+                    label: "Mood",
+                    enabled: $appState.taggingPreferences.mood.enabled,
+                    targetField: appState.taggingPreferences.mood.targetField
+                )
 
-            // Vibes (has two target fields)
-            vibesToggleRow
+                fieldToggleRow(
+                    label: "Comments",
+                    enabled: $appState.taggingPreferences.comments.enabled,
+                    targetField: appState.taggingPreferences.comments.targetField
+                )
 
-            // Hooks
-            fieldToggleRow(
-                label: "Hooks",
-                enabled: $appState.taggingPreferences.hooks.enabled,
-                targetField: appState.taggingPreferences.hooks.targetField
-            )
+                fieldToggleRow(
+                    label: "Likeness",
+                    enabled: $appState.taggingPreferences.likeness.enabled,
+                    targetField: appState.taggingPreferences.likeness.targetField
+                )
 
-            Divider()
+                fieldToggleRow(
+                    label: "Vibes Short",
+                    enabled: $appState.taggingPreferences.vibesShort.enabled,
+                    targetField: appState.taggingPreferences.vibesShort.targetField
+                )
 
-            // Overwrite toggle
-            Toggle("Overwrite Existing Tags", isOn: $appState.taggingPreferences.overwrite)
-        } header: {
-            Text("Tagging Options")
-        } footer: {
-            Text("Configure which ID3 fields CrateBot writes to when tagging files.")
-                .foregroundStyle(.secondary)
-        }
-    }
+                fieldToggleRow(
+                    label: "Vibes Long",
+                    enabled: $appState.taggingPreferences.vibesLong.enabled,
+                    targetField: appState.taggingPreferences.vibesLong.targetField
+                )
 
-    private func fieldToggleRow(label: String, enabled: Binding<Bool>, targetField: String) -> some View {
-        HStack {
-            Toggle(label, isOn: enabled)
+                fieldToggleRow(
+                    label: "Hooks",
+                    enabled: $appState.taggingPreferences.hooks.enabled,
+                    targetField: appState.taggingPreferences.hooks.targetField
+                )
 
-            Spacer()
+                Divider().background(Theme.Colors.textTertiary.opacity(0.2))
 
-            if enabled.wrappedValue {
-                Text(targetField)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.secondary.opacity(0.1))
-                    .cornerRadius(4)
+                HStack {
+                    Toggle("Overwrite Existing Tags", isOn: $appState.taggingPreferences.overwrite)
+                        .font(Theme.Fonts.body(14))
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    Spacer()
+                }
+                .padding(.vertical, Theme.Spacing.xs)
             }
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.bgSurface)
+            .cornerRadius(Theme.Radius.md)
+
+            Text("Configure which ID3 fields CrateBot writes to when tagging files.")
+                .font(Theme.Fonts.body(12))
+                .foregroundColor(Theme.Colors.textTertiary)
         }
     }
 
-    private var vibesToggleRow: some View {
+    // MARK: - Fallback Mappings Section
+
+    @State private var showFallbackEditor = false
+
+    private var fallbackMappingsSection: some View {
         @Bindable var appState = appState
 
-        return HStack {
-            Toggle("Vibes", isOn: $appState.taggingPreferences.vibes.enabled)
+        let configuredCount = appState.fallbackMappingConfig.mappings.filter { !$0.essentiaLabels.isEmpty }.count
 
-            Spacer()
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            sectionHeader("Tag Fallback Mappings")
 
-            if appState.taggingPreferences.vibes.enabled {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(appState.taggingPreferences.vibes.shortTargetField)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(appState.taggingPreferences.vibes.longTargetField)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            VStack(spacing: Theme.Spacing.sm) {
+                HStack {
+                    Toggle("Enable Fallback Mappings", isOn: $appState.fallbackMappingConfig.enabled)
+                        .font(Theme.Fonts.body(14))
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    Spacer()
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.secondary.opacity(0.1))
-                .cornerRadius(4)
-            }
-        }
-    }
+                .padding(.vertical, Theme.Spacing.xs)
 
-    // MARK: - Music Folders Section
+                if appState.fallbackMappingConfig.enabled {
+                    Divider().background(Theme.Colors.textTertiary.opacity(0.2))
 
-    private var musicFoldersSection: some View {
-        Section("Music Folders") {
-            if appState.bookmarkManager.musicFolderURLs.isEmpty {
-                Text("No folders added")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(appState.bookmarkManager.musicFolderURLs, id: \.absoluteString) { url in
                     HStack {
-                        Image(systemName: "folder.fill")
-                            .foregroundStyle(Color.accentColor)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(url.lastPathComponent)
-                                .lineLimit(1)
-                            Text(url.deletingLastPathComponent().path)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("\(configuredCount) tags configured")
+                                .font(Theme.Fonts.body(14))
+                                .foregroundColor(Theme.Colors.textPrimary)
+                            Text("Map model tags to Essentia predictions")
+                                .font(Theme.Fonts.body(12))
+                                .foregroundColor(Theme.Colors.textTertiary)
                         }
 
                         Spacer()
 
                         Button {
-                            removeFolder(url)
+                            showFallbackEditor = true
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
+                            Label("Edit Mappings", systemImage: "pencil")
                         }
-                        .buttonStyle(.plain)
-                        .help("Remove folder")
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(appState.loadedTagNames.isEmpty)
+                    }
+                    .padding(.vertical, Theme.Spacing.xs)
+
+                    if appState.loadedTagNames.isEmpty {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            Image(systemName: "info.circle")
+                                .foregroundColor(Theme.Colors.textTertiary)
+                            Text("Load a model to configure fallback mappings")
+                                .font(Theme.Fonts.body(12))
+                                .foregroundColor(Theme.Colors.textTertiary)
+                        }
+                        .padding(.vertical, Theme.Spacing.xs)
                     }
                 }
             }
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.bgSurface)
+            .cornerRadius(Theme.Radius.md)
 
-            Button {
-                addFolder()
-            } label: {
-                Label("Add Folder", systemImage: "plus")
+            Text("Fallback mappings apply Essentia predictions when your trained classifiers have low confidence. Uses the global strictness threshold.")
+                .font(Theme.Fonts.body(12))
+                .foregroundColor(Theme.Colors.textTertiary)
+        }
+        .sheet(isPresented: $showFallbackEditor) {
+            FallbackMappingsEditor()
+                .environment(appState)
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(Theme.Fonts.heading(16))
+            .foregroundColor(Theme.Colors.textPrimary)
+    }
+
+    private func fieldToggleRow(label: String, enabled: Binding<Bool>, targetField: String) -> some View {
+        HStack {
+            Toggle(label, isOn: enabled)
+                .font(Theme.Fonts.body(14))
+                .foregroundColor(Theme.Colors.textPrimary)
+
+            Spacer()
+
+            if enabled.wrappedValue {
+                Text(targetField)
+                    .font(Theme.Fonts.mono(11))
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, Theme.Spacing.xs)
+                    .background(Theme.Colors.bgElevated)
+                    .cornerRadius(Theme.Radius.sm)
             }
+        }
+        .padding(.vertical, Theme.Spacing.xs)
+    }
+
+    // MARK: - Music Folders Section
+
+    private var musicFoldersSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            sectionHeader("Music Folders")
+
+            VStack(spacing: Theme.Spacing.sm) {
+                if appState.bookmarkManager.musicFolderURLs.isEmpty {
+                    Text("No folders added")
+                        .font(Theme.Fonts.body(14))
+                        .foregroundColor(Theme.Colors.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, Theme.Spacing.md)
+                } else {
+                    ForEach(appState.bookmarkManager.musicFolderURLs, id: \.absoluteString) { url in
+                        HStack {
+                            Image(systemName: "folder.fill")
+                                .foregroundStyle(Theme.Colors.accentPrimary)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(url.lastPathComponent)
+                                    .font(Theme.Fonts.body(14))
+                                    .foregroundColor(Theme.Colors.textPrimary)
+                                    .lineLimit(1)
+                                Text(url.deletingLastPathComponent().path)
+                                    .font(Theme.Fonts.mono(11))
+                                    .foregroundColor(Theme.Colors.textTertiary)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                removeFolder(url)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(Theme.Colors.textTertiary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Remove folder")
+                        }
+                        .padding(.vertical, Theme.Spacing.xs)
+                    }
+                }
+
+                Button {
+                    addFolder()
+                } label: {
+                    Label("Add Folder", systemImage: "plus")
+                }
+                .buttonStyle(SecondaryButtonStyle())
+            }
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.bgSurface)
+            .cornerRadius(Theme.Radius.md)
         }
     }
 
@@ -205,41 +337,81 @@ struct SettingsPanel: View {
     // MARK: - Model Section
 
     private var modelSection: some View {
-        Section("Model") {
-            HStack {
-                Text("Status")
-                Spacer()
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(appState.modelLoaded ? Color.green : Color.orange)
-                        .frame(width: 8, height: 8)
-                    Text(appState.modelLoaded ? "Loaded" : "Not Loaded")
-                        .foregroundStyle(.secondary)
-                }
-            }
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            sectionHeader("Model")
 
-            if let modelName = appState.modelName {
-                LabeledContent("Model", value: modelName)
-            }
-
-            if appState.availableTags != nil {
+            VStack(spacing: Theme.Spacing.sm) {
                 HStack {
-                    Text("Tags Available")
+                    Text("Status")
+                        .font(Theme.Fonts.body(14))
+                        .foregroundColor(Theme.Colors.textSecondary)
                     Spacer()
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                    HStack(spacing: Theme.Spacing.sm) {
+                        StatusLED(
+                            status: appState.modelLoaded ? .complete : .pending,
+                            size: 8
+                        )
+                        Text(appState.modelLoaded ? "Loaded" : "Not Loaded")
+                            .font(Theme.Fonts.body(14))
+                            .foregroundColor(appState.modelLoaded ? Theme.Colors.statusSuccess : Theme.Colors.textTertiary)
+                    }
+                }
+
+                if let modelName = appState.modelName {
+                    HStack {
+                        Text("Model")
+                            .font(Theme.Fonts.body(14))
+                            .foregroundColor(Theme.Colors.textSecondary)
+                        Spacer()
+                        Text(modelName)
+                            .font(Theme.Fonts.mono(14))
+                            .foregroundColor(Theme.Colors.textPrimary)
+                    }
+                }
+
+                if appState.availableTags != nil {
+                    HStack {
+                        Text("Tags Available")
+                            .font(Theme.Fonts.body(14))
+                            .foregroundColor(Theme.Colors.textSecondary)
+                        Spacer()
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(Theme.Colors.statusSuccess)
+                    }
                 }
             }
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.bgSurface)
+            .cornerRadius(Theme.Radius.md)
         }
     }
 
     // MARK: - About Section
 
     private var aboutSection: some View {
-        Section("About") {
-            LabeledContent("Version", value: appVersion)
-            LabeledContent("CrateBotCore", value: CrateBotCore.version)
-            LabeledContent("Build", value: buildNumber)
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            sectionHeader("About")
+
+            VStack(spacing: Theme.Spacing.sm) {
+                aboutRow("Version", value: appVersion)
+                aboutRow("CrateBotCore", value: CrateBotCore.version)
+                aboutRow("Build", value: buildNumber)
+            }
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.bgSurface)
+            .cornerRadius(Theme.Radius.md)
+        }
+    }
+
+    private func aboutRow(_ label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(Theme.Fonts.body(14))
+                .foregroundColor(Theme.Colors.textSecondary)
+            Spacer()
+            Text(value)
+                .font(Theme.Fonts.mono(14))
+                .foregroundColor(Theme.Colors.textPrimary)
         }
     }
 

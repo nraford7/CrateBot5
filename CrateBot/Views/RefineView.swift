@@ -15,6 +15,7 @@ struct RefineView: View {
                 .frame(minWidth: 400)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Colors.bgWindow)
     }
 
     // MARK: - File List Pane
@@ -24,19 +25,22 @@ struct RefineView: View {
             // Header
             HStack {
                 Text("Files to Review")
-                    .font(.headline)
+                    .font(Theme.Fonts.heading(16))
+                    .foregroundColor(Theme.Colors.textPrimary)
                 Spacer()
                 Text("\(appState.refineQueue.count)")
-                    .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.2))
+                    .font(Theme.Fonts.mono(12))
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, Theme.Spacing.xs)
+                    .background(Theme.Colors.bgSurface)
                     .clipShape(Capsule())
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.md)
+            .background(Theme.Colors.bgElevated)
 
-            Divider()
+            Divider().background(Theme.Colors.textTertiary.opacity(0.2))
 
             if appState.refineQueue.isEmpty {
                 emptyFileListView
@@ -44,20 +48,20 @@ struct RefineView: View {
                 fileList
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Theme.Colors.bgSurface)
     }
 
     private var emptyFileListView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.system(size: 32))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textTertiary)
             Text("No files to review")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(14))
+                .foregroundColor(Theme.Colors.textSecondary)
             Text("Tagged files will appear here for refinement")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(Theme.Fonts.body(12))
+                .foregroundColor(Theme.Colors.textTertiary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -82,12 +86,16 @@ struct RefineView: View {
             .onDelete(perform: removeFiles)
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(Theme.Colors.bgSurface)
     }
 
     private func fileRow(_ file: AppState.RefineFile) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack {
                 Text(file.fileName)
+                    .font(Theme.Fonts.mono(13))
+                    .foregroundColor(Theme.Colors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
@@ -95,21 +103,20 @@ struct RefineView: View {
 
                 if file.hasChanges {
                     Image(systemName: "pencil.circle.fill")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Theme.Colors.accentPrimary)
                         .font(.caption)
                 }
             }
 
             Text(file.tagsSummary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(11))
+                .foregroundColor(Theme.Colors.textSecondary)
                 .lineLimit(1)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Theme.Spacing.xs)
     }
 
     private func removeFiles(at offsets: IndexSet) {
-        // Stop playback if removing the selected file
         let idsToRemove = offsets.map { appState.refineQueue[$0].id }
         if let selected = appState.selectedRefineFile, idsToRemove.contains(selected.id) {
             appState.audioPlayer.stop()
@@ -131,15 +138,16 @@ struct RefineView: View {
     }
 
     private var noSelectionView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "music.note.list")
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textTertiary)
             Text("Select a file to review")
-                .font(.title3)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.heading(18))
+                .foregroundColor(Theme.Colors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Colors.bgWindow)
     }
 }
 
@@ -161,23 +169,24 @@ private struct RefineDetailView: View {
         VStack(spacing: 0) {
             // Audio player section
             audioPlayerSection
-                .padding(20)
-                .background(Color(nsColor: .windowBackgroundColor))
+                .padding(Theme.Spacing.lg)
+                .background(Theme.Colors.bgElevated)
 
-            Divider()
+            Divider().background(Theme.Colors.textTertiary.opacity(0.2))
 
             // Tag editor section
             ScrollView {
                 tagEditorSection
-                    .padding(20)
+                    .padding(Theme.Spacing.lg)
             }
+            .background(Theme.Colors.bgWindow)
 
-            Divider()
+            Divider().background(Theme.Colors.textTertiary.opacity(0.2))
 
             // Bottom controls
             bottomControls
-                .padding(16)
-                .background(.regularMaterial)
+                .padding(Theme.Spacing.md)
+                .background(Theme.Colors.bgElevated)
         }
         .onAppear {
             loadEditedValues()
@@ -202,10 +211,11 @@ private struct RefineDetailView: View {
     // MARK: - Audio Player Section
 
     private var audioPlayerSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Theme.Spacing.md) {
             // File name
             Text(file.fileName)
-                .font(.headline)
+                .font(Theme.Fonts.heading(16))
+                .foregroundColor(Theme.Colors.textPrimary)
                 .lineLimit(1)
                 .truncationMode(.middle)
 
@@ -218,14 +228,12 @@ private struct RefineDetailView: View {
             // Time display
             HStack {
                 Text(formatTime(appState.audioPlayer.currentTime))
-                    .font(.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.mono(12))
+                    .foregroundColor(Theme.Colors.textSecondary)
                 Spacer()
                 Text(formatTime(appState.audioPlayer.duration))
-                    .font(.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.mono(12))
+                    .foregroundColor(Theme.Colors.textSecondary)
             }
 
             // Playback controls
@@ -234,8 +242,8 @@ private struct RefineDetailView: View {
             // Error message
             if let error = playbackError {
                 Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                    .font(Theme.Fonts.body(12))
+                    .foregroundColor(Theme.Colors.statusError)
             }
         }
     }
@@ -254,7 +262,7 @@ private struct RefineDetailView: View {
                     let isPlayed = Double(index) / Double(waveformBarCount) < appState.audioPlayer.progress
 
                     RoundedRectangle(cornerRadius: 1)
-                        .fill(isPlayed ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .fill(isPlayed ? Theme.Colors.accentPrimary : Theme.Colors.textTertiary.opacity(0.3))
                         .frame(
                             width: barWidth,
                             height: height * geometry.size.height
@@ -267,7 +275,6 @@ private struct RefineDetailView: View {
     }
 
     private func waveformBarHeight(index: Int, totalBars: Int) -> CGFloat {
-        // Generate pseudo-random but deterministic heights based on file name
         let seed = file.fileName.hashValue
         let noise = sin(Double(index * 7 + seed)) * 0.3 +
                    cos(Double(index * 13 + seed)) * 0.2 +
@@ -280,13 +287,19 @@ private struct RefineDetailView: View {
             ZStack(alignment: .leading) {
                 // Background track
                 Rectangle()
-                    .fill(Color.secondary.opacity(0.2))
+                    .fill(Theme.Colors.bgSurface)
                     .frame(height: 4)
                     .clipShape(Capsule())
 
                 // Progress fill
                 Rectangle()
-                    .fill(Color.accentColor)
+                    .fill(
+                        LinearGradient(
+                            colors: [Theme.Colors.accentPrimary, Theme.Colors.statusWarning],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .frame(width: geometry.size.width * appState.audioPlayer.progress, height: 4)
                     .clipShape(Capsule())
             }
@@ -303,7 +316,7 @@ private struct RefineDetailView: View {
     }
 
     private var playbackControls: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: Theme.Spacing.lg) {
             // Skip backward 10s
             Button {
                 let newTime = max(0, appState.audioPlayer.currentTime - 10)
@@ -311,6 +324,7 @@ private struct RefineDetailView: View {
             } label: {
                 Image(systemName: "gobackward.10")
                     .font(.title2)
+                    .foregroundColor(Theme.Colors.textSecondary)
             }
             .buttonStyle(.plain)
             .disabled(appState.audioPlayer.duration == 0)
@@ -321,7 +335,7 @@ private struct RefineDetailView: View {
             } label: {
                 Image(systemName: appState.audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 44))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Theme.Colors.accentPrimary)
             }
             .buttonStyle(.plain)
 
@@ -332,6 +346,7 @@ private struct RefineDetailView: View {
             } label: {
                 Image(systemName: "goforward.10")
                     .font(.title2)
+                    .foregroundColor(Theme.Colors.textSecondary)
             }
             .buttonStyle(.plain)
             .disabled(appState.audioPlayer.duration == 0)
@@ -342,10 +357,8 @@ private struct RefineDetailView: View {
         if appState.audioPlayer.isPlaying {
             appState.audioPlayer.pause()
         } else if appState.audioPlayer.duration > 0 {
-            // Resume existing playback
             appState.audioPlayer.resume()
         } else {
-            // Start new playback
             do {
                 try appState.audioPlayer.play(url: file.url)
                 playbackError = nil
@@ -364,19 +377,20 @@ private struct RefineDetailView: View {
     // MARK: - Tag Editor Section
 
     private var tagEditorSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             // Genre
-            tagField(title: "Genre", value: $editedGenre, confidence: file.confidences?["genre"])
+            tagField(title: "Genre", value: $editedGenre, confidence: file.confidences?["genre"], category: .genre)
 
             // Timing
-            tagField(title: "Timing", value: $editedTiming, confidence: file.confidences?["timing"])
+            tagField(title: "Timing", value: $editedTiming, confidence: file.confidences?["timing"], category: .timing)
 
             // Mood (multi-value)
             multiTagField(
                 title: "Mood",
                 tags: $editedMood,
                 newTag: $newMoodTag,
-                confidenceKey: "mood"
+                confidenceKey: "mood",
+                category: .mood
             )
 
             // Descriptive (multi-value)
@@ -384,17 +398,23 @@ private struct RefineDetailView: View {
                 title: "Descriptive",
                 tags: $editedDescriptive,
                 newTag: $newDescriptiveTag,
-                confidenceKey: "descriptive"
+                confidenceKey: "descriptive",
+                category: .descriptive
             )
         }
     }
 
-    private func tagField(title: String, value: Binding<String>, confidence: Float?) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func tagField(title: String, value: Binding<String>, confidence: Float?, category: CategoryTagChip.Category) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack {
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                HStack(spacing: Theme.Spacing.sm) {
+                    Circle()
+                        .fill(category.color)
+                        .frame(width: 8, height: 8)
+                    Text(title)
+                        .font(Theme.Fonts.label(14))
+                        .foregroundColor(Theme.Colors.textPrimary)
+                }
 
                 if let conf = confidence {
                     confidenceBadge(conf)
@@ -403,6 +423,7 @@ private struct RefineDetailView: View {
 
             TextField("Enter \(title.lowercased())", text: value)
                 .textFieldStyle(.roundedBorder)
+                .font(Theme.Fonts.body(13))
         }
     }
 
@@ -410,13 +431,19 @@ private struct RefineDetailView: View {
         title: String,
         tags: Binding<[String]>,
         newTag: Binding<String>,
-        confidenceKey: String
+        confidenceKey: String,
+        category: CategoryTagChip.Category
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack {
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                HStack(spacing: Theme.Spacing.sm) {
+                    Circle()
+                        .fill(category.color)
+                        .frame(width: 8, height: 8)
+                    Text(title)
+                        .font(Theme.Fonts.label(14))
+                        .foregroundColor(Theme.Colors.textPrimary)
+                }
 
                 if let conf = file.confidences?[confidenceKey] {
                     confidenceBadge(conf)
@@ -424,10 +451,12 @@ private struct RefineDetailView: View {
             }
 
             // Current tags
-            FlowLayout(spacing: 6) {
-                ForEach(tags.wrappedValue, id: \.self) { tag in
-                    tagChip(tag) {
-                        tags.wrappedValue.removeAll { $0 == tag }
+            if !tags.wrappedValue.isEmpty {
+                FlowLayout(spacing: Theme.Spacing.sm) {
+                    ForEach(tags.wrappedValue, id: \.self) { tag in
+                        CategoryTagChip(tag: tag, category: category) {
+                            tags.wrappedValue.removeAll { $0 == tag }
+                        }
                     }
                 }
             }
@@ -436,6 +465,7 @@ private struct RefineDetailView: View {
             HStack {
                 TextField("Add \(title.lowercased()) tag", text: newTag)
                     .textFieldStyle(.roundedBorder)
+                    .font(Theme.Fonts.body(13))
                     .onSubmit {
                         addTag(to: tags, from: newTag)
                     }
@@ -444,7 +474,7 @@ private struct RefineDetailView: View {
                     addTag(to: tags, from: newTag)
                 } label: {
                     Image(systemName: "plus.circle.fill")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Theme.Colors.accentPrimary)
                 }
                 .buttonStyle(.plain)
                 .disabled(newTag.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -459,36 +489,18 @@ private struct RefineDetailView: View {
         newTag.wrappedValue = ""
     }
 
-    private func tagChip(_ tag: String, onRemove: @escaping () -> Void) -> some View {
-        HStack(spacing: 4) {
-            Text(tag)
-                .font(.caption)
-
-            Button(action: onRemove) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Color.accentColor.opacity(0.15))
-        .clipShape(Capsule())
-    }
-
     private func confidenceBadge(_ confidence: Float) -> some View {
         let percentage = Int(confidence * 100)
-        let color: Color = confidence >= 0.8 ? .green :
-                          confidence >= 0.5 ? .orange : .red
+        let color: Color = confidence >= 0.8 ? Theme.Colors.statusSuccess :
+                          confidence >= 0.5 ? Theme.Colors.statusWarning : Theme.Colors.statusError
 
         return Text("\(percentage)%")
-            .font(.caption2)
+            .font(Theme.Fonts.label(10))
             .fontWeight(.medium)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(color.opacity(0.2))
-            .foregroundStyle(color)
+            .background(color.opacity(0.15))
+            .foregroundColor(color)
             .clipShape(Capsule())
     }
 
@@ -496,21 +508,20 @@ private struct RefineDetailView: View {
 
     private var bottomControls: some View {
         HStack {
-            // Discard changes button
             Button("Reset") {
                 loadEditedValues()
             }
+            .buttonStyle(SecondaryButtonStyle())
             .disabled(!hasChanges)
 
             Spacer()
 
-            // Save changes button
             Button {
                 saveChanges()
             } label: {
                 Label("Save Changes", systemImage: "checkmark.circle")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PrimaryButtonStyle())
             .disabled(!hasChanges)
         }
     }
@@ -531,7 +542,6 @@ private struct RefineDetailView: View {
         appState.refineQueue[index].descriptive = editedDescriptive
         appState.refineQueue[index].hasChanges = true
 
-        // Update selected file reference
         appState.selectedRefineFile = appState.refineQueue[index]
 
         appState.showToast("Changes saved")
@@ -571,7 +581,6 @@ struct FlowLayout: Layout {
             let size = subview.sizeThatFits(.unspecified)
 
             if currentX + size.width > maxWidth && currentX > 0 {
-                // Move to next line
                 currentX = 0
                 currentY += lineHeight + spacing
                 lineHeight = 0

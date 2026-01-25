@@ -295,6 +295,7 @@ public enum CheckpointCompatibility: Sendable {
 public enum IncompatibilityReason: Sendable, Equatable {
     case sourceDirectoriesMismatch
     case tagsModified
+    case featureDimensionMismatch(expected: Int, found: Int)
 
     public var description: String {
         switch self {
@@ -302,6 +303,8 @@ public enum IncompatibilityReason: Sendable, Equatable {
             return "Source directories have changed since checkpoint was created"
         case .tagsModified:
             return "Tags have been modified since checkpoint was created"
+        case .featureDimensionMismatch(let expected, let found):
+            return "Feature dimension mismatch: expected \(expected), found \(found) in checkpoint"
         }
     }
 }

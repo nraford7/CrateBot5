@@ -197,6 +197,9 @@ public struct TagsToWrite: Sendable, Equatable {
     /// The genre of the track (e.g., "House", "Techno")
     public var genre: String?
 
+    /// The sub-genre from Essentia predictions (e.g., "Deep House", "Tech House")
+    public var subGenre: String?
+
     /// The timing/album information
     public var timing: String?
 
@@ -235,6 +238,7 @@ public struct TagsToWrite: Sendable, Equatable {
     /// Creates a new TagsToWrite instance.
     public init(
         genre: String? = nil,
+        subGenre: String? = nil,
         timing: String? = nil,
         mood: String? = nil,
         comments: String? = nil,
@@ -248,6 +252,7 @@ public struct TagsToWrite: Sendable, Equatable {
         overwrite: Bool = true
     ) {
         self.genre = genre
+        self.subGenre = subGenre
         self.timing = timing
         self.mood = mood
         self.comments = comments
@@ -264,6 +269,7 @@ public struct TagsToWrite: Sendable, Equatable {
     /// Returns `true` if all tag values are nil.
     public var isEmpty: Bool {
         genre == nil &&
+        subGenre == nil &&
         timing == nil &&
         mood == nil &&
         comments == nil &&

@@ -12,24 +12,28 @@ public final class EssentiaClassifier: @unchecked Sendable {
     private static let outputName = "var_17"
 
     public init() throws {
-        // Load mood/theme model
-        guard let moodURL = Bundle.module.url(forResource: "Jamendo_MoodTheme", withExtension: "mlpackage") else {
-            throw EssentiaClassifierError.modelNotFound("Jamendo_MoodTheme")
-        }
-
-        // Load instrument model
-        guard let instURL = Bundle.module.url(forResource: "Jamendo_Instrument", withExtension: "mlpackage") else {
-            throw EssentiaClassifierError.modelNotFound("Jamendo_Instrument")
-        }
-
         let config = MLModelConfiguration()
         config.computeUnits = .cpuAndNeuralEngine
 
-        let moodCompiled = try MLModel.compileModel(at: moodURL)
-        let instCompiled = try MLModel.compileModel(at: instURL)
+        // Load mood/theme model - try compiled first, then uncompiled
+        if let url = Bundle.module.url(forResource: "Jamendo_MoodTheme", withExtension: "mlmodelc") {
+            self.moodThemeModel = try MLModel(contentsOf: url, configuration: config)
+        } else if let url = Bundle.module.url(forResource: "Jamendo_MoodTheme", withExtension: "mlpackage") {
+            let compiled = try MLModel.compileModel(at: url)
+            self.moodThemeModel = try MLModel(contentsOf: compiled, configuration: config)
+        } else {
+            throw EssentiaClassifierError.modelNotFound("Jamendo_MoodTheme")
+        }
 
-        self.moodThemeModel = try MLModel(contentsOf: moodCompiled, configuration: config)
-        self.instrumentModel = try MLModel(contentsOf: instCompiled, configuration: config)
+        // Load instrument model - try compiled first, then uncompiled
+        if let url = Bundle.module.url(forResource: "Jamendo_Instrument", withExtension: "mlmodelc") {
+            self.instrumentModel = try MLModel(contentsOf: url, configuration: config)
+        } else if let url = Bundle.module.url(forResource: "Jamendo_Instrument", withExtension: "mlpackage") {
+            let compiled = try MLModel.compileModel(at: url)
+            self.instrumentModel = try MLModel(contentsOf: compiled, configuration: config)
+        } else {
+            throw EssentiaClassifierError.modelNotFound("Jamendo_Instrument")
+        }
     }
 
     /// Predict mood/theme from EffNet embeddings

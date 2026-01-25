@@ -95,6 +95,7 @@ public actor TrainingDataCollector {
 
     private let id3Manager: ID3Manager
     private let audioAnalyzer: AudioAnalyzer
+    private let embeddingCache: EmbeddingCache
 
     /// Lazy-loaded EffNetExtractor - only created when extractFeatures is called
     private var _effnetExtractor: EffNetExtractor?
@@ -108,13 +109,15 @@ public actor TrainingDataCollector {
     /// - Parameters:
     ///   - id3Manager: The ID3 manager for reading tags. Defaults to a new instance.
     ///   - audioAnalyzer: The audio analyzer for loading audio. Defaults to a new instance.
+    ///   - embeddingCache: Cache for storing computed embeddings. Defaults to a new instance.
     public init(
         id3Manager: ID3Manager = ID3Manager(),
-        audioAnalyzer: AudioAnalyzer = AudioAnalyzer()
+        audioAnalyzer: AudioAnalyzer = AudioAnalyzer(),
+        embeddingCache: EmbeddingCache = EmbeddingCache()
     ) {
         self.id3Manager = id3Manager
         self.audioAnalyzer = audioAnalyzer
-        // EffNetExtractor is now lazy-loaded only when needed for feature extraction
+        self.embeddingCache = embeddingCache
     }
 
     /// Get or create the EffNetExtractor (lazy initialization)
@@ -184,10 +187,12 @@ public actor TrainingDataCollector {
     ///
     /// - Parameters:
     ///   - directories: The directories to scan for MP3 files.
+    ///   - mapping: Configuration for which ID3 fields map to which categories.
     ///   - progress: Optional closure called with progress updates.
     /// - Returns: A CollectionResult containing the tracks and statistics.
     public func collectTrainingData(
         from directories: [URL],
+        mapping: TagFieldMapping = .default,
         progress: (@Sendable (CollectionProgress) async -> Void)? = nil
     ) async -> CollectionResult {
         // Discover all MP3 files
@@ -247,7 +252,7 @@ public actor TrainingDataCollector {
 
             do {
                 let extractedTags = try await id3Manager.readTags(from: fileURL)
-                let tagSet = convertToTagSet(extractedTags)
+                let tagSet = convertToTagSet(extractedTags, mapping: mapping)
 
                 // Skip files with no tags
                 guard !tagSet.isEmpty else { continue }
@@ -567,12 +572,12 @@ public actor TrainingDataCollector {
     ///
     /// - Parameters:
     ///   - tracks: The tracks to extract features for.
-    ///   - concurrency: Number of tracks to process in parallel (default 4).
+    ///   - concurrency: Number of tracks to process in parallel (default 8).
     ///   - progress: Optional closure called with progress updates.
     /// - Returns: An array of tracks with features populated.
     public func extractFeatures(
         for tracks: [TaggedTrack],
-        concurrency: Int = 4,
+        concurrency: Int = 8,
         progress: (@Sendable (CollectionProgress) async -> Void)? = nil
     ) async -> [TaggedTrack] {
         // Delegate to checkpoint-aware version without checkpointing
@@ -593,7 +598,7 @@ public actor TrainingDataCollector {
     ///
     /// - Parameters:
     ///   - tracks: The tracks to extract features for.
-    ///   - concurrency: Number of tracks to process in parallel (default 4).
+    ///   - concurrency: Number of tracks to process in parallel (default 8).
     ///   - modelName: Name of the model being trained (for checkpoint identification).
     ///   - sourceDirectories: Source directories for this training run.
     ///   - checkpointManager: Manager for saving/loading checkpoints.
@@ -601,7 +606,7 @@ public actor TrainingDataCollector {
     /// - Returns: An array of tracks with features populated.
     public func extractFeatures(
         for tracks: [TaggedTrack],
-        concurrency: Int = 4,
+        concurrency: Int = 8,
         modelName: String?,
         sourceDirectories: [URL],
         checkpointManager: CheckpointManager?,
@@ -646,14 +651,43 @@ public actor TrainingDataCollector {
             return tracks
         }
 
-        // Process in concurrent batches
-        var extractedTracks: [TaggedTrack] = []
-        let batchSize = max(1, concurrency)
-        var processedSoFar = tracksWithFeatures.count
+        // Phase 1: Check cache for already-computed embeddings
+        var cachedTracks: [TaggedTrack] = []
+        var uncachedTracks: [TaggedTrack] = []
 
-        for batchStart in stride(from: 0, to: tracksNeedingFeatures.count, by: batchSize) {
-            let batchEnd = min(batchStart + batchSize, tracksNeedingFeatures.count)
-            let batch = Array(tracksNeedingFeatures[batchStart..<batchEnd])
+        for track in tracksNeedingFeatures {
+            let fileURL = URL(fileURLWithPath: track.id)
+            if let cachedFeatures = await embeddingCache.get(for: fileURL) {
+                let updatedTrack = TaggedTrack(id: track.id, tags: track.tags, features: cachedFeatures)
+                cachedTracks.append(updatedTrack)
+            } else {
+                uncachedTracks.append(track)
+            }
+        }
+
+        let cacheStats = await embeddingCache.statistics
+        Self.debugLog("Cache check: \(cachedTracks.count) hits, \(uncachedTracks.count) misses (total cache entries: \(cacheStats.totalEntries))")
+
+        // Phase 2: Process uncached tracks with concurrent individual inference
+        // (Batch inference not supported by this CoreML model's fixed input shape)
+        var extractedTracks: [TaggedTrack] = cachedTracks
+        var processedSoFar = tracksWithFeatures.count + cachedTracks.count
+
+        // Report initial progress
+        if let progress = progress {
+            await progress(CollectionProgress(
+                processed: processedSoFar,
+                total: total,
+                currentFile: uncachedTracks.first.map { URL(fileURLWithPath: $0.id) }
+            ))
+        }
+
+        // Process in concurrent batches
+        let batchSize = max(1, concurrency)
+
+        for batchStart in stride(from: 0, to: uncachedTracks.count, by: batchSize) {
+            let batchEnd = min(batchStart + batchSize, uncachedTracks.count)
+            let batch = Array(uncachedTracks[batchStart..<batchEnd])
 
             // Report progress at batch start
             if let progress = progress, !batch.isEmpty {
@@ -664,48 +698,47 @@ public actor TrainingDataCollector {
                 ))
             }
 
-            // Process batch concurrently
-            let batchResults = await withTaskGroup(of: (Int, TaggedTrack).self) { group in
+            // Process batch concurrently - load audio and extract features in one step
+            let batchResults = await withTaskGroup(of: (Int, TaggedTrack, [Float]?).self) { group in
                 for (localIndex, track) in batch.enumerated() {
-                    group.addTask { [audioAnalyzer] in
+                    group.addTask { [audioAnalyzer, extractor] in
                         let globalIndex = batchStart + localIndex
-
                         do {
                             let fileURL = URL(fileURLWithPath: track.id)
-
-                            // Load audio at 16kHz for EffNet
                             let buffer = try await audioAnalyzer.loadAudio(
                                 from: fileURL,
                                 targetSampleRate: EffNetExtractor.targetSampleRate
                             )
-
-                            // Extract features
                             let features = try await extractor.extract(from: buffer)
-
-                            let updatedTrack = TaggedTrack(
-                                id: track.id,
-                                tags: track.tags,
-                                features: features
-                            )
-                            return (globalIndex, updatedTrack)
+                            return (globalIndex, track, features)
                         } catch {
-                            // Keep track without features on failure
-                            return (globalIndex, track)
+                            return (globalIndex, track, nil)
                         }
                     }
                 }
 
-                // Collect all results
-                var results: [(Int, TaggedTrack)] = []
+                var results: [(Int, TaggedTrack, [Float]?)] = []
                 for await result in group {
                     results.append(result)
                 }
-                return results
+                return results.sorted { $0.0 < $1.0 }
             }
 
-            // Sort by original index to maintain order within batch
-            let sortedBatch = batchResults.sorted { $0.0 < $1.0 }.map { $0.1 }
-            extractedTracks.append(contentsOf: sortedBatch)
+            // Combine results and cache
+            for (_, track, features) in batchResults {
+                if let features = features, !features.isEmpty {
+                    let updatedTrack = TaggedTrack(id: track.id, tags: track.tags, features: features)
+                    extractedTracks.append(updatedTrack)
+
+                    // Cache the embeddings
+                    let fileURL = URL(fileURLWithPath: track.id)
+                    await embeddingCache.set(features, for: fileURL)
+                } else {
+                    // Failed to extract features - keep track without features
+                    extractedTracks.append(track)
+                }
+            }
+
             processedSoFar += batch.count
 
             // Report progress after batch completes
@@ -713,7 +746,7 @@ public actor TrainingDataCollector {
                 await progress(CollectionProgress(
                     processed: processedSoFar,
                     total: total,
-                    currentFile: sortedBatch.last.map { URL(fileURLWithPath: $0.id) }
+                    currentFile: batch.last.map { URL(fileURLWithPath: $0.id) }
                 ))
             }
 
@@ -737,6 +770,9 @@ public actor TrainingDataCollector {
                 }
             }
         }
+
+        // Save embedding cache
+        await embeddingCache.saveIfNeeded()
 
         // Combine tracks with existing features and newly extracted
         var allTracks: [TaggedTrack] = []
@@ -806,38 +842,39 @@ public actor TrainingDataCollector {
         return mp3Files
     }
 
-    /// Converts ExtractedTags to a Set<String> for TaggedTrack.
-    private func convertToTagSet(_ tags: ExtractedTags) -> Set<String> {
+    /// Converts ExtractedTags to a Set<String> for TaggedTrack using the configured field mapping.
+    ///
+    /// - Parameters:
+    ///   - tags: The extracted ID3 tags from the file.
+    ///   - mapping: Configuration for which ID3 fields map to which training categories.
+    /// - Returns: A set of tag strings to use for training.
+    private func convertToTagSet(_ tags: ExtractedTags, mapping: TagFieldMapping) -> Set<String> {
         var tagSet = Set<String>()
 
-        // Add genre if present
-        if let genre = tags.genre, !genre.isEmpty {
-            tagSet.insert(genre)
+        // Add genre from mapped field (single value)
+        if let value = getFieldValue(tags, field: mapping.genreField), !value.isEmpty {
+            tagSet.insert(value.trimmingCharacters(in: .whitespaces))
         }
 
-        // Add timing if present
-        if let timing = tags.timing, !timing.isEmpty {
-            tagSet.insert(timing)
+        // Add timing from mapped field (single value)
+        if let value = getFieldValue(tags, field: mapping.timingField), !value.isEmpty {
+            tagSet.insert(value.trimmingCharacters(in: .whitespaces))
         }
 
-        // Add mood if present
-        if let mood = tags.mood, !mood.isEmpty {
-            tagSet.insert(mood)
+        // Add mood from mapped field (single value)
+        if let value = getFieldValue(tags, field: mapping.moodField), !value.isEmpty {
+            tagSet.insert(value.trimmingCharacters(in: .whitespaces))
         }
 
-        // Add scene if present
-        if let scene = tags.scene, !scene.isEmpty {
-            tagSet.insert(scene)
-        }
-
-        // Add hook if present
-        if let hook = tags.hook, !hook.isEmpty {
-            tagSet.insert(hook)
-        }
-
-        // Add vibeShort if present
-        if let vibeShort = tags.vibeShort, !vibeShort.isEmpty {
-            tagSet.insert(vibeShort)
+        // Add descriptive tags from mapped field (comma-separated values)
+        if let value = getFieldValue(tags, field: mapping.descriptiveField), !value.isEmpty {
+            // Parse comma-separated tags
+            let individualTags = value.split(separator: ",").map {
+                $0.trimmingCharacters(in: .whitespaces)
+            }
+            for tag in individualTags where !tag.isEmpty {
+                tagSet.insert(tag)
+            }
         }
 
         return tagSet

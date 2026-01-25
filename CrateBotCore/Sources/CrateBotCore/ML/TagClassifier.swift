@@ -18,45 +18,77 @@ public enum TagClassifierError: Error, LocalizedError {
     }
 }
 
+/// Input format for the classifier
+private enum ClassifierInputFormat {
+    /// Single multiArray input (e.g., neural network models)
+    case multiArray(inputKey: String, featureCount: Int)
+    /// Tabular input with individual feature columns (e.g., BoostedTreeClassifier)
+    case tabular(featureCount: Int)
+}
+
 /// Wrapper for CoreML binary classifier with proper MLFeatureProvider usage
 public class TagClassifier: @unchecked Sendable {
     public let tagName: String
     public let threshold: Float
 
     private let compiledModel: MLModel
-    private let featureInputKey: String
+    private let inputFormat: ClassifierInputFormat
     private let probabilityOutputKey: String
-    private let expectedFeatureCount: Int
     private let logger = Logger(subsystem: "com.cratebot", category: "TagClassifier")
 
     public init(tagName: String, modelURL: URL, threshold: Float) throws {
         self.tagName = tagName
         self.threshold = threshold
 
+        // Load model - compile if needed (uncompiled .mlmodel vs compiled .mlmodelc)
         do {
-            self.compiledModel = try MLModel(contentsOf: modelURL)
+            if modelURL.pathExtension == "mlmodelc" {
+                // Already compiled
+                self.compiledModel = try MLModel(contentsOf: modelURL)
+            } else {
+                // Uncompiled .mlmodel - compile it first
+                let compiledURL = try MLModel.compileModel(at: modelURL)
+                self.compiledModel = try MLModel(contentsOf: compiledURL)
+            }
         } catch {
             throw TagClassifierError.modelLoadFailed(error.localizedDescription)
         }
 
         let description = compiledModel.modelDescription
+        let inputs = description.inputDescriptionsByName
 
-        guard let inputKey = description.inputDescriptionsByName.keys.first,
-              let inputDescription = description.inputDescriptionsByName[inputKey] else {
-            throw TagClassifierError.modelLoadFailed("Model must have at least one input")
+        // Detect input format
+        if let inputKey = inputs.keys.first,
+           let inputDescription = inputs[inputKey],
+           let constraint = inputDescription.multiArrayConstraint {
+            // Single multiArray input (neural network style)
+            self.inputFormat = .multiArray(
+                inputKey: inputKey,
+                featureCount: constraint.shape.first?.intValue ?? 0
+            )
+        } else {
+            // Tabular input (BoostedTreeClassifier style with f0, f1, f2, ...)
+            // Count how many "fN" inputs exist
+            let featureInputs = inputs.keys.filter { $0.hasPrefix("f") && Int($0.dropFirst()) != nil }
+            guard !featureInputs.isEmpty else {
+                throw TagClassifierError.modelLoadFailed("Model has no recognized input format")
+            }
+            self.inputFormat = .tabular(featureCount: featureInputs.count)
         }
-
-        guard let constraint = inputDescription.multiArrayConstraint else {
-            throw TagClassifierError.modelLoadFailed("Model input must be multiArray type")
-        }
-
-        self.featureInputKey = inputKey
-        self.expectedFeatureCount = constraint.shape.first?.intValue ?? 0
 
         self.probabilityOutputKey = description.outputDescriptionsByName
             .first { $0.value.type == .dictionary }?.key ?? "probability"
 
         logger.debug("Loaded classifier for '\(tagName)' with threshold \(threshold)")
+    }
+
+    private var expectedFeatureCount: Int {
+        switch inputFormat {
+        case .multiArray(_, let featureCount):
+            return featureCount
+        case .tabular(let featureCount):
+            return featureCount
+        }
     }
 
     private func runPrediction(features: [Float]) throws -> Double {
@@ -67,14 +99,27 @@ public class TagClassifier: @unchecked Sendable {
             )
         }
 
-        let multiArray = try MLMultiArray(shape: [NSNumber(value: features.count)], dataType: .float32)
-        for (i, value) in features.enumerated() {
-            multiArray[i] = NSNumber(value: value)
-        }
+        let inputProvider: MLFeatureProvider
 
-        let inputProvider = try MLDictionaryFeatureProvider(dictionary: [
-            featureInputKey: MLFeatureValue(multiArray: multiArray)
-        ])
+        switch inputFormat {
+        case .multiArray(let inputKey, _):
+            // Create multiArray input
+            let multiArray = try MLMultiArray(shape: [NSNumber(value: features.count)], dataType: .float32)
+            for (i, value) in features.enumerated() {
+                multiArray[i] = NSNumber(value: value)
+            }
+            inputProvider = try MLDictionaryFeatureProvider(dictionary: [
+                inputKey: MLFeatureValue(multiArray: multiArray)
+            ])
+
+        case .tabular:
+            // Create dictionary with individual feature columns (f0, f1, f2, ...)
+            var featureDict: [String: MLFeatureValue] = [:]
+            for (i, value) in features.enumerated() {
+                featureDict["f\(i)"] = MLFeatureValue(double: Double(value))
+            }
+            inputProvider = try MLDictionaryFeatureProvider(dictionary: featureDict)
+        }
 
         let output = try compiledModel.prediction(from: inputProvider)
 

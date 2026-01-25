@@ -9,6 +9,7 @@ struct TaggingView: View {
     @State private var taggingTask: Task<Void, Never>?
     @State private var lastTaggingResult: TaggingResult?
     @State private var showResultsSheet = false
+    @State private var showTaggingSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,45 +24,46 @@ struct TaggingView: View {
             controlsBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Colors.bgWindow)
     }
 
     // MARK: - Drop Zone
 
     private var dropZoneView: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: Theme.Radius.lg)
                 .strokeBorder(
-                    isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.3),
+                    isDropTargeted ? Theme.Colors.accentPrimary : Theme.Colors.textTertiary.opacity(0.3),
                     style: StrokeStyle(lineWidth: 2, dash: [8])
                 )
                 .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(isDropTargeted ? Color.accentColor.opacity(0.1) : Color.clear)
+                    RoundedRectangle(cornerRadius: Theme.Radius.lg)
+                        .fill(isDropTargeted ? Theme.Colors.accentPrimary.opacity(0.1) : Color.clear)
                 )
 
-            VStack(spacing: 16) {
+            VStack(spacing: Theme.Spacing.md) {
                 Image(systemName: "arrow.down.doc.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(isDropTargeted ? Color.accentColor : .secondary)
+                    .foregroundStyle(isDropTargeted ? Theme.Colors.accentPrimary : Theme.Colors.textTertiary)
 
                 Text("Drop MP3 Files Here")
-                    .font(.title2)
-                    .fontWeight(.medium)
+                    .font(Theme.Fonts.heading(20))
+                    .foregroundColor(Theme.Colors.textPrimary)
 
                 Text("Or drag folders to add all MP3s")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(14))
+                    .foregroundColor(Theme.Colors.textSecondary)
 
                 Button {
                     openFilePicker()
                 } label: {
                     Label("Browse Files", systemImage: "folder")
                 }
-                .buttonStyle(.borderedProminent)
-                .padding(.top, 8)
+                .buttonStyle(PrimaryButtonStyle())
+                .padding(.top, Theme.Spacing.sm)
             }
         }
-        .padding(24)
+        .padding(Theme.Spacing.lg)
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             handleDrop(providers: providers)
             return true
@@ -75,7 +77,8 @@ struct TaggingView: View {
             // Header
             HStack {
                 Text("\(appState.queuedFiles.count) file\(appState.queuedFiles.count == 1 ? "" : "s") queued")
-                    .font(.headline)
+                    .font(Theme.Fonts.heading(16))
+                    .foregroundColor(Theme.Colors.textPrimary)
 
                 Spacer()
 
@@ -84,34 +87,34 @@ struct TaggingView: View {
                 } label: {
                     Label("Add More", systemImage: "plus")
                 }
+                .buttonStyle(SecondaryButtonStyle())
                 .disabled(appState.isTagging)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.md)
+            .background(Theme.Colors.bgElevated)
 
-            Divider()
+            Divider().background(Theme.Colors.textTertiary.opacity(0.2))
 
             // File list
-            List {
-                ForEach(appState.queuedFiles) { file in
-                    fileRow(file)
-                }
-                .onDelete { indexSet in
-                    if !appState.isTagging {
-                        removeFiles(at: indexSet)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(appState.queuedFiles) { file in
+                        fileRow(file)
+                        Divider().background(Theme.Colors.textTertiary.opacity(0.1))
                     }
                 }
             }
-            .listStyle(.inset)
+            .background(Theme.Colors.bgSurface)
             .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
                 handleDrop(providers: providers)
                 return true
             }
             .overlay {
                 if isDropTargeted {
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.accentColor, lineWidth: 2)
-                        .background(Color.accentColor.opacity(0.1))
+                    RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                        .strokeBorder(Theme.Colors.accentPrimary, lineWidth: 2)
+                        .background(Theme.Colors.accentPrimary.opacity(0.1))
                         .padding(4)
                 }
             }
@@ -119,24 +122,26 @@ struct TaggingView: View {
     }
 
     private func fileRow(_ file: AppState.QueuedFile) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Spacing.md) {
             // Status icon
             statusIcon(for: file.status)
 
             // File info
             VStack(alignment: .leading, spacing: 2) {
                 Text(file.fileName)
+                    .font(Theme.Fonts.mono(13))
+                    .foregroundColor(Theme.Colors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
                 if let error = file.error {
                     Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                        .font(Theme.Fonts.body(11))
+                        .foregroundColor(Theme.Colors.statusError)
                 } else if file.status == .complete, let summary = file.tagsSummary {
                     Text(summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(11))
+                        .foregroundColor(Theme.Colors.textSecondary)
                         .lineLimit(1)
                 }
             }
@@ -149,7 +154,7 @@ struct TaggingView: View {
                     showTagDetails(tags, for: file.fileName)
                 } label: {
                     Image(systemName: "info.circle")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .help("View tag details")
@@ -161,12 +166,14 @@ struct TaggingView: View {
                     removeFile(file)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
+        .background(file.status == .processing ? Theme.Colors.statusWarning.opacity(0.08) : Color.clear)
     }
 
     private func showTagDetails(_ tags: AppState.WrittenTags, for fileName: String) {
@@ -212,38 +219,36 @@ struct TaggingView: View {
     private func statusIcon(for status: AppState.QueuedFile.Status) -> some View {
         switch status {
         case .pending:
-            Image(systemName: "clock")
-                .foregroundStyle(.secondary)
+            StatusLED(status: .pending, size: 16)
         case .processing:
             ProgressView()
-                .scaleEffect(0.7)
+                .scaleEffect(0.6)
+                .tint(Theme.Colors.statusWarning)
                 .frame(width: 16, height: 16)
         case .complete:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            StatusLED(status: .complete, size: 16)
         case .error:
-            Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(.red)
+            StatusLED(status: .error, size: 16)
         }
     }
 
     // MARK: - Controls Bar
 
     private var controlsBar: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Theme.Spacing.md) {
             // Progress bar (only during tagging)
             if appState.isTagging {
-                VStack(spacing: 4) {
-                    ProgressView(value: appState.taggingProgress)
+                VStack(spacing: Theme.Spacing.xs) {
+                    ThemedProgressBar(progress: appState.taggingProgress)
 
                     HStack {
                         Text("Processing...")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(Theme.Fonts.body(12))
+                            .foregroundColor(Theme.Colors.textSecondary)
                         Spacer()
                         Text("\(Int(appState.taggingProgress * 100))%")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(Theme.Fonts.mono(12))
+                            .foregroundColor(Theme.Colors.textPrimary)
                     }
                 }
             }
@@ -254,6 +259,7 @@ struct TaggingView: View {
                     Button("Clear All") {
                         clearQueue()
                     }
+                    .buttonStyle(SecondaryButtonStyle())
                     .disabled(appState.isTagging)
                 }
 
@@ -263,22 +269,33 @@ struct TaggingView: View {
                     Button("Cancel") {
                         cancelTagging()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(DangerButtonStyle())
                 } else {
-                    Button {
-                        startTagging()
-                    } label: {
-                        Label("Start Tagging", systemImage: "tag.fill")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(appState.queuedFiles.isEmpty)
-                    // TODO: Re-enable model check once ModelManager is integrated
-                    // .disabled(appState.queuedFiles.isEmpty || !appState.modelLoaded)
+                    startTaggingButton
                 }
             }
         }
-        .padding(16)
-        .background(.regularMaterial)
+        .padding(Theme.Spacing.md)
+        .background(Theme.Colors.bgElevated)
+    }
+
+    @ViewBuilder
+    private var startTaggingButton: some View {
+        let isDisabled = appState.queuedFiles.isEmpty || !appState.modelLoaded
+
+        Button {
+            showTaggingSettings = true
+        } label: {
+            Label("Start Tagging", systemImage: "tag")
+        }
+        .buttonStyle(isDisabled ? AnyButtonStyle(DisabledButtonStyle()) : AnyButtonStyle(PrimaryButtonStyle()))
+        .disabled(isDisabled)
+        .sheet(isPresented: $showTaggingSettings) {
+            TaggingSettingsSheet(onStartTagging: {
+                startTagging()
+            })
+            .environment(appState)
+        }
     }
 
     // MARK: - Actions
@@ -288,12 +305,38 @@ struct TaggingView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
-        // Note: Not setting allowedContentTypes to allow folder selection
-        // MP3 filtering happens in addFiles(from:)
 
         if panel.runModal() == .OK {
-            addFiles(from: panel.urls)
+            addFilesWithBookmarks(from: panel.urls)
         }
+    }
+
+    /// Add files from NSOpenPanel with security-scoped access started immediately
+    private func addFilesWithBookmarks(from urls: [URL]) {
+        var filesToAdd: [(url: URL, startAccessImmediately: Bool)] = []
+
+        for url in urls {
+            if url.hasDirectoryPath {
+                // For directories, start accessing and add folder bookmark
+                _ = url.startAccessingSecurityScopedResource()
+                do {
+                    try appState.bookmarkManager.addFolderAccess(url)
+                } catch {
+                    print("Failed to bookmark folder: \(error)")
+                }
+                let mp3s = findMP3Files(in: url)
+                filesToAdd.append(contentsOf: mp3s.map { ($0, false) })
+            } else if url.pathExtension.lowercased() == "mp3" {
+                filesToAdd.append((url, true))
+            }
+        }
+
+        let existingURLs = Set(appState.queuedFiles.map(\.url))
+        let newFiles = filesToAdd
+            .filter { !existingURLs.contains($0.url) }
+            .map { AppState.QueuedFile(url: $0.url, startAccessImmediately: $0.startAccessImmediately) }
+
+        appState.queuedFiles.append(contentsOf: newFiles)
     }
 
     private func handleDrop(providers: [NSItemProvider]) {
@@ -305,32 +348,75 @@ struct TaggingView: View {
                 }
 
                 DispatchQueue.main.async {
-                    addFiles(from: [url])
+                    self.addDroppedFiles(from: [url])
                 }
             }
         }
     }
 
-    private func addFiles(from urls: [URL]) {
+    /// Add files from drag-and-drop (checks for folder access)
+    private func addDroppedFiles(from urls: [URL]) {
         var filesToAdd: [URL] = []
+        var filesWithoutAccess: [URL] = []
 
         for url in urls {
             if url.hasDirectoryPath {
-                // Recursively find MP3s in directory
-                let mp3s = findMP3Files(in: url)
-                filesToAdd.append(contentsOf: mp3s)
+                // Check if we have access to this directory
+                if appState.bookmarkManager.hasAccess(to: url) {
+                    let mp3s = findMP3Files(in: url)
+                    filesToAdd.append(contentsOf: mp3s)
+                } else {
+                    // Try to add folder access (will work if Finder drag grants temporary access)
+                    do {
+                        try appState.bookmarkManager.addFolderAccess(url)
+                        let mp3s = findMP3Files(in: url)
+                        filesToAdd.append(contentsOf: mp3s)
+                    } catch {
+                        filesWithoutAccess.append(url)
+                    }
+                }
             } else if url.pathExtension.lowercased() == "mp3" {
-                filesToAdd.append(url)
+                // Check if parent folder has access
+                let parentFolder = url.deletingLastPathComponent()
+                if appState.bookmarkManager.hasAccess(to: parentFolder) ||
+                   FileManager.default.isWritableFile(atPath: url.path) {
+                    filesToAdd.append(url)
+                } else {
+                    filesWithoutAccess.append(url)
+                }
             }
         }
 
-        // Filter out duplicates
+        // Add files we have access to
         let existingURLs = Set(appState.queuedFiles.map(\.url))
         let newFiles = filesToAdd
             .filter { !existingURLs.contains($0) }
             .map { AppState.QueuedFile(url: $0) }
 
         appState.queuedFiles.append(contentsOf: newFiles)
+
+        // Warn about files we can't access
+        if !filesWithoutAccess.isEmpty {
+            showAccessDeniedAlert(fileCount: filesWithoutAccess.count)
+        }
+    }
+
+    /// Show alert when dropped files can't be accessed
+    private func showAccessDeniedAlert(fileCount: Int) {
+        let alert = NSAlert()
+        alert.messageText = "File Access Required"
+        alert.informativeText = """
+            \(fileCount) file\(fileCount == 1 ? "" : "s") could not be added due to macOS security restrictions.
+
+            To write tags, please use the "Browse Files" button instead of drag-and-drop, or grant CrateBot Full Disk Access in System Preferences → Privacy & Security.
+            """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Browse Files")
+        alert.addButton(withTitle: "Cancel")
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            openFilePicker()
+        }
     }
 
     private func findMP3Files(in directory: URL) -> [URL] {
@@ -354,14 +440,18 @@ struct TaggingView: View {
     }
 
     private func removeFile(_ file: AppState.QueuedFile) {
+        // Stop security-scoped access before removing
+        if file.securityAccessActive {
+            file.url.stopAccessingSecurityScopedResource()
+        }
         appState.queuedFiles.removeAll { $0.id == file.id }
     }
 
-    private func removeFiles(at offsets: IndexSet) {
-        appState.queuedFiles.remove(atOffsets: offsets)
-    }
-
     private func clearQueue() {
+        // Stop security-scoped access for all files
+        for file in appState.queuedFiles where file.securityAccessActive {
+            file.url.stopAccessingSecurityScopedResource()
+        }
         appState.queuedFiles.removeAll()
         appState.taggingProgress = 0.0
     }
@@ -370,27 +460,23 @@ struct TaggingView: View {
         appState.isTagging = true
         appState.taggingProgress = 0.0
 
-        // Reset all files to pending
         for index in appState.queuedFiles.indices {
             appState.queuedFiles[index].status = .pending
             appState.queuedFiles[index].error = nil
         }
 
-        // Start the tagging task
         taggingTask = Task {
             await performTagging()
         }
     }
 
     private func cancelTagging() {
-        // Cancel the task
         taggingTask?.cancel()
         taggingTask = nil
 
         appState.isTagging = false
         appState.taggingProgress = 0.0
 
-        // Reset any processing files back to pending
         for index in appState.queuedFiles.indices {
             if appState.queuedFiles[index].status == .processing {
                 appState.queuedFiles[index].status = .pending
@@ -409,14 +495,11 @@ struct TaggingView: View {
             return
         }
 
-        // Initialize engine and manager
-        let engine: TaggingEngine
-        do {
-            engine = try TaggingEngine()
-        } catch {
+        // Use the tagging engine from AppState (already initialized with models)
+        guard let engine = appState.taggingEngine else {
             await MainActor.run {
                 appState.isTagging = false
-                appState.showToast("Failed to initialize tagging engine: \(error.localizedDescription)", kind: .error)
+                appState.showToast("No tagging engine available. Please load a model first.", kind: .error)
             }
             return
         }
@@ -425,27 +508,61 @@ struct TaggingView: View {
         let overwrite = appState.taggingPreferences.overwrite
 
         for (index, file) in appState.queuedFiles.enumerated() {
-            // Check for cancellation
             if Task.isCancelled { break }
 
-            // Update status to processing
             await MainActor.run {
                 if index < appState.queuedFiles.count {
                     appState.queuedFiles[index].status = .processing
                 }
             }
 
+            // Ensure security-scoped access is active
+            // Files from folder bookmarks rely on the parent folder's active access.
+            let hasFolderAccess = appState.bookmarkManager.hasAccess(to: file.url)
+            var startedFileAccess = false
+            var mutableFile = file
+
+            if hasFolderAccess {
+                print("TaggingView: using folder-scoped access for \(file.url.path)")
+            } else {
+                startedFileAccess = mutableFile.startAccess()
+                print("TaggingView: started file access: \(startedFileAccess) for \(file.url.path)")
+            }
+
+            // Defer cleanup to after ALL file operations complete (end of for loop iteration)
+            defer {
+                if startedFileAccess {
+                    print("TaggingView: stopping file access for \(file.url.path)")
+                    mutableFile.stopAccess()
+                    Task { @MainActor in
+                        if index < appState.queuedFiles.count {
+                            appState.queuedFiles[index].securityAccessActive = false
+                        }
+                    }
+                }
+            }
+
+            let hasAccess = hasFolderAccess || startedFileAccess
+
+            guard hasAccess else {
+                await MainActor.run {
+                    if index < appState.queuedFiles.count {
+                        appState.queuedFiles[index].status = .error
+                        appState.queuedFiles[index].error = "Permission denied. Use 'Browse Files' to grant access."
+                    }
+                }
+                await MainActor.run {
+                    appState.taggingProgress = Double(index + 1) / Double(totalFiles)
+                }
+                continue
+            }
+
             do {
-                // Analyze the file with TaggingEngine
                 let result = try await engine.analyze(url: file.url)
 
-                // Build tags to write
                 var tagsToWrite = TagsToWrite(overwrite: overwrite)
-
-                // Build written tags record for display
                 var writtenTags = AppState.WrittenTags()
 
-                // User predictions -> Primary fields (if available)
                 if let user = result.userPredictions {
                     tagsToWrite.genre = user.genre
                     tagsToWrite.timing = user.timing
@@ -454,14 +571,12 @@ struct TaggingView: View {
                         tagsToWrite.comments = user.descriptive.joined(separator: ", ")
                     }
 
-                    // Store for display
                     writtenTags.userGenre = user.genre
                     writtenTags.userTiming = user.timing
                     writtenTags.userMood = user.mood
                     writtenTags.userDescriptive = user.descriptive
                 }
 
-                // Essentia predictions -> Secondary fields (always available)
                 let essentia = result.essentiaTags
                 if !essentia.genres.isEmpty {
                     tagsToWrite.essentiaGenres = essentia.genresString
@@ -476,10 +591,14 @@ struct TaggingView: View {
                     writtenTags.essentiaInstruments = essentia.instruments
                 }
 
-                // Write tags to file
+                // Sub Genre - use Essentia's top genre prediction
+                if appState.taggingPreferences.subGenre.enabled, let subGenre = essentia.topSubGenre {
+                    tagsToWrite.subGenre = subGenre
+                    writtenTags.essentiaSubGenre = subGenre
+                }
+
                 try await id3Manager.writeTags(tagsToWrite, to: file.url)
 
-                // Update status to complete and store written tags
                 await MainActor.run {
                     if index < appState.queuedFiles.count {
                         appState.queuedFiles[index].status = .complete
@@ -489,7 +608,6 @@ struct TaggingView: View {
                 }
 
             } catch {
-                // Update status to error
                 await MainActor.run {
                     if index < appState.queuedFiles.count {
                         appState.queuedFiles[index].status = .error
@@ -498,13 +616,11 @@ struct TaggingView: View {
                 }
             }
 
-            // Update progress
             await MainActor.run {
                 appState.taggingProgress = Double(index + 1) / Double(totalFiles)
             }
         }
 
-        // Tagging complete
         await MainActor.run {
             appState.isTagging = false
             let completedCount = appState.queuedFiles.filter { $0.status == .complete }.count
@@ -526,7 +642,6 @@ struct TaggingView: View {
         .environment(previewState)
         .frame(width: 600, height: 500)
         .onAppear {
-            // Add sample files for preview
             previewState.queuedFiles = [
                 AppState.QueuedFile(url: URL(fileURLWithPath: "/Music/track1.mp3")),
                 AppState.QueuedFile(url: URL(fileURLWithPath: "/Music/track2.mp3")),

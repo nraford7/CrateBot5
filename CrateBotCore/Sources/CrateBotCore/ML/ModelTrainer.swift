@@ -204,10 +204,17 @@ public actor ModelTrainer {
                     seed: config.randomSeed
                 )
 
-                // Train the classifier
-                let classifier = try MLClassifier(
+                // Train the classifier using Boosted Tree (handles high-dim features better)
+                let classifier = try MLBoostedTreeClassifier(
                     trainingData: trainingData,
-                    targetColumn: "label"
+                    targetColumn: "label",
+                    parameters: MLBoostedTreeClassifier.ModelParameters(
+                        maxDepth: 6,
+                        maxIterations: 100,
+                        minLossReduction: 0.0,
+                        minChildWeight: 1.0,
+                        stepSize: 0.3
+                    )
                 )
 
                 // Report validating phase
@@ -285,9 +292,19 @@ public actor ModelTrainer {
         }
 
         var labels: [String] = []
+        var skippedNaN = 0
+        var skippedDimension = 0
 
         for track in tracks {
             guard let features = track.features, features.count == featureCount else {
+                skippedDimension += 1
+                continue
+            }
+
+            // Skip tracks with NaN or Inf values (CreateML will reject them)
+            let hasInvalidValue = features.contains { !$0.isFinite }
+            if hasInvalidValue {
+                skippedNaN += 1
                 continue
             }
 
@@ -300,6 +317,35 @@ public actor ModelTrainer {
             let label = track.tags.contains(tag) ? "positive" : "negative"
             labels.append(label)
         }
+
+        if skippedDimension > 0 {
+            logger.warning("Skipped \(skippedDimension) tracks with wrong feature dimension")
+        }
+        if skippedNaN > 0 {
+            logger.warning("Skipped \(skippedNaN) tracks with NaN/Inf features")
+        }
+
+        // Z-score normalize each feature column to help CreateML optimizer
+        var zeroVarianceCount = 0
+        var totalVariance: Double = 0
+        for i in 0..<featureCount {
+            let columnName = "f\(i)"
+            guard var values = columns[columnName], !values.isEmpty else { continue }
+
+            let mean = values.reduce(0, +) / Double(values.count)
+            let variance = values.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(values.count)
+            let stdDev = sqrt(variance)
+            totalVariance += variance
+
+            // Only normalize if there's variance (avoid division by zero)
+            if stdDev > 1e-10 {
+                values = values.map { ($0 - mean) / stdDev }
+                columns[columnName] = values
+            } else {
+                zeroVarianceCount += 1
+            }
+        }
+        logger.info("Feature stats: \(zeroVarianceCount)/\(featureCount) zero-variance, avg variance: \(totalVariance / Double(featureCount))")
 
         // Build DataFrame
         var dataFrame = DataFrame()
@@ -314,6 +360,8 @@ public actor ModelTrainer {
 
         // Add label column
         dataFrame.append(column: Column(name: "label", contents: labels))
+
+        logger.info("DataFrame prepared: \(dataFrame.rows.count) rows, \(featureCount) features")
 
         return dataFrame
     }
@@ -334,7 +382,7 @@ public actor ModelTrainer {
         return (DataFrame(training), DataFrame(validation))
     }
 
-    private func calculateAccuracy(classifier: MLClassifier, data: DataFrame) -> Double {
+    private func calculateAccuracy(classifier: MLBoostedTreeClassifier, data: DataFrame) -> Double {
         guard data.rows.count > 0 else { return 0.0 }
 
         do {

@@ -5,25 +5,26 @@ struct MainHeader: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        HStack {
+        HStack(spacing: Theme.Spacing.lg) {
             // App title
             Text("CrateBot")
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(Theme.Fonts.heading(20))
+                .foregroundColor(Theme.Colors.textPrimary)
 
             Spacer()
 
-            // View switcher
-            Picker("View", selection: Binding(
+            // Tab switcher (centered)
+            Picker("", selection: Binding(
                 get: { appState.currentView },
                 set: { appState.currentView = $0 }
             )) {
                 ForEach(AppState.AppView.allCases, id: \.self) { view in
-                    Text(view.rawValue.capitalized).tag(view)
+                    Text(view.displayName).tag(view)
                 }
             }
             .pickerStyle(.segmented)
-            .frame(width: 250)
+            .labelsHidden()
+            .frame(width: 200)
 
             Spacer()
 
@@ -32,13 +33,17 @@ struct MainHeader: View {
                 appState.settingsOpen = true
             } label: {
                 Image(systemName: "gearshape")
-                    .imageScale(.large)
+                    .font(.system(size: 16))
+                    .foregroundColor(Theme.Colors.textSecondary)
             }
             .buttonStyle(.plain)
+            .padding(Theme.Spacing.sm)
+            .background(Theme.Colors.bgSurface)
+            .cornerRadius(Theme.Radius.sm)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(.regularMaterial)
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.md)
+        .background(Theme.Colors.bgElevated)
     }
 }
 

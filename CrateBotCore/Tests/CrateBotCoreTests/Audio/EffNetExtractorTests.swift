@@ -18,9 +18,10 @@ final class EffNetExtractorTests: XCTestCase {
     func testExtraction() async throws {
         let extractor = try EffNetExtractor()
 
-        // Create test audio buffer (1 second of noise at 16kHz)
+        // Create test audio buffer (3 seconds of noise at 16kHz)
+        // Need at least 33,024 samples for 128 time frames
         let sampleRate: Double = 16000
-        let samples = (0..<16000).map { _ in Float.random(in: -1...1) }
+        let samples = (0..<48000).map { _ in Float.random(in: -1...1) }
         let buffer = try createBuffer(samples: samples, sampleRate: sampleRate)
 
         let features = try await extractor.extract(from: buffer)
@@ -35,9 +36,10 @@ final class EffNetExtractorTests: XCTestCase {
     func testExtractionWithGenres() async throws {
         let extractor = try EffNetExtractor()
 
-        // Create test audio
+        // Create test audio (3 seconds at 16kHz)
+        // Need at least 33,024 samples for 128 time frames
         let sampleRate: Double = 16000
-        let samples = (0..<16000).map { i in
+        let samples = (0..<48000).map { i in
             Float(sin(2.0 * .pi * 440.0 * Double(i) / sampleRate))
         }
         let buffer = try createBuffer(samples: samples, sampleRate: sampleRate)

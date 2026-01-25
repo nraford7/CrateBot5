@@ -25,6 +25,13 @@ struct CrateBotApp: App {
             ContentView()
                 .environment(appState)
                 .modelContainer(sharedModelContainer)
+                .task {
+                    // Restore security-scoped bookmarks for music folders
+                    _ = appState.bookmarkManager.restoreAllAccess()
+
+                    // Load default/last-used model on app startup
+                    await appState.loadDefaultModel()
+                }
         }
         .commands {
             CommandGroup(replacing: .newItem) {}

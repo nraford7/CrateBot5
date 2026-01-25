@@ -37,8 +37,13 @@ public struct BinaryTrainingDataGenerator: Sendable {
         let positive = tracks.filter { $0.tags.contains(tagName) }
         let negative = tracks.filter { !$0.tags.contains(tagName) }
 
-        // Skip tags with insufficient data
+        // Skip tags with insufficient positive data
         guard positive.count >= Self.minPositiveExamples else {
+            return nil
+        }
+
+        // Skip tags with no negative samples (can't train binary classifier with single class)
+        guard !negative.isEmpty else {
             return nil
         }
 

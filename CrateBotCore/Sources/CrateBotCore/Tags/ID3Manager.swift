@@ -65,7 +65,11 @@ public actor ID3Manager {
         }
 
         do {
-            guard let tag = try editor.read(from: url.path) else {
+            // Read file data directly using the URL (preserves security-scoped access)
+            let mp3Data = try Data(contentsOf: url)
+
+            // Use the Data-based read method instead of path-based
+            guard let tag = try editor.read(mp3: mp3Data) else {
                 // No tag found - return empty tags
                 return ExtractedTags()
             }
@@ -229,14 +233,29 @@ public actor ID3Manager {
             throw ID3Error.invalidFormat(url)
         }
 
+        // Note: We don't check isWritableFile here because it doesn't work with
+        // security-scoped resources. The actual write will fail if access is denied.
+
         // Skip if no tags to write
         guard !tags.isEmpty else {
             return
         }
 
         do {
-            // Read existing tags to preserve them
-            let existingTag = try editor.read(from: url.path)
+            print("ID3Manager writeTags: starting for \(url.path)")
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) {
+                let permissions = attributes[.posixPermissions] as? NSNumber
+                let owner = attributes[.ownerAccountName] as? String
+                let group = attributes[.groupOwnerAccountName] as? String
+                print("ID3Manager writeTags: perms=\(permissions?.stringValue ?? "nil") owner=\(owner ?? "nil") group=\(group ?? "nil")")
+            }
+
+            // Read file data directly using the URL (preserves security-scoped access)
+            let mp3Data = try Data(contentsOf: url)
+            print("ID3Manager writeTags: read OK (\(mp3Data.count) bytes) for \(url.lastPathComponent)")
+
+            // Read existing tags to preserve them (using Data-based method)
+            let existingTag = try editor.read(mp3: mp3Data)
 
             // Build new tag, starting with existing frames if available
             var builder = ID32v3TagBuilder()
@@ -255,6 +274,15 @@ public actor ID3Manager {
                         genre: existingGenre.identifier,
                         description: existingGenre.description
                     ))
+                }
+
+                // Handle subGenre - write to mix artist frame (TPE4)
+                // Using TPE4 for Essentia-predicted subgenre
+                let existingMixArtist = reader.mixArtist()
+                if let subGenre = tags.subGenre, tags.overwrite || existingMixArtist == nil {
+                    builder = builder.mixArtist(frame: ID3FrameWithStringContent(content: subGenre))
+                } else if let existingMixArtist {
+                    builder = builder.mixArtist(frame: ID3FrameWithStringContent(content: existingMixArtist))
                 }
 
                 // Handle timing - write to album frame (TALB)
@@ -363,6 +391,9 @@ public actor ID3Manager {
                 if let genre = tags.genre {
                     builder = builder.genre(frame: ID3FrameGenre(genre: nil, description: genre))
                 }
+                if let subGenre = tags.subGenre {
+                    builder = builder.mixArtist(frame: ID3FrameWithStringContent(content: subGenre))
+                }
                 if let timing = tags.timing {
                     builder = builder.album(frame: ID3FrameWithStringContent(content: timing))
                 }
@@ -403,10 +434,58 @@ public actor ID3Manager {
             }
 
             let newTag = builder.build()
-            try editor.write(tag: newTag, to: url.path)
+
+            // Use the Data-based write method (returns modified Data instead of writing to path)
+            let modifiedMp3Data = try editor.write(tag: newTag, mp3: mp3Data)
+
+            print("ID3Manager writeTags: writing \(modifiedMp3Data.count) bytes to \(url.path)")
+
+            // Check for extended attributes that might block writes
+            if let xattrs = try? FileManager.default.attributesOfItem(atPath: url.path) {
+                if let extendedAttrs = xattrs[FileAttributeKey(rawValue: "NSFileExtendedAttributes")] as? [String: Any] {
+                    let attrNames = extendedAttrs.keys.joined(separator: ", ")
+                    print("ID3Manager writeTags: extended attributes: \(attrNames)")
+                    if extendedAttrs["com.apple.macl"] != nil {
+                        print("ID3Manager writeTags: WARNING - file has com.apple.macl (app-specific access control)")
+                    }
+                }
+            }
+
+            // Write the data directly using FileHandle to preserve security scope
+            do {
+                let handle = try FileHandle(forWritingTo: url)
+                try handle.truncate(atOffset: 0)
+                try handle.write(contentsOf: modifiedMp3Data)
+                try handle.close()
+                print("ID3Manager writeTags: write OK for \(url.lastPathComponent)")
+            } catch {
+                let nsError = error as NSError
+                print("ID3Manager writeTags: FileHandle write failed domain=\(nsError.domain) code=\(nsError.code)")
+
+                // If FileHandle fails, try Data.write as fallback
+                if nsError.code == 1 { // EPERM
+                    print("ID3Manager writeTags: trying Data.write fallback...")
+                    do {
+                        try modifiedMp3Data.write(to: url, options: .atomic)
+                        print("ID3Manager writeTags: Data.write fallback OK for \(url.lastPathComponent)")
+                        return
+                    } catch {
+                        let fallbackError = error as NSError
+                        print("ID3Manager writeTags: Data.write fallback also failed domain=\(fallbackError.domain) code=\(fallbackError.code)")
+                    }
+                }
+
+                // Provide helpful error message
+                if nsError.code == 1 {
+                    throw ID3Error.writeFailed("Permission denied. This file may have macOS access restrictions. Try granting Full Disk Access to CrateBot in System Preferences → Privacy & Security, or use 'Browse Files' to re-select the files.")
+                }
+                throw error
+            }
         } catch let error as ID3Error {
             throw error
         } catch {
+            let nsError = error as NSError
+            print("ID3Manager writeTags: failed domain=\(nsError.domain) code=\(nsError.code) userInfo=\(nsError.userInfo)")
             throw ID3Error.writeFailed(error.localizedDescription)
         }
     }

@@ -18,10 +18,10 @@ struct SetupWizard: View {
     var body: some View {
         VStack(spacing: 0) {
             // Progress indicator
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Spacing.sm) {
                 ForEach(Step.allCases, id: \.rawValue) { s in
                     Circle()
-                        .fill(s.rawValue <= step.rawValue ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .fill(s.rawValue <= step.rawValue ? Theme.Colors.accentPrimary : Theme.Colors.textTertiary.opacity(0.3))
                         .frame(width: 8, height: 8)
                 }
             }
@@ -50,7 +50,7 @@ struct SetupWizard: View {
                     Button("Back") {
                         withAnimation { step = Step(rawValue: step.rawValue - 1) ?? .welcome }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SecondaryButtonStyle())
                 }
 
                 Spacer()
@@ -62,63 +62,67 @@ struct SetupWizard: View {
                         withAnimation { step = Step(rawValue: step.rawValue + 1) ?? .complete }
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryButtonStyle())
                 .disabled(step == .musicFolders && selectedFolders.isEmpty)
             }
             .padding(40)
         }
         .frame(minWidth: 600, minHeight: 500)
+        .background(Theme.Colors.bgWindow)
     }
 
     private var welcomeStep: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: Theme.Spacing.lg) {
             Image(systemName: "music.note.list")
                 .font(.system(size: 60))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Theme.Colors.accentPrimary)
 
             Text("Welcome to CrateBot")
-                .font(.largeTitle)
-                .fontWeight(.bold)
+                .font(Theme.Fonts.heading(28))
+                .foregroundColor(Theme.Colors.textPrimary)
 
             Text("Auto-tag your music library using machine learning. Let's get set up.")
-                .font(.title3)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(16))
+                .foregroundColor(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
         }
     }
 
     private var musicFoldersStep: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: Theme.Spacing.lg) {
             Image(systemName: "folder.badge.plus")
                 .font(.system(size: 50))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Theme.Colors.accentPrimary)
 
             Text("Add Music Folders")
-                .font(.title)
-                .fontWeight(.bold)
+                .font(Theme.Fonts.heading(24))
+                .foregroundColor(Theme.Colors.textPrimary)
 
             Text("Select folders containing your MP3 files. CrateBot will remember access to these folders.")
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(14))
+                .foregroundColor(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 ForEach(selectedFolders, id: \.absoluteString) { url in
                     HStack {
                         Image(systemName: "folder.fill")
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(Theme.Colors.accentPrimary)
                         Text(url.lastPathComponent)
+                            .font(Theme.Fonts.mono(13))
+                            .foregroundColor(Theme.Colors.textPrimary)
                         Spacer()
                         Button {
                             selectedFolders.removeAll { $0 == url }
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .buttonStyle(.plain)
                     }
-                    .padding(12)
-                    .background(.regularMaterial)
-                    .cornerRadius(8)
+                    .padding(Theme.Spacing.md)
+                    .background(Theme.Colors.bgSurface)
+                    .cornerRadius(Theme.Radius.sm)
                 }
             }
             .frame(maxWidth: 400)
@@ -128,21 +132,29 @@ struct SetupWizard: View {
             } label: {
                 Label("Add Folder", systemImage: "plus")
             }
+            .buttonStyle(SecondaryButtonStyle())
         }
     }
 
     private var completeStep: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.green)
+        VStack(spacing: Theme.Spacing.lg) {
+            ZStack {
+                Circle()
+                    .fill(Theme.Colors.statusSuccess.opacity(0.15))
+                    .frame(width: 100, height: 100)
+
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 60))
+                    .foregroundStyle(Theme.Colors.statusSuccess)
+            }
 
             Text("You're All Set!")
-                .font(.title)
-                .fontWeight(.bold)
+                .font(Theme.Fonts.heading(24))
+                .foregroundColor(Theme.Colors.textPrimary)
 
             Text("CrateBot is ready to tag your music. Drop files onto the app or use the Add Files button to get started.")
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(14))
+                .foregroundColor(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
         }
     }
