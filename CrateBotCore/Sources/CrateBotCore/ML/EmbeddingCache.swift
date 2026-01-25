@@ -31,7 +31,7 @@ public actor EmbeddingCache {
 
     // MARK: - Initialization
 
-    public init(extractorVersion: String = "effnet-v1") {
+    public init(extractorVersion: String = "effnet-v2-extended-2192") {
         self.extractorVersion = extractorVersion
 
         // Store cache in Application Support/CrateBot/
