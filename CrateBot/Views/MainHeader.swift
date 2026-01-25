@@ -5,13 +5,9 @@ struct MainHeader: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.lg) {
-            // Logo with spinning disc when processing
-            CrateBotLogo(isProcessing: appState.isTagging || appState.isLoadingModel)
-
+        HStack {
             Spacer()
-
-            // Tab switcher (styled segments)
+            // Tab switcher centered in the window
             HStack(spacing: 2) {
                 ForEach(AppState.AppView.allCases, id: \.self) { view in
                     TabButton(
@@ -27,8 +23,12 @@ struct MainHeader: View {
             .padding(3)
             .background(Theme.Colors.bgSurface)
             .cornerRadius(Theme.Radius.sm)
-
             Spacer()
+        }
+        // Logo as overlay so it doesn't affect centering
+        .overlay(alignment: .leading) {
+            CrateBotLogo(isProcessing: appState.isTagging || appState.isLoadingModel)
+                .padding(.leading, Theme.Spacing.lg)
         }
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.md)
