@@ -39,15 +39,8 @@ env/
 .LSOverride
 ._*
 
-# Node.js / Electron
-node_modules/
-desktop/node_modules/
-desktop/dist/
-desktop/release/
+# Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # Build outputs
 *.pyc
@@ -71,7 +64,6 @@ yarn-error.log*
 *.local.json
 
 # CrateBot specific
-desktop/resources/python/cratebot-server
 ~/.cratebot/
 
 # Test/temp files

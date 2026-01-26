@@ -69,26 +69,27 @@ See [docs/LYRICS-FIRST-HOOK-DETECTION.md](docs/LYRICS-FIRST-HOOK-DETECTION.md) f
 
 ## Architecture
 
-Built with **Electron + React + TypeScript** frontend and **Python FastAPI** backend.
+Built with **SwiftUI** frontend and **Python FastAPI** backend.
 
 ```
 CrateBot5/
-├── backend/           # FastAPI server (Python)
-│   ├── api_server.py  # REST API + WebSocket endpoints
-│   ├── task_manager.py # Async task handling
-│   └── models/        # Pydantic schemas
-├── python/            # Python core modules
-│   ├── src/core/      # Audio analysis, tagging, vibe generation
-│   │   ├── feature_config.py   # Feature configuration tracking
-│   │   ├── taxonomy.py         # Centralized tag transformation
-│   │   ├── model_loader.py     # Lazy model loading
-│   │   └── ...
-│   ├── src/models/    # ML tag predictor
-│   └── tests/         # Test suite
-├── desktop/           # Electron + React
-│   ├── electron/      # Main process
-│   └── src/           # React frontend
-└── resources/         # Icons, bundled models
+├── CrateBot.xcodeproj    # Xcode project
+├── CrateBot/             # SwiftUI app
+│   ├── App/              # App entry, state management
+│   └── Views/            # SwiftUI views
+├── CrateBotCore/         # Swift Package
+│   ├── Audio/            # Audio file processing
+│   ├── ML/               # CoreML tagging engine
+│   ├── Tags/             # ID3 tag management
+│   ├── Networking/       # Backend API client
+│   └── Resources/        # ML models (.mlpackage)
+├── backend/              # FastAPI server (Python)
+│   ├── api_server.py     # REST API + WebSocket endpoints
+│   ├── task_manager.py   # Async task handling
+│   └── models/           # Pydantic schemas
+└── python/               # Python core modules
+    ├── src/core/         # Audio analysis, vibe generation
+    └── tests/            # Test suite
 ```
 
 ## API Endpoints
