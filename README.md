@@ -10,12 +10,43 @@ Audio fingerprinting and intelligent music analysis suite for DJs.
 
 - **ML-powered tagging**: Predict Genre, Timing, Mood, and Descriptive tags for your tracks
 - **184-dimensional feature vectors**: Combines librosa, Essentia, PANNs, CLAP, and Jamendo analysis
-- **Vibe generation**: Claude API-powered descriptive tags that capture the *feel* of a track
+- **Vibe generation**: Claude API-powered tags that capture what makes each track *distinctive*
+- **Mnemonic anchors**: Album-art-like memory hooks (2-3 word phrases that *feel* like the track)
 - **Hook detection**: Whisper-based vocal transcription to find memorable moments
 - **PANNs integration**: Instrument and sound detection
 - **CLAP embeddings**: Semantic audio understanding
 - **Real-time progress**: WebSocket updates for long analysis tasks
 - **Checkpoint recovery**: Resume interrupted training
+
+## Vibe System
+
+CrateBot generates two complementary tags for each track:
+
+### Short Vibe Tag
+**Format:** `[ENERGY] [DISTINCTIVE THING] [MOMENT]`
+
+Identifies what makes the track unique - the thing you'd tell a friend to listen for.
+
+```
+DARK FLUTE MELODY PEAK
+HARD ACID 303 SQUELCH PEAK
+JOYFUL KALIMBA GROOVE OPENER
+DREAMY STRINGS PIANO BLEND FLOATER
+```
+
+### Mnemonic Anchor
+**Format:** `[synesthetic modifier] + [concrete anchor]`
+
+A 2-3 word phrase that works like album art in text form - triggers recall through association, not description.
+
+```
+sweating serpent
+chrome shaman
+golden grandmother
+velvet cathedral
+```
+
+The modifier translates sonic qualities to other senses (warm, dusty, chrome, velvet). The anchor is something you can picture (wizard, panther, cathedral, shaman).
 
 ## Architecture
 
