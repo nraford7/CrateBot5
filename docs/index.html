@@ -676,6 +676,119 @@
             line-height: 1.5;
         }
 
+        /* Tag Flow Visual */
+        .tag-flow-visual {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .tag-flow-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+            padding: var(--space-md);
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            border: 1px solid rgba(107, 92, 74, 0.3);
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .flow-now-playing,
+        .flow-filter,
+        .flow-next {
+            background: var(--booth-black);
+            border: 1px solid rgba(107, 92, 74, 0.3);
+            border-radius: 12px;
+            padding: var(--space-sm) var(--space-md);
+            width: 100%;
+            text-align: center;
+        }
+
+        .flow-now-playing {
+            border-color: var(--gold);
+            box-shadow: 0 0 20px rgba(201, 162, 39, 0.2);
+        }
+
+        .flow-next {
+            border-color: rgba(201, 162, 39, 0.5);
+        }
+
+        .flow-label {
+            display: block;
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            color: var(--gold);
+            letter-spacing: 0.1em;
+            margin-bottom: 0.25rem;
+        }
+
+        .flow-track {
+            display: block;
+            font-family: var(--font-display);
+            font-size: 1rem;
+            color: var(--cream);
+            margin-bottom: 0.5rem;
+        }
+
+        .flow-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            justify-content: center;
+        }
+
+        .flow-tag {
+            padding: 0.2rem 0.5rem;
+            background: rgba(201, 162, 39, 0.1);
+            border: 1px solid rgba(201, 162, 39, 0.3);
+            border-radius: 100px;
+            font-size: 0.7rem;
+            font-family: var(--font-mono);
+            color: var(--gold-light);
+        }
+
+        .flow-tag.active {
+            background: rgba(201, 162, 39, 0.25);
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+
+        .flow-arrow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0.5rem 0;
+        }
+
+        .flow-arrow svg {
+            width: 24px;
+            height: 40px;
+            stroke: var(--sepia);
+        }
+
+        .flow-decision {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--sepia);
+            font-style: italic;
+            margin-top: 0.25rem;
+        }
+
+        .flow-filter {
+            background: transparent;
+            border-style: dashed;
+        }
+
+        .flow-filter-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            justify-content: center;
+        }
+
         /* ========================================
            SOLUTION SECTION
            ======================================== */
@@ -1092,7 +1205,7 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: var(--space-xl);
-            align-items: center;
+            align-items: stretch;
         }
 
         .vibe-text h2 {
@@ -1148,6 +1261,7 @@
 
         .vibe-visual {
             position: relative;
+            height: 100%;
         }
 
         .vibe-card {
@@ -1157,6 +1271,11 @@
             padding: var(--space-lg);
             position: relative;
             overflow: hidden;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: var(--space-md);
         }
 
         .vibe-card::before {
@@ -1171,15 +1290,12 @@
         }
 
         .vibe-card-header {
-            display: flex;
-            align-items: center;
-            gap: var(--space-sm);
-            margin-bottom: var(--space-md);
+            width: 100%;
         }
 
         .vibe-waveform {
-            flex: 1;
-            height: 40px;
+            width: 100%;
+            height: 60px;
             display: flex;
             align-items: center;
             gap: 3px;
@@ -1213,15 +1329,15 @@
 
         .vibe-card-content h4 {
             font-family: var(--font-display);
-            font-size: 1.2rem;
+            font-size: 1.3rem;
             margin-bottom: 0.5rem;
+            color: var(--cream);
         }
 
         .vibe-card-tags {
             display: flex;
             flex-wrap: wrap;
             gap: 0.5rem;
-            margin-top: var(--space-sm);
         }
 
         .vibe-tag {
@@ -1232,6 +1348,35 @@
             font-size: 0.8rem;
             font-family: var(--font-mono);
             color: var(--gold);
+        }
+
+        .vibe-card-description {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .vibe-line {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: var(--gold);
+            letter-spacing: 0.05em;
+            font-weight: 500;
+        }
+
+        .vibe-hook {
+            font-family: var(--font-display);
+            font-style: italic;
+            font-size: 1.1rem;
+            color: var(--cream);
+            opacity: 0.9;
+        }
+
+        .vibe-mnemonic {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--sepia);
+            text-transform: lowercase;
         }
 
         /* ========================================
@@ -1973,11 +2118,6 @@
     <!-- Solution Section -->
     <section class="vibe-showcase" id="solution">
         <div class="container">
-            <div class="section-header" style="text-align: left; margin-bottom: var(--space-lg);">
-                <div class="section-number">02</div>
-                <h2>CrateBot fixes this.</h2>
-            </div>
-
             <div class="vibe-content">
                 <div class="vibe-visual">
                     <div class="vibe-card">
@@ -2009,11 +2149,18 @@
                                 <span class="vibe-tag">Peak Time</span>
                                 <span class="vibe-tag">Classic</span>
                             </div>
+                            <div class="vibe-card-description">
+                                <p class="vibe-line">GOSPEL CHOIR SUNRISE ANTHEM</p>
+                                <p class="vibe-hook">"music is the answer to your problems"</p>
+                                <p class="vibe-mnemonic">sweating cathedral</p>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="vibe-text">
+                    <div class="section-number">02</div>
+                    <h2>CrateBot fixes this.</h2>
                     <p>
                         Tags that capture how tracks feel—not just what they're called.
                         Evocative descriptions designed for instant recognition, like album art in text form.
@@ -2038,11 +2185,84 @@
         </div>
     </section>
 
+    <!-- Live DJ Workflow Section -->
+    <section class="problem" id="workflow">
+        <div class="container">
+            <div class="problem-content">
+                <div class="problem-text">
+                    <div class="section-number">03</div>
+                    <h2>AI does the tagging. You do the jamming.</h2>
+                    <p class="problem-lead">
+                        The best DJs don't just pick tracks—they navigate energy. Each song is a decision point:
+                        go harder or pull back? Keep the vibe or shift the mood?
+                    </p>
+                    <p>
+                        With proper tags, your library becomes a map. Filter by energy level, mood, and timing
+                        to see only tracks that fit <em>this exact moment</em>. No more scrolling through thousands
+                        of files hoping something catches your eye. Search "dark + rising + 3am" and let the
+                        right tracks surface.
+                    </p>
+                    <p style="margin-top: var(--space-sm);">
+                        CrateBot tags every track automatically—energy, mood, vibe, memorable hooks—so you can
+                        focus on reading the room, not managing metadata.
+                    </p>
+                </div>
+                <div class="tag-flow-visual">
+                    <div class="tag-flow-container">
+                        <div class="flow-now-playing">
+                            <span class="flow-label">NOW PLAYING</span>
+                            <span class="flow-track">Deep & Hypnotic</span>
+                            <div class="flow-tags">
+                                <span class="flow-tag">Energy: 3</span>
+                                <span class="flow-tag">Dark</span>
+                                <span class="flow-tag">Driving</span>
+                            </div>
+                        </div>
+
+                        <div class="flow-arrow">
+                            <svg viewBox="0 0 24 60" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 0 L12 50 M6 44 L12 50 L18 44" stroke-dasharray="4 2"/>
+                            </svg>
+                            <span class="flow-decision">crowd wants more energy, so you:</span>
+                        </div>
+
+                        <div class="flow-filter">
+                            <span class="flow-label">FILTER</span>
+                            <div class="flow-filter-tags">
+                                <span class="flow-tag active">Energy: 4+</span>
+                                <span class="flow-tag active">Dark</span>
+                                <span class="flow-tag">Peak Time</span>
+                            </div>
+                        </div>
+
+                        <div class="flow-arrow">
+                            <svg viewBox="0 0 24 60" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 0 L12 50 M6 44 L12 50 L18 44" stroke-dasharray="4 2"/>
+                            </svg>
+                            <span class="flow-decision">47 tracks match</span>
+                        </div>
+
+                        <div class="flow-next">
+                            <span class="flow-label">UP NEXT</span>
+                            <span class="flow-track">Dark Driving Peak</span>
+                            <div class="flow-tags">
+                                <span class="flow-tag">Energy: 4</span>
+                                <span class="flow-tag">Dark</span>
+                                <span class="flow-tag">Driving</span>
+                                <span class="flow-tag">Peak</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- How It Works + Audio Intelligence -->
     <section class="ml-tech" id="features">
         <div class="container">
             <div class="section-header">
-                <div class="section-number">03</div>
+                <div class="section-number">04</div>
                 <h2>How It Works</h2>
                 <p>Three steps to smarter crates, powered by five audio analysis engines.</p>
             </div>
@@ -2140,16 +2360,15 @@
         </div>
     </section>
 
-    <!-- Built for DJs -->
+    <!-- Features -->
     <section class="features" id="benefits">
         <div class="container">
             <div class="section-header">
-                <div class="section-number">04</div>
-                <h2>AI does the tagging.<br>You do the jamming.</h2>
+                <div class="section-number">05</div>
+                <h2>What You Get</h2>
                 <p style="max-width: 800px;">
-                    This isn't AI DJing. CrateBot doesn't select tracks, suggest what to play, or make creative decisions for you.
-                    It handles the tedious work of track administration so you can focus on what you do best—reading the room,
-                    building a vibe, and creating a moment. AI in support of creativity, not the other way around.
+                    CrateBot handles the tedious work of track administration so you can focus on what you do best—reading the room,
+                    building a vibe, and creating a moment.
                 </p>
             </div>
 
@@ -2235,7 +2454,7 @@
     <section class="beta-form-section" id="beta">
         <div class="container">
             <div class="section-header">
-                <div class="section-number">05</div>
+                <div class="section-number">06</div>
                 <h2>Request Beta Access</h2>
                 <p>CrateBot is in early beta. Tell us about your library and we'll get you set up.</p>
             </div>
