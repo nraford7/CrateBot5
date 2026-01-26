@@ -410,32 +410,32 @@ struct FallbackMappingsEditor: View {
             $0.localizedCaseInsensitiveContains(searchText)
         }
 
-        return ScrollView {
+        // Use VStack instead of ScrollView to avoid nested scroll issues
+        // Parent ScrollView handles scrolling
+        return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             // Use grouped display for genres only
             if source == .genre {
                 let grouped = groupedGenreLabels(labels: filteredLabels)
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    ForEach(grouped, id: \.genre) { group in
-                        // Section header
-                        Text(group.genre)
-                            .font(Theme.Fonts.mono(10))
-                            .foregroundColor(Theme.Colors.textTertiary)
-                            .textCase(.uppercase)
-                            .padding(.horizontal, Theme.Spacing.xs)
-                            .padding(.top, Theme.Spacing.xs)
+                ForEach(grouped, id: \.genre) { group in
+                    // Section header
+                    Text(group.genre)
+                        .font(Theme.Fonts.mono(10))
+                        .foregroundColor(Theme.Colors.textTertiary)
+                        .textCase(.uppercase)
+                        .padding(.horizontal, Theme.Spacing.xs)
+                        .padding(.top, Theme.Spacing.xs)
 
-                        // Subgenres grid
-                        LazyVGrid(columns: [
-                            GridItem(.flexible(), spacing: Theme.Spacing.xs),
-                            GridItem(.flexible(), spacing: Theme.Spacing.xs)
-                        ], spacing: Theme.Spacing.xs) {
-                            ForEach(group.subgenres, id: \.full) { subgenre in
-                                labelToggleButton(
-                                    fullLabel: subgenre.full,
-                                    displayLabel: subgenre.display,
-                                    binding: binding
-                                )
-                            }
+                    // Subgenres grid - use regular VGrid, not Lazy
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: Theme.Spacing.xs),
+                        GridItem(.flexible(), spacing: Theme.Spacing.xs)
+                    ], spacing: Theme.Spacing.xs) {
+                        ForEach(group.subgenres, id: \.full) { subgenre in
+                            labelToggleButton(
+                                fullLabel: subgenre.full,
+                                displayLabel: subgenre.display,
+                                binding: binding
+                            )
                         }
                     }
                 }
@@ -451,7 +451,7 @@ struct FallbackMappingsEditor: View {
                 }
             }
         }
-        .frame(height: 200)
+        .padding(Theme.Spacing.sm)
         .background(Theme.Colors.bgSurface)
         .cornerRadius(Theme.Radius.sm)
     }

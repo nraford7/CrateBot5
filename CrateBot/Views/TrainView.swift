@@ -233,9 +233,17 @@ final class TrainingViewModel: ObservableObject {
         isPaused = false
         isCancelled = false
 
+        // Build category map for model metadata
+        var tagsByCategory: [String: Set<String>] = [:]
+        if !selectedTags.genre.isEmpty { tagsByCategory["Genre"] = selectedTags.genre }
+        if !selectedTags.timing.isEmpty { tagsByCategory["Timing"] = selectedTags.timing }
+        if !selectedTags.mood.isEmpty { tagsByCategory["Mood"] = selectedTags.mood }
+        if !selectedTags.descriptive.isEmpty { tagsByCategory["Descriptive"] = selectedTags.descriptive }
+
         let options = TrainingCoordinator.TrainingOptions(
             modelName: trimmedName,
             selectedTags: selectedTags.allTags,
+            tagsByCategory: tagsByCategory,
             validationSplit: 0.2,
             minSamplesPerTag: minSamplesPerTag,
             tagFieldMapping: tagMapping.coreMapping
