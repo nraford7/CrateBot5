@@ -41,6 +41,7 @@ public struct ModelMetadata: Codable, Sendable {
     public let accuracy: Double?             // Validation accuracy if available
     public let featureDimension: Int         // 1280, 1680, or 2192
     public let calibratorTemperature: Float? // Temperature for confidence calibration
+    public let descriptiveSubCategories: [String: [String]]? // Sub-category organization for Descriptive tags
 
     public init(
         name: String,
@@ -53,7 +54,8 @@ public struct ModelMetadata: Codable, Sendable {
         tagGroups: [TagGroupMetadata] = [],
         accuracy: Double? = nil,
         featureDimension: Int = 1680,
-        calibratorTemperature: Float? = nil
+        calibratorTemperature: Float? = nil,
+        descriptiveSubCategories: [String: [String]]? = nil
     ) {
         self.name = name
         self.version = version
@@ -66,6 +68,7 @@ public struct ModelMetadata: Codable, Sendable {
         self.accuracy = accuracy
         self.featureDimension = featureDimension
         self.calibratorTemperature = calibratorTemperature
+        self.descriptiveSubCategories = descriptiveSubCategories
     }
 
     // Custom decoder to handle old JSON files without featureDimension or tagGroups
@@ -85,12 +88,14 @@ public struct ModelMetadata: Codable, Sendable {
         featureDimension = try container.decodeIfPresent(Int.self, forKey: .featureDimension) ?? 1280
         // Calibrator temperature is optional (may not exist in old models)
         calibratorTemperature = try container.decodeIfPresent(Float.self, forKey: .calibratorTemperature)
+        // Descriptive sub-categories are optional (may not exist in old models)
+        descriptiveSubCategories = try container.decodeIfPresent([String: [String]].self, forKey: .descriptiveSubCategories)
     }
 
     private enum CodingKeys: String, CodingKey {
         case name, version, pipelineVersion, trainedAt, trainingFileCount
         case categories, tags, tagGroups, accuracy, featureDimension
-        case calibratorTemperature
+        case calibratorTemperature, descriptiveSubCategories
     }
 
     /// Load metadata from JSON sidecar file
