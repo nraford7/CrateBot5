@@ -735,27 +735,31 @@ FIERCE AFRO PERCUSSION BREAKDOWN PEAK
 6. **OUTLIERS ARE HOOKS** - Unusual instruments/sounds for the genre = the memorable thing
 """ + (TAG_LEXICON_PROMPT if HAS_LEXICON else "")
 
-    USER_PROMPT_TEMPLATE = """Generate an adjective-stack tag for this track:
+    USER_PROMPT_TEMPLATE = """Identify what makes this track DISTINCTIVE and create a vibe tag:
 
 {context}
 
-PROCESS:
-1. GUT REACTION - What's your first feeling? (dope? sick? beautiful? heavy? weird? insane?)
-2. TEXTURE - What does the rhythm feel like physically? (grindy? chugging? bouncy? broken? loopy?)
-3. GENRE/REGION - What style or geographic flavor? (use detected genre, or regional marker like AFRO, DESERT, CHICAGO)
-4. SONIC STANDOUT - What instrument/element defines it? (walking bass? steel drums? chanting? flute? acid?)
-5. ENDING - Anchor noun (GROOVE, BUILD, SLAMMER) or trailing vibe (GROOVY, SICK, SMOOTH)
+## OUTLIER DETECTION
+Look at the detected sounds above. What's UNUSUAL for this genre?
+- Unexpected instruments? (flute in techno, accordion in house)
+- Unusual rhythm patterns? (broken beats in 4/4 genre)
+- Distinctive vocal treatment? (pitched, chopped, chanted)
 
-Stack 5-8 words. No commas. Match the energy - dark tracks get dark words, joyful tracks get bright words.
+## YOUR TASK
+Find the ONE THING that makes this track memorable, then build the tag:
 
-ALSO: If there's a vocal transcription above, identify the most memorable/catchy hook phrase (3-6 words that would be the earworm). Not filler like "come on" or "let's go" - the ACTUAL memorable phrase.
+1. ENERGY (1-2 words): What's the mood/feel?
+2. DISTINCTIVE THING (2-4 words): What would you tell a friend to listen for?
+3. MOMENT (1 word): When would you play this? (PEAK/BUILDER/OPENER/JOURNEY/SLAMMER/etc)
+
+ALSO: If there's a vocal transcription above, identify the most memorable hook phrase (3-6 words).
 
 Respond in this EXACT format:
-VIBE: [YOUR 5-8 WORD TAG IN ALL CAPS]
+VIBE: [ENERGY] [DISTINCTIVE THING] [MOMENT]
 HOOK: [the catchy hook phrase, or NONE if no clear hook]
 
-Example response:
-VIBE: FIERCE AFRO BROKEN GRINDY BASS BUILDER
+Example:
+VIBE: DARK GRINDING SAW BASS PEAK
 HOOK: killers in the jungle"""
 
     DESCRIPTION_SYSTEM_PROMPT = """You are a poet channeling music into vivid imagery. Each track evokes a moment, a place, a fleeting scene. Your job is to capture that in a single striking image.
