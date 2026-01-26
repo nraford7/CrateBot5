@@ -431,6 +431,145 @@ class TestEdgeCases:
         assert isinstance(result, ChorusResult)
 
 
+class TestLyricsAnalyzer:
+    """Required test methods from spec."""
+
+    def test_find_repeated_lines_simple(self):
+        """Find 'let me see you work' repeated 3 times."""
+        analyzer = LyricsAnalyzer()
+        lyrics = """
+        Let me see you work
+        On the dance floor
+        Let me see you work
+        Give me some more
+        Let me see you work
+        """
+        phrases = analyzer.find_repeated_phrases(lyrics)
+        assert len(phrases) > 0
+        top_phrase, count = phrases[0]
+        assert "let me see you work" in top_phrase.lower()
+        assert count == 3
+
+    def test_find_repeated_lines_with_variations(self):
+        """Handle 'work your body' with variations."""
+        analyzer = LyricsAnalyzer()
+        lyrics = """
+        Work your body
+        To the rhythm
+        Work your body
+        Feel the beat
+        Work your body tonight
+        """
+        phrases = analyzer.find_repeated_phrases(lyrics)
+        assert len(phrases) > 0
+        # Should find "work your body" repeated
+        phrase_texts = [p[0].lower() for p in phrases]
+        assert any("work your body" in p for p in phrase_texts)
+
+    def test_detect_chorus_structure(self):
+        """Detect [Chorus] marked sections with 'dance all night'."""
+        analyzer = LyricsAnalyzer()
+        lyrics = """
+        [Verse 1]
+        Walking through the door
+        Ready for the floor
+
+        [Chorus]
+        Dance all night
+        Under the lights
+        Dance all night
+        Everything feels right
+
+        [Verse 2]
+        Moving to the sound
+        Best party in town
+        """
+        result = analyzer.detect_chorus(lyrics)
+        assert result.chorus_text is not None
+        assert "dance all night" in result.chorus_text.lower()
+        assert result.confidence >= 0.9  # High confidence for marked sections
+
+    def test_detect_chorus_without_markers(self):
+        """Detect chorus from repetition when no markers."""
+        analyzer = LyricsAnalyzer()
+        lyrics = """
+        Feel the beat drop
+        In the night
+        Feel the beat drop
+        Hold on tight
+        Feel the beat drop
+        Gonna be alright
+        """
+        result = analyzer.detect_chorus(lyrics)
+        assert result.chorus_text is not None
+        assert "feel the beat drop" in result.chorus_text.lower()
+        assert result.repetitions >= 2
+
+    def test_extract_hook_phrase(self):
+        """Extract hook from chorus."""
+        analyzer = LyricsAnalyzer()
+        lyrics = """
+        [Chorus]
+        Shake it like you mean it
+        Move it to the beat
+        Shake it like you mean it
+        Get up on your feet
+        """
+        hook = analyzer.extract_hook_phrase(lyrics)
+        assert hook is not None
+        # Hook should come from chorus content
+        assert len(hook.split()) >= analyzer.MIN_PHRASE_WORDS
+
+    def test_empty_lyrics(self):
+        """Handle empty/None gracefully."""
+        analyzer = LyricsAnalyzer()
+        # Empty string
+        result = analyzer.detect_chorus("")
+        assert result.chorus_text is None
+        assert result.is_instrumental is True
+
+        # Whitespace only
+        result2 = analyzer.detect_chorus("   \n\n   ")
+        assert result2.chorus_text is None
+
+        # find_repeated_phrases with empty
+        phrases = analyzer.find_repeated_phrases("")
+        assert phrases == []
+
+        # extract_hook_phrase with empty
+        hook = analyzer.extract_hook_phrase("")
+        assert hook is None
+
+    def test_instrumental_lyrics(self):
+        """Handle [Instrumental] marker."""
+        analyzer = LyricsAnalyzer()
+        result = analyzer.detect_chorus("[Instrumental]")
+        assert result.is_instrumental is True
+        assert result.chorus_text is None
+
+        # Also test extract_hook_phrase
+        hook = analyzer.extract_hook_phrase("[Instrumental]")
+        assert hook is None
+
+    def test_filters_common_phrases(self):
+        """Filter 'come on' but keep 'real hook line'."""
+        analyzer = LyricsAnalyzer()
+        lyrics = """
+        Come on come on
+        Let's go let's go
+        Come on come on
+        Real hook line here
+        Real hook line here
+        Real hook line here
+        """
+        phrases = analyzer.find_repeated_phrases(lyrics)
+        phrase_texts = [p[0].lower() for p in phrases]
+        # "come on" should be filtered
+        assert not any(p == "come on" for p in phrase_texts)
+        # "real hook line here" should be found
+        assert any("real hook line" in p for p in phrase_texts)
+
+
 class TestIntegration:
     """Integration tests for complete workflow."""
 

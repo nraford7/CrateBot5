@@ -66,6 +66,7 @@ class LyricsAnalyzer:
         'so good', 'so bad', 'too much', 'so much',
         'like this', 'like that', 'just like', 'the beat',
         'yeah yeah', 'yeah yeah yeah', 'oh oh', 'oh oh oh',
+        'oh yeah', 'uh huh', 'mm hmm',
         'la la', 'la la la', 'na na', 'na na na',
         'come on everybody', 'everybody come on',
     }
@@ -101,16 +102,17 @@ class LyricsAnalyzer:
         """Initialize the LyricsAnalyzer."""
         pass
 
-    def find_repeated_phrases(self, lyrics: str) -> List[Tuple[str, int]]:
+    def find_repeated_phrases(self, lyrics: str, min_occurrences: int = 2) -> List[Tuple[str, int]]:
         """
         Find phrases that repeat in the lyrics.
 
         Args:
             lyrics: Raw lyrics text
+            min_occurrences: Minimum number of times a phrase must appear (default 2)
 
         Returns:
             List of (phrase, count) tuples, sorted by count descending.
-            Only includes phrases that repeat at least twice.
+            Only includes phrases that repeat at least min_occurrences times.
         """
         if not lyrics or not lyrics.strip():
             return []
@@ -138,11 +140,11 @@ class LyricsAnalyzer:
 
                 ngram_counts[ngram] += 1
 
-        # Filter to phrases that appear at least twice
+        # Filter to phrases that appear at least min_occurrences times
         repeated = [
             (phrase, count)
             for phrase, count in ngram_counts.items()
-            if count >= 2
+            if count >= min_occurrences
         ]
 
         if not repeated:
