@@ -335,7 +335,7 @@ class LyricsFirstHookDetector:
         confidence = self._calculate_lyrics_confidence(hook, occurrences, repeated_phrases)
 
         # Optionally verify in audio
-        audio_verified = False
+        audio_verified = None
         full_transcription = None
 
         if verify_audio:
