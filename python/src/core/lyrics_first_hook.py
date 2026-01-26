@@ -61,7 +61,7 @@ class LyricsFirstResult:
     source: str  # "lyrics", "transcription", "none"
     occurrences: int
     lyrics_source: Optional[str]
-    audio_verified: bool
+    audio_verified: Optional[bool] = None
     all_candidates: List[Tuple[str, int]] = field(default_factory=list)
     full_transcription: Optional[str] = None
 
@@ -194,7 +194,7 @@ class LyricsFirstHookDetector:
                 source="none",
                 occurrences=0,
                 lyrics_source=None,
-                audio_verified=False,
+                audio_verified=None,
                 all_candidates=[],
                 full_transcription=None
             )
@@ -233,7 +233,7 @@ class LyricsFirstHookDetector:
             source="none",
             occurrences=0,
             lyrics_source=None,
-            audio_verified=False,
+            audio_verified=None,
             all_candidates=[],
             full_transcription=None
         )
@@ -288,7 +288,7 @@ class LyricsFirstHookDetector:
                 source="none",
                 occurrences=0,
                 lyrics_source=lyrics_source,
-                audio_verified=False,
+                audio_verified=None,
                 all_candidates=[],
                 full_transcription=None
             )
@@ -304,7 +304,7 @@ class LyricsFirstHookDetector:
                 source="lyrics",
                 occurrences=0,
                 lyrics_source=lyrics_source,
-                audio_verified=False,
+                audio_verified=None,
                 all_candidates=[],
                 full_transcription=None
             )
@@ -326,7 +326,7 @@ class LyricsFirstHookDetector:
                 source="lyrics",
                 occurrences=0,
                 lyrics_source=lyrics_source,
-                audio_verified=False,
+                audio_verified=None,
                 all_candidates=repeated_phrases[:5],
                 full_transcription=None
             )
@@ -385,7 +385,7 @@ class LyricsFirstHookDetector:
                 source="none",
                 occurrences=0,
                 lyrics_source=None,
-                audio_verified=False,
+                audio_verified=None,
                 all_candidates=[],
                 full_transcription=None
             )
@@ -404,7 +404,7 @@ class LyricsFirstHookDetector:
                 source="transcription",
                 occurrences=hook_result.occurrences,
                 lyrics_source=None,
-                audio_verified=False,  # Transcription is the audio itself
+                audio_verified=None,  # Transcription is the audio itself
                 all_candidates=hook_result.all_phrases,
                 full_transcription=hook_result.transcription
             )
@@ -417,7 +417,7 @@ class LyricsFirstHookDetector:
                 source="none",
                 occurrences=0,
                 lyrics_source=None,
-                audio_verified=False,
+                audio_verified=None,
                 all_candidates=[],
                 full_transcription=None
             )
