@@ -491,11 +491,23 @@ public actor TaggingEngine {
 
     // MARK: - Private Helpers
 
-    /// Categorize predicted tags into genre, timing, mood, and descriptive based on model metadata
+    /// Categorize predicted tags into genre, timing, mood, and structured descriptive based on model metadata
     private func categorizePredictions(_ tags: [String]) -> UserTagPredictions {
         guard let metadata = loadedMetadata else {
-            // No metadata - fall back to putting everything in descriptive
-            return UserTagPredictions(genre: nil, timing: nil, mood: nil, descriptive: tags)
+            // No metadata - fall back to organizing descriptive tags only
+            let organized = DescriptiveTagMapping.organize(tags)
+            return UserTagPredictions(
+                genre: nil,
+                timing: nil,
+                mood: nil,
+                bassType: organized[.bassType]?.first,
+                rhythm: organized[.rhythm] ?? [],
+                style: organized[.style] ?? [],
+                vibes: organized[.vibes] ?? [],
+                instruments: organized[.instruments] ?? [],
+                vocalType: organized[.vocalType]?.first,
+                acapella: nil
+            )
         }
 
         var genre: String? = nil
@@ -535,11 +547,30 @@ public actor TaggingEngine {
         // Join mood tags with comma for the mood field
         let moodString = moodTags.isEmpty ? nil : moodTags.joined(separator: ", ")
 
+        // Organize descriptive tags by sub-category using DescriptiveTagMapping
+        let organized = DescriptiveTagMapping.organize(descriptiveTags)
+
+        // Extract multi-class results (BassType, VocalType) - only first value if present
+        let bassType = organized[.bassType]?.first
+        let vocalType = organized[.vocalType]?.first
+
+        // Binary descriptive tags (excluding multi-class sub-categories)
+        let rhythm = organized[.rhythm] ?? []
+        let style = organized[.style] ?? []
+        let vibes = organized[.vibes] ?? []
+        let instruments = organized[.instruments] ?? []
+
         return UserTagPredictions(
             genre: genre,
             timing: timing,
             mood: moodString,
-            descriptive: descriptiveTags
+            bassType: bassType,
+            rhythm: rhythm,
+            style: style,
+            vibes: vibes,
+            instruments: instruments,
+            vocalType: vocalType,
+            acapella: nil
         )
     }
 
