@@ -1680,6 +1680,113 @@
                 font-size: 0.85rem;
             }
         }
+
+        /* ========================================
+           BETA FORM SECTION
+           ======================================== */
+
+        .beta-form-section {
+            background: var(--bg-secondary);
+            position: relative;
+        }
+
+        .beta-form-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                var(--sepia) 50%,
+                transparent 100%);
+        }
+
+        .beta-form {
+            max-width: 600px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-group label {
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 1rem 1.25rem;
+            background: var(--booth-black);
+            border: 1px solid rgba(107, 92, 74, 0.3);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            font-size: 1rem;
+            transition: all var(--duration-fast) ease;
+        }
+
+        .form-group input::placeholder,
+        .form-group textarea::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.1);
+        }
+
+        .form-group select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236b5c4a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1.25rem;
+            padding-right: 3rem;
+        }
+
+        .form-group select option {
+            background: var(--booth-black);
+            color: var(--text-primary);
+            padding: 0.5rem;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn-submit {
+            margin-top: var(--space-sm);
+            width: 100%;
+            justify-content: center;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px var(--gold-glow);
+        }
+
+        @media (max-width: 768px) {
+            .beta-form {
+                padding: 0 var(--space-sm);
+            }
+        }
     </style>
 </head>
 <body>
@@ -1700,7 +1807,7 @@
                 <a href="#solution">Solution</a>
                 <a href="#features">How It Works</a>
                 <a href="#benefits">Features</a>
-                <a href="#download" class="nav-cta">Download</a>
+                <a href="#beta" class="nav-cta">Request Beta</a>
             </div>
         </div>
     </nav>
@@ -1729,13 +1836,14 @@
                     </p>
 
                     <div class="hero-cta-group animate-fade-in-up delay-4">
-                        <a href="#download" class="btn btn-primary">
+                        <a href="#beta" class="btn btn-primary">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                <polyline points="7 10 12 15 17 10"/>
-                                <line x1="12" y1="15" x2="12" y2="3"/>
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="8.5" cy="7" r="4"/>
+                                <line x1="20" y1="8" x2="20" y2="14"/>
+                                <line x1="23" y1="11" x2="17" y2="11"/>
                             </svg>
-                            Download for macOS
+                            Request Beta Access
                         </a>
                         <a href="#features" class="btn btn-secondary">
                             See How It Works
@@ -2123,20 +2231,95 @@
         </div>
     </section>
 
-    <!-- Final CTA -->
-    <section class="final-cta" id="download">
+    <!-- Beta Request Form -->
+    <section class="beta-form-section" id="beta">
         <div class="container">
-            <p style="font-family: var(--font-display); font-style: italic; color: var(--gold); font-size: 1.1rem; margin-bottom: var(--space-sm); position: relative;">"A little bit of data and a whole lotta love"</p>
-            <h2>Ready to dig smarter?</h2>
-            <p>Download CrateBot and let machine learning organize your crates.</p>
-            <a href="#" class="btn btn-primary">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                Download for macOS
-            </a>
+            <div class="section-header">
+                <div class="section-number">05</div>
+                <h2>Request Beta Access</h2>
+                <p>CrateBot is in early beta. Tell us about your library and we'll get you set up.</p>
+            </div>
+
+            <form class="beta-form" action="https://formsubmit.co/noah@noahraford.com" method="POST">
+                <!-- FormSubmit configuration -->
+                <input type="hidden" name="_subject" value="CrateBot Beta Request">
+                <input type="hidden" name="_captcha" value="false">
+                <input type="hidden" name="_template" value="table">
+                <input type="hidden" name="_next" value="https://nraford7.github.io/CrateBot5/">
+
+                <div class="form-group">
+                    <label for="name">Name or Reddit Handle</label>
+                    <input type="text" id="name" name="name" placeholder="e.g. DJ_CrateMaster or u/vinylhead" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="your@email.com" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="library_size">How many tracks in your library?</label>
+                    <select id="library_size" name="library_size" required>
+                        <option value="">Select...</option>
+                        <option value="under-500">Under 500</option>
+                        <option value="500-2000">500 - 2,000</option>
+                        <option value="2000-5000">2,000 - 5,000</option>
+                        <option value="5000-10000">5,000 - 10,000</option>
+                        <option value="10000-plus">10,000+</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="current_tagging">Do you currently use a tagging system?</label>
+                    <select id="current_tagging" name="current_tagging" required>
+                        <option value="">Select...</option>
+                        <option value="yes-strict">Yes — I tag everything consistently</option>
+                        <option value="yes-partial">Yes — but only some of my tracks are tagged</option>
+                        <option value="no-want-to">No — but I wish I did</option>
+                        <option value="no-dont-care">No — I don't really tag</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="tagging_discipline">How strict are you about tagging new tracks?</label>
+                    <select id="tagging_discipline" name="tagging_discipline" required>
+                        <option value="">Select...</option>
+                        <option value="always">I tag every new track before it goes in rotation</option>
+                        <option value="usually">I usually tag, but sometimes skip it</option>
+                        <option value="rarely">I rarely get around to tagging</option>
+                        <option value="never">I basically never tag new tracks</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="would_help">If CrateBot actually worked — auto-tagged your tracks the way you would — would that be genuinely useful to you?</label>
+                    <select id="would_help" name="would_help" required>
+                        <option value="">Select...</option>
+                        <option value="game-changer">Game-changer — I'd use it on everything</option>
+                        <option value="helpful">Helpful — would save me real time</option>
+                        <option value="nice-to-have">Nice to have — but not critical</option>
+                        <option value="not-really">Not really — I prefer manual tagging</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="dj_software">What DJ software do you use? (optional)</label>
+                    <input type="text" id="dj_software" name="dj_software" placeholder="e.g. Serato, Rekordbox, Traktor...">
+                </div>
+
+                <div class="form-group">
+                    <label for="notes">Anything else? (optional)</label>
+                    <textarea id="notes" name="notes" rows="3" placeholder="Questions, use cases, what you're hoping for..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-submit">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 2L11 13"/>
+                        <path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+                    </svg>
+                    Request Access
+                </button>
+            </form>
         </div>
     </section>
 
