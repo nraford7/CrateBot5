@@ -149,6 +149,11 @@
             50% { stroke-dashoffset: 20; }
         }
 
+        @keyframes waveformPulse {
+            0%, 100% { transform: scaleY(1); }
+            50% { transform: scaleY(0.4); }
+        }
+
         .animate-fade-in-up {
             animation: fadeInUp var(--duration-slow) var(--ease-out) forwards;
             opacity: 0;
@@ -1185,7 +1190,26 @@
             background: var(--gold);
             border-radius: 2px;
             opacity: 0.6;
+            animation: waveformPulse 1.2s ease-in-out infinite;
+            transform-origin: bottom;
         }
+
+        .waveform-bar:nth-child(1) { animation-delay: 0s; }
+        .waveform-bar:nth-child(2) { animation-delay: 0.1s; }
+        .waveform-bar:nth-child(3) { animation-delay: 0.2s; }
+        .waveform-bar:nth-child(4) { animation-delay: 0.3s; }
+        .waveform-bar:nth-child(5) { animation-delay: 0.4s; }
+        .waveform-bar:nth-child(6) { animation-delay: 0.3s; }
+        .waveform-bar:nth-child(7) { animation-delay: 0.2s; }
+        .waveform-bar:nth-child(8) { animation-delay: 0.1s; }
+        .waveform-bar:nth-child(9) { animation-delay: 0s; }
+        .waveform-bar:nth-child(10) { animation-delay: 0.1s; }
+        .waveform-bar:nth-child(11) { animation-delay: 0.2s; }
+        .waveform-bar:nth-child(12) { animation-delay: 0.3s; }
+        .waveform-bar:nth-child(13) { animation-delay: 0.4s; }
+        .waveform-bar:nth-child(14) { animation-delay: 0.3s; }
+        .waveform-bar:nth-child(15) { animation-delay: 0.2s; }
+        .waveform-bar:nth-child(16) { animation-delay: 0.1s; }
 
         .vibe-card-content h4 {
             font-family: var(--font-display);
@@ -1478,7 +1502,7 @@
             }
 
             .features-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, 1fr);
             }
 
             .steps {
@@ -1494,8 +1518,16 @@
                 grid-template-columns: 1fr;
             }
 
+            .vibe-visual {
+                order: 2;
+            }
+
+            .vibe-text {
+                order: 1;
+            }
+
             .tech-grid {
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns: repeat(3, 1fr);
             }
 
             .problem-content {
@@ -1546,10 +1578,106 @@
                 font-size: 0.9rem;
             }
 
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tech-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .vibe-example {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.25rem;
+            }
+
+            .vibe-type {
+                min-width: auto;
+            }
+
             .footer-content {
                 flex-direction: column;
                 gap: var(--space-md);
                 text-align: center;
+            }
+
+            .footer-links {
+                justify-content: center;
+            }
+
+            .section-header h2 {
+                font-size: 1.8rem;
+            }
+
+            .problem-text h2 {
+                font-size: 1.8rem;
+            }
+
+            .vibe-text h2 {
+                font-size: 1.8rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            :root {
+                --space-xl: 3rem;
+                --space-lg: 2rem;
+            }
+
+            .container {
+                padding: 0 var(--space-sm);
+            }
+
+            .tech-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .tech-item {
+                padding: var(--space-sm);
+            }
+
+            .tech-name {
+                font-size: 0.8rem;
+            }
+
+            .tech-desc {
+                font-size: 0.7rem;
+            }
+
+            .dimension-number {
+                font-size: 3rem;
+            }
+
+            .btn {
+                padding: 0.8rem 1.5rem;
+                font-size: 0.9rem;
+            }
+
+            .hero h1 {
+                font-size: 2rem;
+            }
+
+            .step-number {
+                width: 60px;
+                height: 60px;
+                font-size: 1.4rem;
+            }
+
+            .vibe-card {
+                padding: var(--space-md);
+            }
+
+            .feature-card {
+                padding: var(--space-sm);
+            }
+
+            .feature-card h3 {
+                font-size: 1.1rem;
+            }
+
+            .feature-card p {
+                font-size: 0.85rem;
             }
         }
     </style>
