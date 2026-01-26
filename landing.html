@@ -852,9 +852,13 @@
             background: linear-gradient(145deg, var(--dark-wood), var(--booth-black));
             border: 1px solid rgba(107, 92, 74, 0.3);
             border-radius: 20px;
-            padding: var(--space-lg);
+            padding: var(--space-xl) var(--space-lg);
             position: relative;
             overflow: hidden;
+            min-height: 360px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
 
         .vibe-card::before {
@@ -1507,31 +1511,6 @@
     <section class="vibe-showcase">
         <div class="container">
             <div class="vibe-content">
-                <div class="vibe-text">
-                    <div class="section-number">03</div>
-                    <h2>Creative Tags That Stick</h2>
-                    <p>
-                        Standard metadata is forgettable. CrateBot generates evocative
-                        descriptions designed for instant recognition—like album art
-                        in text form.
-                    </p>
-
-                    <div class="vibe-examples">
-                        <div class="vibe-example">
-                            <span class="vibe-type">Short Vibe</span>
-                            <span class="vibe-value">DARK FLUTE MELODY PEAK</span>
-                        </div>
-                        <div class="vibe-example">
-                            <span class="vibe-type">Mnemonic</span>
-                            <span class="vibe-value">sweating serpent</span>
-                        </div>
-                        <div class="vibe-example">
-                            <span class="vibe-type">Hook</span>
-                            <span class="vibe-value">"music is the answer"</span>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="vibe-visual">
                     <div class="vibe-card">
                         <div class="vibe-card-header">
@@ -1562,6 +1541,31 @@
                                 <span class="vibe-tag">Peak Time</span>
                                 <span class="vibe-tag">Classic</span>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="vibe-text">
+                    <div class="section-number">03</div>
+                    <h2>Creative Tags That Stick</h2>
+                    <p>
+                        Standard metadata is forgettable. CrateBot generates evocative
+                        descriptions designed for instant recognition—like album art
+                        in text form.
+                    </p>
+
+                    <div class="vibe-examples">
+                        <div class="vibe-example">
+                            <span class="vibe-type">Short Vibe</span>
+                            <span class="vibe-value">DARK FLUTE MELODY PEAK</span>
+                        </div>
+                        <div class="vibe-example">
+                            <span class="vibe-type">Mnemonic</span>
+                            <span class="vibe-value">sweating serpent</span>
+                        </div>
+                        <div class="vibe-example">
+                            <span class="vibe-type">Hook</span>
+                            <span class="vibe-value">"music is the answer"</span>
                         </div>
                     </div>
                 </div>
