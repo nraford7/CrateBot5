@@ -567,6 +567,111 @@
         }
 
         /* ========================================
+           PROBLEM SECTION
+           ======================================== */
+
+        .problem {
+            position: relative;
+        }
+
+        .problem::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                var(--sepia) 50%,
+                transparent 100%);
+        }
+
+        .problem-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-xl);
+            align-items: start;
+        }
+
+        .problem-text h2 {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 4vw, 2.8rem);
+            margin-bottom: var(--space-md);
+            font-weight: 500;
+            line-height: 1.2;
+        }
+
+        .problem-lead {
+            font-size: 1.15rem;
+            color: var(--text-primary);
+            margin-bottom: var(--space-md);
+            line-height: 1.7;
+        }
+
+        .problem-text p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.7;
+        }
+
+        .problem-text em {
+            color: var(--gold);
+            font-style: normal;
+        }
+
+        .problem-points {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+
+        .problem-point {
+            display: flex;
+            gap: var(--space-sm);
+            padding: var(--space-md);
+            background: var(--bg-secondary);
+            border: 1px solid rgba(107, 92, 74, 0.2);
+            border-radius: 12px;
+            transition: all var(--duration-fast) ease;
+        }
+
+        .problem-point:hover {
+            border-color: rgba(201, 162, 39, 0.3);
+            transform: translateX(4px);
+        }
+
+        .problem-icon {
+            width: 40px;
+            height: 40px;
+            min-width: 40px;
+            border-radius: 10px;
+            background: rgba(201, 162, 39, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .problem-icon svg {
+            width: 20px;
+            height: 20px;
+            stroke: var(--gold);
+        }
+
+        .problem-point h4 {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+
+        .problem-point p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* ========================================
            FEATURES SECTION
            ======================================== */
 
@@ -957,6 +1062,75 @@
             margin-top: 0.5rem;
         }
 
+        .model-options {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-md);
+            margin-top: var(--space-lg);
+        }
+
+        .model-option {
+            background: var(--bg-secondary);
+            border: 1px solid rgba(107, 92, 74, 0.2);
+            border-radius: 16px;
+            padding: var(--space-md);
+            text-align: center;
+            transition: all var(--duration-fast) ease;
+        }
+
+        .model-option:hover {
+            border-color: var(--gold);
+            transform: translateY(-4px);
+        }
+
+        .model-option-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: rgba(201, 162, 39, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto var(--space-sm);
+        }
+
+        .model-option-icon svg {
+            width: 28px;
+            height: 28px;
+            stroke: var(--gold);
+        }
+
+        .model-option h4 {
+            font-family: var(--font-display);
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .model-option p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .model-option-coming {
+            opacity: 0.7;
+        }
+
+        .coming-badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            background: rgba(201, 162, 39, 0.2);
+            border-radius: 100px;
+            font-size: 0.65rem;
+            font-family: var(--font-mono);
+            color: var(--gold);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            vertical-align: middle;
+            margin-left: 0.25rem;
+        }
+
         /* ========================================
            FINAL CTA
            ======================================== */
@@ -1111,6 +1285,14 @@
             .tech-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
+
+            .problem-content {
+                grid-template-columns: 1fr;
+            }
+
+            .model-options {
+                grid-template-columns: 1fr;
+            }
         }
 
         @media (max-width: 768px) {
@@ -1264,13 +1446,73 @@
         </div>
     </section>
 
+    <!-- The Problem Section -->
+    <section class="problem" id="problem">
+        <div class="container">
+            <div class="problem-content">
+                <div class="problem-text">
+                    <div class="section-number">01</div>
+                    <h2>Your library is bigger than your memory</h2>
+                    <p class="problem-lead">
+                        You know that track. The one with the hypnotic bassline that works perfectly
+                        after a Moodymann record. But what's it called? Who made it? You bought it
+                        three years ago and played it twice.
+                    </p>
+                    <p>
+                        As collections grow into the thousands, human memory fails. You can't remember
+                        every track's energy, mood, or that one detail that makes it special. Genre alone
+                        doesn't cut it—you need to know <em>how</em> a track feels, <em>when</em> to play it,
+                        and <em>what</em> makes it memorable.
+                    </p>
+                </div>
+                <div class="problem-points">
+                    <div class="problem-point">
+                        <div class="problem-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4>Tiny screens, big libraries</h4>
+                            <p>Squinting at track names on CDJ displays while the crowd waits. Artist and title tell you nothing about energy or vibe.</p>
+                        </div>
+                    </div>
+                    <div class="problem-point">
+                        <div class="problem-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4>Context evaporates</h4>
+                            <p>That track worked perfectly at 3am in a sweaty basement. But you forgot to tag it, and now you can't find it when you need it.</p>
+                        </div>
+                    </div>
+                    <div class="problem-point">
+                        <div class="problem-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                <path d="M3 9h18M9 21V9"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4>Playlists don't scale</h4>
+                            <p>Creating folders for every mood × energy × genre combination is a full-time job. And tracks belong in multiple categories anyway.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Features Section -->
     <section class="features" id="features">
         <div class="container">
             <div class="section-header">
-                <div class="section-number">01</div>
+                <div class="section-number">02</div>
                 <h2>Intelligent Tagging</h2>
-                <p>Trained on your library, tuned to your taste. CrateBot learns how you categorize music and predicts tags for new tracks.</p>
+                <p>Start tagging immediately with our default model, or train on your own library for predictions tuned to your taste.</p>
             </div>
 
             <div class="features-grid">
@@ -1281,8 +1523,8 @@
                             <path d="M12 8v8M8 12h8" stroke-linecap="round"/>
                         </svg>
                     </div>
-                    <h3>Custom ML Models</h3>
-                    <p>Train classifiers on your own tagged library. The model learns your vocabulary, your categories, your way of thinking about music.</p>
+                    <h3>Ready Out of the Box</h3>
+                    <p>Use our default model to start tagging immediately, or train on your own library for predictions tuned to your vocabulary and taste.</p>
                 </div>
 
                 <div class="feature-card">
@@ -1348,7 +1590,7 @@
     <section class="how-it-works" id="how-it-works">
         <div class="container">
             <div class="section-header">
-                <div class="section-number">02</div>
+                <div class="section-number">03</div>
                 <h2>Three Steps to Smarter Crates</h2>
                 <p>From raw audio to rich metadata in a streamlined workflow.</p>
             </div>
@@ -1380,7 +1622,7 @@
         <div class="container">
             <div class="vibe-content">
                 <div class="vibe-text">
-                    <div class="section-number">03</div>
+                    <div class="section-number">04</div>
                     <h2>Creative Tags That Stick</h2>
                     <p>
                         Standard metadata is forgettable. CrateBot generates evocative
@@ -1445,7 +1687,7 @@
     <section class="ml-tech" id="technology">
         <div class="container">
             <div class="section-header">
-                <div class="section-number">04</div>
+                <div class="section-number">05</div>
                 <h2>Audio Intelligence</h2>
                 <p>Five analysis engines combine to create a rich audio fingerprint for every track.</p>
             </div>
@@ -1476,6 +1718,40 @@
             <div class="dimension-counter">
                 <div class="dimension-number">135+</div>
                 <div class="dimension-label">dimensional ML models analyzing every track</div>
+            </div>
+
+            <div class="model-options">
+                <div class="model-option">
+                    <div class="model-option-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                            <line x1="12" y1="22.08" x2="12" y2="12"/>
+                        </svg>
+                    </div>
+                    <h4>Default Model</h4>
+                    <p>Start tagging immediately with our pre-trained model. Works out of the box for common electronic music genres.</p>
+                </div>
+                <div class="model-option">
+                    <div class="model-option-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                        </svg>
+                    </div>
+                    <h4>Custom Training</h4>
+                    <p>Train on your own tagged library. The model learns your vocabulary and classification style for personalized predictions.</p>
+                </div>
+                <div class="model-option model-option-coming">
+                    <div class="model-option-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                    </div>
+                    <h4>Community Models <span class="coming-badge">Coming Soon</span></h4>
+                    <p>Download models trained on curated genre libraries, or share your own models with the community.</p>
+                </div>
             </div>
         </div>
     </section>
@@ -1540,7 +1816,7 @@
         }, observerOptions);
 
         // Observe all feature cards, steps, etc.
-        document.querySelectorAll('.feature-card, .step, .tech-item, .vibe-example').forEach(el => {
+        document.querySelectorAll('.feature-card, .step, .tech-item, .vibe-example, .problem-point, .model-option').forEach(el => {
             el.style.opacity = '0';
             el.style.transform = 'translateY(20px)';
             el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
