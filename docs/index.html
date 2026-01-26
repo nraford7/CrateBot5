@@ -672,11 +672,223 @@
         }
 
         /* ========================================
+           SOLUTION SECTION
+           ======================================== */
+
+        .solution {
+            background: var(--bg-secondary);
+            position: relative;
+        }
+
+        .solution::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                var(--sepia) 50%,
+                transparent 100%);
+        }
+
+        .solution-header {
+            text-align: center;
+            margin-bottom: var(--space-xl);
+        }
+
+        .solution-header h2 {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 500;
+            margin-bottom: var(--space-md);
+        }
+
+        .solution-lead {
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 0 auto;
+            font-size: 1.15rem;
+            line-height: 1.7;
+        }
+
+        .solution-lead em {
+            color: var(--gold);
+            font-style: normal;
+            font-weight: 500;
+        }
+
+        .solution-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            grid-template-rows: auto auto;
+            gap: var(--space-md);
+        }
+
+        .solution-card {
+            background: var(--booth-black);
+            border: 1px solid rgba(107, 92, 74, 0.2);
+            border-radius: 16px;
+            padding: var(--space-md);
+            transition: all var(--duration-medium) var(--ease-out);
+        }
+
+        .solution-card:hover {
+            border-color: rgba(201, 162, 39, 0.3);
+            transform: translateY(-4px);
+        }
+
+        .solution-card-main {
+            grid-row: span 2;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .solution-card-visual {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-md);
+        }
+
+        .drag-drop-demo {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            width: 100%;
+        }
+
+        .drag-drop-zone {
+            flex: 1;
+            border: 2px dashed rgba(201, 162, 39, 0.3);
+            border-radius: 12px;
+            padding: var(--space-lg) var(--space-md);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all var(--duration-fast) ease;
+        }
+
+        .solution-card-main:hover .drag-drop-zone {
+            border-color: var(--gold);
+            background: rgba(201, 162, 39, 0.05);
+        }
+
+        .drag-drop-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(201, 162, 39, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .drag-drop-icon svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--gold);
+        }
+
+        .drag-drop-zone span {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .drag-drop-arrow {
+            color: var(--sepia);
+        }
+
+        .drag-drop-arrow svg {
+            width: 32px;
+            height: 32px;
+        }
+
+        .drag-drop-result {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .result-tag {
+            padding: 0.5rem 1rem;
+            background: rgba(201, 162, 39, 0.1);
+            border: 1px solid rgba(201, 162, 39, 0.3);
+            border-radius: 8px;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--gold);
+            text-align: center;
+            animation: fadeInUp 0.6s var(--ease-out) forwards;
+            opacity: 0;
+        }
+
+        .result-tag:nth-child(1) { animation-delay: 0.1s; }
+        .result-tag:nth-child(2) { animation-delay: 0.2s; }
+        .result-tag:nth-child(3) { animation-delay: 0.3s; }
+
+        .solution-card-main:hover .result-tag {
+            animation: none;
+            opacity: 1;
+        }
+
+        .solution-card-content {
+            padding-top: var(--space-md);
+            border-top: 1px solid rgba(107, 92, 74, 0.2);
+        }
+
+        .solution-card-content h3 {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .solution-card-content p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .solution-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: rgba(201, 162, 39, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: var(--space-sm);
+        }
+
+        .solution-icon svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--gold);
+        }
+
+        .solution-card h3 {
+            font-family: var(--font-display);
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .solution-card p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* ========================================
            FEATURES SECTION
            ======================================== */
 
         .features {
-            background: var(--bg-secondary);
             position: relative;
         }
 
@@ -1290,6 +1502,22 @@
                 grid-template-columns: 1fr;
             }
 
+            .solution-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .solution-card-main {
+                grid-row: auto;
+            }
+
+            .drag-drop-demo {
+                flex-direction: column;
+            }
+
+            .drag-drop-arrow {
+                transform: rotate(90deg);
+            }
+
             .model-options {
                 grid-template-columns: 1fr;
             }
@@ -1506,11 +1734,98 @@
         </div>
     </section>
 
+    <!-- Solution Section -->
+    <section class="solution" id="solution">
+        <div class="container">
+            <div class="solution-header">
+                <div class="section-number">02</div>
+                <h2>Tags that think like you do</h2>
+                <p class="solution-lead">
+                    CrateBot uses machine learning to tag every track in <em>your words</em>,
+                    with <em>your style</em>. It learns how you think about music and applies
+                    that understanding to your entire library.
+                </p>
+            </div>
+
+            <div class="solution-grid">
+                <div class="solution-card solution-card-main">
+                    <div class="solution-card-visual">
+                        <div class="drag-drop-demo">
+                            <div class="drag-drop-zone">
+                                <div class="drag-drop-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                </div>
+                                <span>Drop tracks here</span>
+                            </div>
+                            <div class="drag-drop-arrow">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <line x1="5" y1="12" x2="19" y2="12"/>
+                                    <polyline points="12 5 19 12 12 19"/>
+                                </svg>
+                            </div>
+                            <div class="drag-drop-result">
+                                <div class="result-tag">Deep House</div>
+                                <div class="result-tag">Peak Time</div>
+                                <div class="result-tag">Hypnotic</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="solution-card-content">
+                        <h3>Drag. Drop. Done.</h3>
+                        <p>
+                            Tagging thousands of tracks by hand takes forever. Adding tags to new
+                            purchases is a chore you always fall behind on. CrateBot handles it for
+                            you—just drag your tracks in and watch them get tagged automatically.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="solution-card">
+                    <div class="solution-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M12 2a10 10 0 1 0 10 10H12V2z"/>
+                            <path d="M12 2a10 10 0 0 1 10 10"/>
+                            <circle cx="12" cy="12" r="6"/>
+                        </svg>
+                    </div>
+                    <h3>Learns your vocabulary</h3>
+                    <p>Train on your existing tags and CrateBot speaks your language—whether you call it "jackin house" or "Chicago heat."</p>
+                </div>
+
+                <div class="solution-card">
+                    <div class="solution-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                        </svg>
+                    </div>
+                    <h3>Remembers what you forget</h3>
+                    <p>AI-generated vibes and mnemonics burn into memory. "chrome shaman" sticks better than "Unknown Artist - Track 04."</p>
+                </div>
+
+                <div class="solution-card">
+                    <div class="solution-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="11" cy="11" r="8"/>
+                            <path d="M21 21l-4.35-4.35"/>
+                            <path d="M11 8v6M8 11h6"/>
+                        </svg>
+                    </div>
+                    <h3>Search by feeling</h3>
+                    <p>Find "dark driving techno with haunting vocals" instead of scrolling through folders. Tags make your library searchable by vibe.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Features Section -->
     <section class="features" id="features">
         <div class="container">
             <div class="section-header">
-                <div class="section-number">02</div>
+                <div class="section-number">03</div>
                 <h2>Intelligent Tagging</h2>
                 <p>Start tagging immediately with our default model, or train on your own library for predictions tuned to your taste.</p>
             </div>
@@ -1590,7 +1905,7 @@
     <section class="how-it-works" id="how-it-works">
         <div class="container">
             <div class="section-header">
-                <div class="section-number">03</div>
+                <div class="section-number">04</div>
                 <h2>Three Steps to Smarter Crates</h2>
                 <p>From raw audio to rich metadata in a streamlined workflow.</p>
             </div>
@@ -1622,7 +1937,7 @@
         <div class="container">
             <div class="vibe-content">
                 <div class="vibe-text">
-                    <div class="section-number">04</div>
+                    <div class="section-number">05</div>
                     <h2>Creative Tags That Stick</h2>
                     <p>
                         Standard metadata is forgettable. CrateBot generates evocative
@@ -1687,7 +2002,7 @@
     <section class="ml-tech" id="technology">
         <div class="container">
             <div class="section-header">
-                <div class="section-number">05</div>
+                <div class="section-number">06</div>
                 <h2>Audio Intelligence</h2>
                 <p>Five analysis engines combine to create a rich audio fingerprint for every track.</p>
             </div>
@@ -1816,7 +2131,7 @@
         }, observerOptions);
 
         // Observe all feature cards, steps, etc.
-        document.querySelectorAll('.feature-card, .step, .tech-item, .vibe-example, .problem-point, .model-option').forEach(el => {
+        document.querySelectorAll('.feature-card, .step, .tech-item, .vibe-example, .problem-point, .solution-card, .model-option').forEach(el => {
             el.style.opacity = '0';
             el.style.transform = 'translateY(20px)';
             el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
