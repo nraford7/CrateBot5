@@ -1,44 +1,1773 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:8742 ws://127.0.0.1:8742" />
-    <title>CrateBot</title>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrateBot — Intelligent Music Tagging for DJs</title>
+    <meta name="description" content="AI-powered audio fingerprinting and tagging that helps DJs find the right track in the moment. Train custom ML models on your library.">
+
+    <!-- Open Graph / Social Sharing -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://nraford7.github.io/CrateBot5/">
+    <meta property="og:title" content="CrateBot — Intelligent Music Tagging for DJs">
+    <meta property="og:description" content="AI-powered audio fingerprinting and tagging that helps DJs find the right track in the moment. Train custom ML models on your library.">
+    <meta property="og:image" content="https://nraford7.github.io/CrateBot5/cratebot-logo-256.png">
+    <meta property="og:image:width" content="256">
+    <meta property="og:image:height" content="256">
+    <meta property="og:image:alt" content="CrateBot logo">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="CrateBot — Intelligent Music Tagging for DJs">
+    <meta name="twitter:description" content="AI-powered audio fingerprinting and tagging that helps DJs find the right track in the moment.">
+    <meta name="twitter:image" content="https://nraford7.github.io/CrateBot5/cratebot-logo-256.png">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="cratebot-logo-256.png">
+    <link rel="apple-touch-icon" href="cratebot-logo-256.png">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
     <style>
-      #app-loading {
-        position: fixed;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #0f172a;
-        color: #e2e8f0;
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-        letter-spacing: 0.02em;
-      }
-      #app-loading .spinner {
-        width: 20px;
-        height: 20px;
-        border-radius: 999px;
-        border: 2px solid rgba(226, 232, 240, 0.35);
-        border-top-color: #e2e8f0;
-        animation: spin 0.9s linear infinite;
-        margin-right: 12px;
-      }
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
+        /* ========================================
+           SHINJUKU VINYL SESSION
+           "Golden Hour Booth" Color Palette
+           ======================================== */
+
+        :root {
+            /* Core Colors */
+            --gold: #c9a227;
+            --gold-light: #e8d4a8;
+            --gold-glow: rgba(201, 162, 39, 0.4);
+            --dark-wood: #1a1612;
+            --booth-black: #0d0b09;
+            --sepia: #6b5c4a;
+            --cream: #f5efe6;
+
+            /* Semantic */
+            --bg-primary: var(--booth-black);
+            --bg-secondary: var(--dark-wood);
+            --text-primary: var(--cream);
+            --text-secondary: var(--sepia);
+            --accent: var(--gold);
+            --accent-light: var(--gold-light);
+
+            /* Typography */
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'Outfit', system-ui, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+
+            /* Spacing */
+            --space-xs: 0.5rem;
+            --space-sm: 1rem;
+            --space-md: 2rem;
+            --space-lg: 4rem;
+            --space-xl: 8rem;
+
+            /* Transitions */
+            --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+            --duration-slow: 0.8s;
+            --duration-medium: 0.4s;
+            --duration-fast: 0.2s;
+        }
+
+        /* ========================================
+           RESET & BASE
+           ======================================== */
+
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            font-size: 16px;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        ::selection {
+            background: var(--gold);
+            color: var(--booth-black);
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        /* ========================================
+           ANIMATIONS
+           ======================================== */
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes rotateVinyl {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        @keyframes glow {
+            0%, 100% {
+                box-shadow: 0 0 20px var(--gold-glow),
+                            0 0 40px rgba(201, 162, 39, 0.2);
+            }
+            50% {
+                box-shadow: 0 0 30px var(--gold-glow),
+                            0 0 60px rgba(201, 162, 39, 0.3);
+            }
+        }
+
+        @keyframes nodeConnect {
+            0%, 100% { stroke-dashoffset: 0; }
+            50% { stroke-dashoffset: 20; }
+        }
+
+        .animate-fade-in-up {
+            animation: fadeInUp var(--duration-slow) var(--ease-out) forwards;
+            opacity: 0;
+        }
+
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+        .delay-5 { animation-delay: 0.5s; }
+        .delay-6 { animation-delay: 0.6s; }
+
+        /* ========================================
+           LAYOUT
+           ======================================== */
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 var(--space-md);
+        }
+
+        section {
+            padding: var(--space-xl) 0;
+            position: relative;
+        }
+
+        /* ========================================
+           NAVIGATION
+           ======================================== */
+
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: var(--space-sm) 0;
+            background: linear-gradient(to bottom,
+                var(--booth-black) 0%,
+                rgba(13, 11, 9, 0.95) 50%,
+                transparent 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        nav .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--gold), var(--gold-light));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: glow 3s ease-in-out infinite;
+        }
+
+        .logo-icon svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--booth-black);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: var(--space-md);
+            align-items: center;
+        }
+
+        .nav-links a {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            transition: color var(--duration-fast) ease;
+            font-weight: 500;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-primary);
+        }
+
+        .nav-cta {
+            padding: 0.6rem 1.4rem;
+            background: var(--gold);
+            color: var(--booth-black) !important;
+            border-radius: 100px;
+            font-weight: 600;
+            transition: all var(--duration-fast) ease;
+        }
+
+        .nav-cta:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px var(--gold-glow);
+        }
+
+        /* ========================================
+           HERO SECTION
+           ======================================== */
+
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding-top: 80px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Background texture - grain overlay */
+        .hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.03;
+            pointer-events: none;
+        }
+
+        /* Gradient orbs */
+        .hero-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+        }
+
+        .hero-orb-1 {
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--gold-glow) 0%, transparent 70%);
+            top: -200px;
+            right: -100px;
+            animation: float 8s ease-in-out infinite;
+        }
+
+        .hero-orb-2 {
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(107, 92, 74, 0.3) 0%, transparent 70%);
+            bottom: 100px;
+            left: -100px;
+            animation: float 10s ease-in-out infinite reverse;
+        }
+
+        .hero-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-xl);
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-text {
+            max-width: 560px;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 1rem;
+            background: rgba(201, 162, 39, 0.1);
+            border: 1px solid rgba(201, 162, 39, 0.3);
+            border-radius: 100px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--gold);
+            margin-bottom: var(--space-md);
+        }
+
+        .hero-badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: var(--gold);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .hero h1 {
+            font-family: var(--font-display);
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 500;
+            line-height: 1.1;
+            margin-bottom: var(--space-md);
+            letter-spacing: -0.02em;
+        }
+
+        .hero h1 em {
+            font-style: italic;
+            color: var(--gold);
+        }
+
+        .hero-description {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: var(--space-lg);
+            max-width: 480px;
+            line-height: 1.7;
+        }
+
+        .hero-cta-group {
+            display: flex;
+            gap: var(--space-sm);
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem 2rem;
+            border-radius: 100px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-out);
+            border: none;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--gold) 0%, #d4ad2a 100%);
+            color: var(--booth-black);
+            box-shadow: 0 4px 20px var(--gold-glow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px var(--gold-glow);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-primary);
+            border: 1px solid var(--sepia);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+
+        .btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* Hero Visual - Vinyl with Neural Network */
+        .hero-visual {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .vinyl-container {
+            position: relative;
+            width: 480px;
+            height: 480px;
+        }
+
+        .vinyl {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background:
+                radial-gradient(circle at center,
+                    var(--booth-black) 0%,
+                    var(--booth-black) 15%,
+                    var(--dark-wood) 15.5%,
+                    var(--dark-wood) 17%,
+                    var(--booth-black) 17.5%,
+                    var(--booth-black) 100%
+                );
+            box-shadow:
+                0 0 0 4px var(--dark-wood),
+                0 0 60px rgba(0, 0, 0, 0.6),
+                inset 0 0 100px rgba(0, 0, 0, 0.4);
+            position: relative;
+            animation: rotateVinyl 20s linear infinite;
+        }
+
+        /* Vinyl grooves */
+        .vinyl::before {
+            content: '';
+            position: absolute;
+            inset: 20%;
+            border-radius: 50%;
+            background: repeating-radial-gradient(
+                circle at center,
+                transparent 0px,
+                transparent 2px,
+                rgba(201, 162, 39, 0.03) 2px,
+                rgba(201, 162, 39, 0.03) 3px
+            );
+        }
+
+        /* Center label */
+        .vinyl-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, var(--gold), #8a7020);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            animation: rotateVinyl 20s linear infinite reverse;
+        }
+
+        .vinyl-label-text {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--booth-black);
+            text-align: center;
+        }
+
+        .vinyl-label-sub {
+            font-size: 0.7rem;
+            color: rgba(13, 11, 9, 0.7);
+            margin-top: 2px;
+            font-family: var(--font-mono);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        /* Neural network overlay */
+        .neural-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .neural-overlay svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .neural-node {
+            fill: var(--gold);
+            opacity: 0.8;
+        }
+
+        .neural-line {
+            stroke: var(--gold);
+            stroke-width: 1;
+            opacity: 0.3;
+            stroke-dasharray: 10, 5;
+            animation: nodeConnect 3s linear infinite;
+        }
+
+        /* Floating tags */
+        .floating-tag {
+            position: absolute;
+            padding: 0.5rem 1rem;
+            background: rgba(26, 22, 18, 0.9);
+            border: 1px solid rgba(201, 162, 39, 0.3);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-family: var(--font-mono);
+            color: var(--gold-light);
+            backdrop-filter: blur(10px);
+            animation: float 4s ease-in-out infinite;
+            white-space: nowrap;
+        }
+
+        .floating-tag-1 {
+            top: 60px;
+            right: -20px;
+            animation-delay: 0s;
+        }
+
+        .floating-tag-2 {
+            bottom: 120px;
+            right: -40px;
+            animation-delay: 1s;
+        }
+
+        .floating-tag-3 {
+            top: 140px;
+            left: -30px;
+            animation-delay: 2s;
+        }
+
+        .tag-label {
+            color: var(--sepia);
+            font-size: 0.7rem;
+            margin-bottom: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* ========================================
+           FEATURES SECTION
+           ======================================== */
+
+        .features {
+            background: var(--bg-secondary);
+            position: relative;
+        }
+
+        .features::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                var(--sepia) 50%,
+                transparent 100%);
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: var(--space-xl);
+        }
+
+        .section-number {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--gold);
+            letter-spacing: 0.1em;
+            margin-bottom: var(--space-sm);
+        }
+
+        .section-header h2 {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 500;
+            margin-bottom: var(--space-sm);
+        }
+
+        .section-header p {
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+            font-size: 1.1rem;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-md);
+        }
+
+        .feature-card {
+            background: var(--booth-black);
+            border: 1px solid rgba(107, 92, 74, 0.2);
+            border-radius: 16px;
+            padding: var(--space-md);
+            transition: all var(--duration-medium) var(--ease-out);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--gold), transparent);
+            opacity: 0;
+            transition: opacity var(--duration-fast) ease;
+        }
+
+        .feature-card:hover {
+            border-color: rgba(201, 162, 39, 0.3);
+            transform: translateY(-4px);
+        }
+
+        .feature-card:hover::before {
+            opacity: 1;
+        }
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: rgba(201, 162, 39, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: var(--space-sm);
+        }
+
+        .feature-icon svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--gold);
+            fill: none;
+            stroke-width: 1.5;
+        }
+
+        .feature-card h3 {
+            font-family: var(--font-display);
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .feature-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        /* ========================================
+           HOW IT WORKS
+           ======================================== */
+
+        .how-it-works {
+            position: relative;
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-lg);
+            position: relative;
+        }
+
+        /* Connecting line */
+        .steps::before {
+            content: '';
+            position: absolute;
+            top: 40px;
+            left: 16.67%;
+            right: 16.67%;
+            height: 1px;
+            background: linear-gradient(90deg,
+                var(--sepia) 0%,
+                var(--gold) 50%,
+                var(--sepia) 100%);
+            opacity: 0.5;
+        }
+
+        .step {
+            text-align: center;
+            position: relative;
+        }
+
+        .step-number {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            border: 2px solid var(--sepia);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-display);
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: var(--gold);
+            margin: 0 auto var(--space-md);
+            position: relative;
+            z-index: 1;
+            transition: all var(--duration-medium) var(--ease-out);
+        }
+
+        .step:hover .step-number {
+            border-color: var(--gold);
+            box-shadow: 0 0 30px var(--gold-glow);
+        }
+
+        .step h3 {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            margin-bottom: 0.75rem;
+            font-weight: 500;
+        }
+
+        .step p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            max-width: 280px;
+            margin: 0 auto;
+        }
+
+        /* ========================================
+           VIBE SHOWCASE
+           ======================================== */
+
+        .vibe-showcase {
+            background: var(--bg-secondary);
+            overflow: hidden;
+        }
+
+        .vibe-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-xl);
+            align-items: center;
+        }
+
+        .vibe-text h2 {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 4vw, 2.8rem);
+            margin-bottom: var(--space-md);
+            font-weight: 500;
+        }
+
+        .vibe-text p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: var(--space-md);
+            line-height: 1.7;
+        }
+
+        .vibe-examples {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-sm);
+        }
+
+        .vibe-example {
+            background: var(--booth-black);
+            border: 1px solid rgba(107, 92, 74, 0.3);
+            border-radius: 12px;
+            padding: var(--space-sm) var(--space-md);
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            transition: all var(--duration-fast) ease;
+        }
+
+        .vibe-example:hover {
+            border-color: var(--gold);
+            transform: translateX(8px);
+        }
+
+        .vibe-type {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--sepia);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            min-width: 100px;
+        }
+
+        .vibe-value {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: var(--gold-light);
+        }
+
+        .vibe-visual {
+            position: relative;
+        }
+
+        .vibe-card {
+            background: linear-gradient(145deg, var(--dark-wood), var(--booth-black));
+            border: 1px solid rgba(107, 92, 74, 0.3);
+            border-radius: 20px;
+            padding: var(--space-xl) var(--space-lg);
+            position: relative;
+            overflow: hidden;
+            min-height: 360px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .vibe-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, var(--gold-glow) 0%, transparent 50%);
+            opacity: 0.1;
+        }
+
+        .vibe-card-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            margin-bottom: var(--space-md);
+        }
+
+        .vibe-waveform {
+            flex: 1;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .waveform-bar {
+            flex: 1;
+            background: var(--gold);
+            border-radius: 2px;
+            opacity: 0.6;
+        }
+
+        .vibe-card-content h4 {
+            font-family: var(--font-display);
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .vibe-card-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: var(--space-sm);
+        }
+
+        .vibe-tag {
+            padding: 0.3rem 0.8rem;
+            background: rgba(201, 162, 39, 0.1);
+            border: 1px solid rgba(201, 162, 39, 0.3);
+            border-radius: 100px;
+            font-size: 0.8rem;
+            font-family: var(--font-mono);
+            color: var(--gold);
+        }
+
+        /* ========================================
+           ML TECHNOLOGY
+           ======================================== */
+
+        .ml-tech {
+            position: relative;
+        }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: var(--space-sm);
+            margin-top: var(--space-lg);
+        }
+
+        .tech-item {
+            background: var(--bg-secondary);
+            border: 1px solid rgba(107, 92, 74, 0.2);
+            border-radius: 12px;
+            padding: var(--space-md);
+            text-align: center;
+            transition: all var(--duration-fast) ease;
+        }
+
+        .tech-item:hover {
+            border-color: var(--gold);
+            transform: translateY(-4px);
+        }
+
+        .tech-name {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: var(--gold);
+            margin-bottom: 0.25rem;
+        }
+
+        .tech-desc {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .dimension-counter {
+            text-align: center;
+            margin-top: var(--space-lg);
+            padding: var(--space-md);
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            border: 1px solid rgba(107, 92, 74, 0.2);
+        }
+
+        .dimension-number {
+            font-family: var(--font-display);
+            font-size: clamp(3rem, 8vw, 5rem);
+            font-weight: 600;
+            color: var(--gold);
+            line-height: 1;
+        }
+
+        .dimension-label {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        /* ========================================
+           FINAL CTA
+           ======================================== */
+
+        .final-cta {
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .final-cta::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at center,
+                var(--gold-glow) 0%,
+                transparent 60%);
+            opacity: 0.15;
+        }
+
+        .final-cta h2 {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            margin-bottom: var(--space-sm);
+            font-weight: 500;
+            position: relative;
+        }
+
+        .final-cta p {
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            margin-bottom: var(--space-md);
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+            position: relative;
+        }
+
+        .final-cta .btn {
+            position: relative;
+        }
+
+        /* ========================================
+           FOOTER
+           ======================================== */
+
+        footer {
+            background: var(--bg-secondary);
+            padding: var(--space-lg) 0 var(--space-md);
+            border-top: 1px solid rgba(107, 92, 74, 0.2);
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .footer-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: var(--font-display);
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .footer-logo-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--gold);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .footer-logo-icon svg {
+            width: 14px;
+            height: 14px;
+            fill: var(--booth-black);
+        }
+
+        .footer-text {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: var(--space-md);
+        }
+
+        .footer-links a {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            transition: color var(--duration-fast) ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--gold);
+        }
+
+        /* ========================================
+           RESPONSIVE
+           ======================================== */
+
+        @media (max-width: 1024px) {
+            .hero-content {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+
+            .hero-text {
+                max-width: 100%;
+            }
+
+            .hero-description {
+                max-width: 100%;
+            }
+
+            .hero-cta-group {
+                justify-content: center;
+            }
+
+            .vinyl-container {
+                width: 360px;
+                height: 360px;
+            }
+
+            .floating-tag {
+                display: none;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .steps {
+                grid-template-columns: 1fr;
+                gap: var(--space-md);
+            }
+
+            .steps::before {
+                display: none;
+            }
+
+            .vibe-content {
+                grid-template-columns: 1fr;
+            }
+
+            .tech-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            :root {
+                --space-xl: 4rem;
+            }
+
+            .nav-links a:not(.nav-cta) {
+                display: none;
+            }
+
+            .vinyl-container {
+                width: 280px;
+                height: 280px;
+            }
+
+            .vinyl-label {
+                width: 100px;
+                height: 100px;
+            }
+
+            .vinyl-label-text {
+                font-size: 0.9rem;
+            }
+
+            .footer-content {
+                flex-direction: column;
+                gap: var(--space-md);
+                text-align: center;
+            }
+        }
+
+        /* ========================================
+           BETA FORM SECTION
+           ======================================== */
+
+        .beta-form-section {
+            background: var(--bg-secondary);
+            position: relative;
+        }
+
+        .beta-form-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                var(--sepia) 50%,
+                transparent 100%);
+        }
+
+        .beta-form {
+            max-width: 600px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-group label {
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 1rem 1.25rem;
+            background: var(--booth-black);
+            border: 1px solid rgba(107, 92, 74, 0.3);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            font-size: 1rem;
+            transition: all var(--duration-fast) ease;
+        }
+
+        .form-group input::placeholder,
+        .form-group textarea::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.1);
+        }
+
+        .form-group select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236b5c4a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1.25rem;
+            padding-right: 3rem;
+        }
+
+        .form-group select option {
+            background: var(--booth-black);
+            color: var(--text-primary);
+            padding: 0.5rem;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn-submit {
+            margin-top: var(--space-sm);
+            width: 100%;
+            justify-content: center;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px var(--gold-glow);
+        }
+
+        @media (max-width: 768px) {
+            .beta-form {
+                padding: 0 var(--space-sm);
+            }
+        }
     </style>
-    <script type="module" crossorigin src="./assets/index-BNMfk-tk.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Yu7mSqgL.css">
-  </head>
-  <body class="bg-sidebar dark:bg-sidebar-dark">
-    <div id="app-loading">
-      <div class="spinner"></div>
-      <div>Loading CrateBot...</div>
-    </div>
-    <div id="root"></div>
-  </body>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="container">
+            <a href="#" class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M12 5v2M12 17v2M5 12h2M17 12h2" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                CrateBot
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#how-it-works">How It Works</a>
+                <a href="#technology">Technology</a>
+                <a href="#beta" class="nav-cta">Request Beta</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-orb hero-orb-1"></div>
+        <div class="hero-orb hero-orb-2"></div>
+
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <div class="hero-badge animate-fade-in-up delay-1">
+                        ML-Powered Audio Analysis
+                    </div>
+
+                    <h1 class="animate-fade-in-up delay-2">
+                        Your crates,<br>
+                        <em>understood.</em>
+                    </h1>
+
+                    <p class="hero-description animate-fade-in-up delay-3">
+                        CrateBot analyzes your music library with machine learning,
+                        generating intelligent tags and evocative descriptions that help
+                        you find the perfect track in the moment.
+                    </p>
+
+                    <div class="hero-cta-group animate-fade-in-up delay-4">
+                        <a href="#beta" class="btn btn-primary">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="8.5" cy="7" r="4"/>
+                                <line x1="20" y1="8" x2="20" y2="14"/>
+                                <line x1="23" y1="11" x2="17" y2="11"/>
+                            </svg>
+                            Request Beta Access
+                        </a>
+                        <a href="#how-it-works" class="btn btn-secondary">
+                            See How It Works
+                        </a>
+                    </div>
+                </div>
+
+                <div class="hero-visual animate-fade-in-up delay-5">
+                    <div class="vinyl-container">
+                        <div class="vinyl">
+                            <div class="vinyl-label">
+                                <span class="vinyl-label-text">CrateBot</span>
+                                <span class="vinyl-label-sub">v5.0</span>
+                            </div>
+                        </div>
+
+                        <!-- Neural network overlay -->
+                        <div class="neural-overlay">
+                            <svg viewBox="0 0 480 480">
+                                <!-- Neural network nodes in concentric circles -->
+                                <circle cx="240" cy="100" r="4" class="neural-node"/>
+                                <circle cx="340" cy="140" r="4" class="neural-node"/>
+                                <circle cx="380" cy="240" r="4" class="neural-node"/>
+                                <circle cx="340" cy="340" r="4" class="neural-node"/>
+                                <circle cx="240" cy="380" r="4" class="neural-node"/>
+                                <circle cx="140" cy="340" r="4" class="neural-node"/>
+                                <circle cx="100" cy="240" r="4" class="neural-node"/>
+                                <circle cx="140" cy="140" r="4" class="neural-node"/>
+
+                                <!-- Connection lines -->
+                                <line x1="240" y1="100" x2="340" y2="140" class="neural-line"/>
+                                <line x1="340" y1="140" x2="380" y2="240" class="neural-line"/>
+                                <line x1="380" y1="240" x2="340" y2="340" class="neural-line"/>
+                                <line x1="340" y1="340" x2="240" y2="380" class="neural-line"/>
+                                <line x1="240" y1="380" x2="140" y2="340" class="neural-line"/>
+                                <line x1="140" y1="340" x2="100" y2="240" class="neural-line"/>
+                                <line x1="100" y1="240" x2="140" y2="140" class="neural-line"/>
+                                <line x1="140" y1="140" x2="240" y2="100" class="neural-line"/>
+
+                                <!-- Cross connections -->
+                                <line x1="240" y1="100" x2="240" y2="380" class="neural-line"/>
+                                <line x1="100" y1="240" x2="380" y2="240" class="neural-line"/>
+                                <line x1="140" y1="140" x2="340" y2="340" class="neural-line"/>
+                                <line x1="340" y1="140" x2="140" y2="340" class="neural-line"/>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Floating tags -->
+                    <div class="floating-tag floating-tag-1">
+                        <div class="tag-label">Vibe</div>
+                        <div>DARK FLUTE MELODY PEAK</div>
+                    </div>
+                    <div class="floating-tag floating-tag-2">
+                        <div class="tag-label">Mnemonic</div>
+                        <div>chrome shaman</div>
+                    </div>
+                    <div class="floating-tag floating-tag-3">
+                        <div class="tag-label">Genre</div>
+                        <div>Deep House</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-header">
+                <div class="section-number">01</div>
+                <h2>Intelligent Tagging</h2>
+                <p>Trained on your library, tuned to your taste. CrateBot learns how you categorize music and predicts tags for new tracks.</p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke-linecap="round"/>
+                            <path d="M12 8v8M8 12h8" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Custom ML Models</h3>
+                    <p>Train classifiers on your own tagged library. The model learns your vocabulary, your categories, your way of thinking about music.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M9 18V5l12-2v13"/>
+                            <circle cx="6" cy="18" r="3"/>
+                            <circle cx="18" cy="16" r="3"/>
+                        </svg>
+                    </div>
+                    <h3>Multi-Label Taxonomy</h3>
+                    <p>Four-field system: Genre, Timing, Mood, and Descriptive. Each track can have multiple tags per field for nuanced classification.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M21 12a9 9 0 0 0-9-9M21 12a9 9 0 0 1-9 9M21 12H3M12 3a9 9 0 0 0 0 18M12 3a9 9 0 0 1 0 18"/>
+                        </svg>
+                    </div>
+                    <h3>Vibe Generation</h3>
+                    <p>AI-crafted descriptions like "DARK FLUTE MELODY PEAK" and synesthetic mnemonics like "sweating serpent" for instant recall.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>
+                        </svg>
+                    </div>
+                    <h3>Hook Detection</h3>
+                    <p>Finds the memorable vocal phrase in each track. Uses lyrics databases first, falls back to speech-to-text transcription.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                            <line x1="8" y1="21" x2="16" y2="21"/>
+                            <line x1="12" y1="17" x2="12" y2="21"/>
+                        </svg>
+                    </div>
+                    <h3>Batch Processing</h3>
+                    <p>Tag thousands of tracks while you sleep. Checkpoint recovery means you can stop and resume without losing progress.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                    </div>
+                    <h3>Manual Refinement</h3>
+                    <p>Review predictions with inline audio playback. Corrections persist across model updates and sync to your files.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <div class="section-number">02</div>
+                <h2>Three Steps to Smarter Crates</h2>
+                <p>From raw audio to rich metadata in a streamlined workflow.</p>
+            </div>
+
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3>Train</h3>
+                    <p>Point CrateBot at your already-tagged library. It extracts 135+ audio features and learns your classification patterns.</p>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3>Tag</h3>
+                    <p>Batch process new tracks. CrateBot predicts genre, mood, timing, and descriptive tags—plus generates creative vibes.</p>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3>Refine</h3>
+                    <p>Review predictions with audio playback. Make corrections, train again. Your model improves with each iteration.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Vibe Showcase -->
+    <section class="vibe-showcase">
+        <div class="container">
+            <div class="vibe-content">
+                <div class="vibe-visual">
+                    <div class="vibe-card">
+                        <div class="vibe-card-header">
+                            <div class="vibe-waveform">
+                                <div class="waveform-bar" style="height: 20%"></div>
+                                <div class="waveform-bar" style="height: 40%"></div>
+                                <div class="waveform-bar" style="height: 60%"></div>
+                                <div class="waveform-bar" style="height: 80%"></div>
+                                <div class="waveform-bar" style="height: 100%"></div>
+                                <div class="waveform-bar" style="height: 70%"></div>
+                                <div class="waveform-bar" style="height: 90%"></div>
+                                <div class="waveform-bar" style="height: 60%"></div>
+                                <div class="waveform-bar" style="height: 80%"></div>
+                                <div class="waveform-bar" style="height: 50%"></div>
+                                <div class="waveform-bar" style="height: 70%"></div>
+                                <div class="waveform-bar" style="height: 40%"></div>
+                                <div class="waveform-bar" style="height: 60%"></div>
+                                <div class="waveform-bar" style="height: 30%"></div>
+                                <div class="waveform-bar" style="height: 50%"></div>
+                                <div class="waveform-bar" style="height: 20%"></div>
+                            </div>
+                        </div>
+                        <div class="vibe-card-content">
+                            <h4>Danny Tenaglia - Music Is The Answer</h4>
+                            <div class="vibe-card-tags">
+                                <span class="vibe-tag">Deep House</span>
+                                <span class="vibe-tag">Soulful</span>
+                                <span class="vibe-tag">Peak Time</span>
+                                <span class="vibe-tag">Classic</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="vibe-text">
+                    <div class="section-number">03</div>
+                    <h2>Creative Tags That Stick</h2>
+                    <p>
+                        Standard metadata is forgettable. CrateBot generates evocative
+                        descriptions designed for instant recognition—like album art
+                        in text form.
+                    </p>
+
+                    <div class="vibe-examples">
+                        <div class="vibe-example">
+                            <span class="vibe-type">Short Vibe</span>
+                            <span class="vibe-value">DARK FLUTE MELODY PEAK</span>
+                        </div>
+                        <div class="vibe-example">
+                            <span class="vibe-type">Mnemonic</span>
+                            <span class="vibe-value">sweating serpent</span>
+                        </div>
+                        <div class="vibe-example">
+                            <span class="vibe-type">Hook</span>
+                            <span class="vibe-value">"music is the answer"</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ML Technology -->
+    <section class="ml-tech" id="technology">
+        <div class="container">
+            <div class="section-header">
+                <div class="section-number">04</div>
+                <h2>Audio Intelligence</h2>
+                <p>Five analysis engines combine to create a rich audio fingerprint for every track.</p>
+            </div>
+
+            <div class="tech-grid">
+                <div class="tech-item">
+                    <div class="tech-name">Librosa</div>
+                    <div class="tech-desc">57 spectral & temporal features</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-name">Essentia</div>
+                    <div class="tech-desc">Mood & danceability analysis</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-name">PANNs</div>
+                    <div class="tech-desc">Instrument & genre detection</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-name">CLAP</div>
+                    <div class="tech-desc">Semantic audio embeddings</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-name">Jamendo</div>
+                    <div class="tech-desc">Auxiliary classifiers</div>
+                </div>
+            </div>
+
+            <div class="dimension-counter">
+                <div class="dimension-number">135+</div>
+                <div class="dimension-label">dimensional ML models analyzing every track</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Beta Request Form -->
+    <section class="beta-form-section" id="beta">
+        <div class="container">
+            <div class="section-header">
+                <div class="section-number">05</div>
+                <h2>Request Beta Access</h2>
+                <p>CrateBot is in early beta. Tell us about your library and we'll get you set up.</p>
+            </div>
+
+            <form class="beta-form" action="https://formsubmit.co/noah@noahraford.com" method="POST">
+                <!-- FormSubmit configuration -->
+                <input type="hidden" name="_subject" value="CrateBot Beta Request">
+                <input type="hidden" name="_captcha" value="false">
+                <input type="hidden" name="_template" value="table">
+                <input type="hidden" name="_next" value="https://yoursite.com/thanks.html">
+
+                <div class="form-group">
+                    <label for="name">Name or Reddit Handle</label>
+                    <input type="text" id="name" name="name" placeholder="e.g. DJ_CrateMaster or u/vinylhead" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="your@email.com" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="library_size">How many tracks in your library?</label>
+                    <select id="library_size" name="library_size" required>
+                        <option value="">Select...</option>
+                        <option value="under-500">Under 500</option>
+                        <option value="500-2000">500 - 2,000</option>
+                        <option value="2000-5000">2,000 - 5,000</option>
+                        <option value="5000-10000">5,000 - 10,000</option>
+                        <option value="10000-plus">10,000+</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="current_tagging">Do you currently use a tagging system?</label>
+                    <select id="current_tagging" name="current_tagging" required>
+                        <option value="">Select...</option>
+                        <option value="yes-strict">Yes — I tag everything consistently</option>
+                        <option value="yes-partial">Yes — but only some of my tracks are tagged</option>
+                        <option value="no-want-to">No — but I wish I did</option>
+                        <option value="no-dont-care">No — I don't really tag</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="tagging_discipline">How strict are you about tagging new tracks?</label>
+                    <select id="tagging_discipline" name="tagging_discipline" required>
+                        <option value="">Select...</option>
+                        <option value="always">I tag every new track before it goes in rotation</option>
+                        <option value="usually">I usually tag, but sometimes skip it</option>
+                        <option value="rarely">I rarely get around to tagging</option>
+                        <option value="never">I basically never tag new tracks</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="would_help">If CrateBot actually worked — auto-tagged your tracks the way you would — would that be genuinely useful to you?</label>
+                    <select id="would_help" name="would_help" required>
+                        <option value="">Select...</option>
+                        <option value="game-changer">Game-changer — I'd use it on everything</option>
+                        <option value="helpful">Helpful — would save me real time</option>
+                        <option value="nice-to-have">Nice to have — but not critical</option>
+                        <option value="not-really">Not really — I prefer manual tagging</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="dj_software">What DJ software do you use? (optional)</label>
+                    <input type="text" id="dj_software" name="dj_software" placeholder="e.g. Serato, Rekordbox, Traktor...">
+                </div>
+
+                <div class="form-group">
+                    <label for="notes">Anything else? (optional)</label>
+                    <textarea id="notes" name="notes" rows="3" placeholder="Questions, use cases, what you're hoping for..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-submit">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 2L11 13"/>
+                        <path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+                    </svg>
+                    Request Access
+                </button>
+            </form>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-logo">
+                    <div class="footer-logo-icon">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </div>
+                    CrateBot
+                </div>
+
+                <div class="footer-text">
+                    Built with Claude Code. For DJs, by a DJ.
+                </div>
+
+                <div class="footer-links">
+                    <a href="https://github.com/nraford7/CrateBot5" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://github.com/nraford7/CrateBot5#readme" target="_blank" rel="noopener">Documentation</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scroll animations -->
+    <script>
+        // Intersection Observer for scroll animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        // Observe all feature cards, steps, etc.
+        document.querySelectorAll('.feature-card, .step, .tech-item, .vibe-example').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            observer.observe(el);
+        });
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
 </html>
