@@ -2,6 +2,7 @@
 CrateBot FastAPI Server.
 REST API + WebSocket for the Electron frontend.
 """
+import gc
 import os
 import sys
 import json
@@ -744,13 +745,22 @@ async def start_training(request: TrainingRequest, background_tasks: BackgroundT
                         continue
 
                     features = tagger.analyzer.extract_features(str(mp3_path))
+                    # Only store what's needed for training to avoid memory accumulation
+                    # The full features dict contains large numpy arrays that would consume
+                    # excessive memory when processing thousands of files
                     training_data.append({
                         'file_path': str(mp3_path),
                         'file_name': mp3_path.name,
-                        'features': features,
                         'tags': training_tags,
                         'feature_vector': features['feature_vector'],
                     })
+                    # Explicitly clear features to help garbage collection
+                    del features
+
+                    # Periodic garbage collection to prevent memory accumulation
+                    # when processing large music libraries
+                    if i > 0 and i % 50 == 0:
+                        gc.collect()
 
                 except Exception as e:
                     logger.warning(f"Error processing {mp3_path}: {e}")
