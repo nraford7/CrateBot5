@@ -676,7 +676,7 @@ class VibeGenerator:
     """
     Generate vibe descriptions using Claude API.
 
-    Format: Intuitive adjective stacking (5-8 words, no commas)
+    Format: Intuitive adjective stacking (4-8 words, no commas)
 
     Examples:
     - "DOPE CHUGGING DESERT PEAK GROOVE"
@@ -934,7 +934,7 @@ Respond with ONLY the 2-3 word anchor. Lowercase. No quotes."""
             temperature: API temperature for variety (default 0.9)
 
         Returns:
-            Dict with 'vibe' (5-8 words, adjective stack format) and 'hook' (identified phrase or None)
+            Dict with 'vibe' (4-8 words, adjective stack format) and 'hook' (identified phrase or None)
         """
         prompt_context = context.to_prompt_context()
         user_prompt = self.USER_PROMPT_TEMPLATE.format(context=prompt_context)
