@@ -12,7 +12,7 @@ Audio fingerprinting and intelligent music analysis suite for DJs.
 - **184-dimensional feature vectors**: Combines librosa, Essentia, PANNs, CLAP, and Jamendo analysis
 - **Vibe generation**: Claude API-powered tags that capture what makes each track *distinctive*
 - **Mnemonic anchors**: Album-art-like memory hooks (2-3 word phrases that *feel* like the track)
-- **Hook detection**: Whisper-based vocal transcription to find memorable moments
+- **Hook detection**: Lyrics-first detection with Whisper fallback for finding memorable vocal moments
 - **PANNs integration**: Instrument and sound detection
 - **CLAP embeddings**: Semantic audio understanding
 - **Real-time progress**: WebSocket updates for long analysis tasks
@@ -47,6 +47,25 @@ velvet cathedral
 ```
 
 The modifier translates sonic qualities to other senses (warm, dusty, chrome, velvet). The anchor is something you can picture (wizard, panther, cathedral, shaman).
+
+## Hook Detection
+
+CrateBot uses a **lyrics-first** approach for detecting hooks (memorable vocal phrases):
+
+1. **Fetch lyrics** from free APIs (LRCLIB, Lyrics.ovh)
+2. **Analyze for repetition** - find chorus sections and repeated phrases
+3. **Fall back to Whisper** transcription if no lyrics available
+
+This dramatically improves accuracy for known tracks since lyrics are "ground truth" with no hallucination risk. Whisper can struggle with processed vocals (reverb, autotune, beat-synced mixing).
+
+```python
+# Automatic when using CachedHookTranscriber with artist/title
+transcriber = CachedHookTranscriber(use_lyrics_first=True)
+result = transcriber.detect_hook(path, artist="Artist", title="Song")
+print(result.hook)  # "feel the groove tonight"
+```
+
+See [docs/LYRICS-FIRST-HOOK-DETECTION.md](docs/LYRICS-FIRST-HOOK-DETECTION.md) for details.
 
 ## Architecture
 
