@@ -739,26 +739,13 @@ FIERCE AFRO PERCUSSION BREAKDOWN PEAK
 
 {context}
 
-## OUTLIER DETECTION
-Look at the detected sounds above. What's UNUSUAL for this genre?
-- Unexpected instruments? (flute in techno, accordion in house)
-- Unusual rhythm patterns? (broken beats in 4/4 genre)
-- Distinctive vocal treatment? (pitched, chopped, chanted)
+Find the ONE THING that makes this track memorable. Look for unusual/unexpected elements for this genre.
 
-## YOUR TASK
-Find the ONE THING that makes this track memorable, then build the tag:
+RESPOND WITH ONLY THESE TWO LINES (no explanation, no analysis):
+VIBE: [ENERGY 1-2 words] [DISTINCTIVE THING 2-4 words] [MOMENT word]
+HOOK: [catchy hook phrase, or NONE]
 
-1. ENERGY (1-2 words): What's the mood/feel?
-2. DISTINCTIVE THING (2-4 words): What would you tell a friend to listen for?
-3. MOMENT (1 word): When would you play this? (PEAK/BUILDER/OPENER/JOURNEY/SLAMMER/etc)
-
-ALSO: If there's a vocal transcription above, identify the most memorable hook phrase (3-6 words).
-
-Respond in this EXACT format:
-VIBE: [ENERGY] [DISTINCTIVE THING] [MOMENT]
-HOOK: [the catchy hook phrase, or NONE if no clear hook]
-
-Example:
+Example response:
 VIBE: DARK GRINDING SAW BASS PEAK
 HOOK: killers in the jungle"""
 
@@ -939,10 +926,10 @@ Respond with ONLY the 2-3 word anchor. Lowercase. No quotes."""
         prompt_context = context.to_prompt_context()
         user_prompt = self.USER_PROMPT_TEMPLATE.format(context=prompt_context)
 
-        # Strong nudge to vary opener words
+        # Strong nudge to vary energy words
         if recent_openers and len(recent_openers) > 0:
             openers_str = ", ".join(recent_openers[-6:])  # Last 6
-            user_prompt += f"\n\n⚠️ AVOID THESE OPENERS (recently used): {openers_str}\nPick a DIFFERENT first word from the palette. There are 40+ quality openers to choose from."
+            user_prompt += f"\n\n⚠️ AVOID THESE ENERGY WORDS (recently used): {openers_str}\nPick a DIFFERENT energy word."
 
         response = self._call_api_with_retry(
             messages=[{"role": "user", "content": user_prompt}],
@@ -960,10 +947,12 @@ Respond with ONLY the 2-3 word anchor. Lowercase. No quotes."""
 
         for line in raw_response.split('\n'):
             line = line.strip()
-            if line.upper().startswith('VIBE:'):
-                vibe = line[5:].strip().strip('"\'')
-            elif line.upper().startswith('HOOK:'):
-                hook_text = line[5:].strip().strip('"\'')
+            # Clean markdown formatting (e.g., **VIBE:** -> VIBE:)
+            clean_line = line.replace('**', '').replace('*', '')
+            if clean_line.upper().startswith('VIBE:'):
+                vibe = clean_line[5:].strip().strip('"\'')
+            elif clean_line.upper().startswith('HOOK:'):
+                hook_text = clean_line[5:].strip().strip('"\'')
                 if hook_text.upper() != 'NONE' and hook_text:
                     hook = hook_text.lower()
 
@@ -971,9 +960,14 @@ Respond with ONLY the 2-3 word anchor. Lowercase. No quotes."""
         if not vibe:
             for line in raw_response.split('\n'):
                 line = line.strip().strip('"\'')
+                # Skip markdown headers and empty lines
+                if line.startswith('#') or not line:
+                    continue
                 # Skip lines that look like prompt echoes or instructions
                 skip_patterns = ['looking at', 'process:', 'let me', 'based on', 'this track',
-                                 'analyzing', 'here is', 'here\'s', 'the vibe', 'i would', 'i\'d']
+                                 'analyzing', 'here is', 'here\'s', 'the vibe', 'i would', 'i\'d',
+                                 'outlier', 'detection', 'energy', 'distinctive', 'moment',
+                                 'i need to', 'analysis']
                 if any(pattern in line.lower() for pattern in skip_patterns):
                     continue
                 # Look for ALL CAPS lines with 3+ words (likely a vibe)
@@ -981,9 +975,15 @@ Respond with ONLY the 2-3 word anchor. Lowercase. No quotes."""
                 if len(words) >= 3 and line.isupper():
                     vibe = line
                     break
-            # Last resort: take first line but clean it
+            # Last resort: take first line but clean it, skipping headers
             if not vibe:
-                vibe = raw_response.split('\n')[0].strip('"\'')
+                for line in raw_response.split('\n'):
+                    line = line.strip().strip('"\'')
+                    if line and not line.startswith('#'):
+                        vibe = line
+                        break
+                if not vibe:
+                    vibe = "DARK DRIVING GROOVE PEAK"  # Emergency fallback
 
         # Clean up vibe - remove common prefixes/suffixes
         vibe = vibe.replace(',', '')
@@ -1040,12 +1040,8 @@ Respond with ONLY the 2-3 word anchor. Lowercase. No quotes."""
         # Extract text from response
         description = response.content[0].text.strip()
 
-        # Clean up - remove quotes if present
-        description = description.strip('"\'')
-
-        # Ensure it ends with appropriate punctuation
-        if description and not description.endswith(('.', '!', '?')):
-            description += '.'
+        # Clean up - remove quotes and trailing punctuation (mnemonic anchors are fragments)
+        description = description.strip('"\'').rstrip('.!?')
 
         return description
 
