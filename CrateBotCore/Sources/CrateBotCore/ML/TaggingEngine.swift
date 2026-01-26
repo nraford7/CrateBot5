@@ -51,13 +51,73 @@ public struct UserTagPredictions: Sendable {
     public let genre: String?
     public let timing: String?
     public let mood: String?
-    public let descriptive: [String]
 
-    public init(genre: String? = nil, timing: String? = nil, mood: String? = nil, descriptive: [String] = []) {
+    // Structured descriptive output (new)
+    public let bassType: String?          // From multi-class
+    public let rhythm: [String]           // Binary predictions
+    public let style: [String]            // Binary predictions
+    public let vibes: [String]            // Binary predictions
+    public let instruments: [String]      // Binary predictions
+    public let vocalType: String?         // From multi-class
+    public let acapella: Bool?            // Binary (separate classifier)
+
+    // Legacy flat array (computed for backwards compatibility)
+    public var descriptive: [String] {
+        var result: [String] = []
+        if let bass = bassType { result.append(bass) }
+        result.append(contentsOf: rhythm)
+        result.append(contentsOf: style)
+        result.append(contentsOf: vibes)
+        result.append(contentsOf: instruments)
+        if let vocal = vocalType { result.append(vocal) }
+        return result
+    }
+
+    // Convenience init with flat descriptive array (for backwards compat)
+    public init(
+        genre: String?,
+        timing: String?,
+        mood: String?,
+        descriptive: [String]
+    ) {
         self.genre = genre
         self.timing = timing
         self.mood = mood
-        self.descriptive = descriptive
+
+        // Parse descriptive array into structured fields
+        let organized = DescriptiveTagMapping.organize(descriptive)
+        self.bassType = organized[.bassType]?.first
+        self.rhythm = organized[.rhythm] ?? []
+        self.style = organized[.style] ?? []
+        self.vibes = organized[.vibes] ?? []
+        self.instruments = organized[.instruments] ?? []
+        self.vocalType = organized[.vocalType]?.first
+        self.acapella = nil
+    }
+
+    // Full structured init
+    public init(
+        genre: String?,
+        timing: String?,
+        mood: String?,
+        bassType: String?,
+        rhythm: [String],
+        style: [String],
+        vibes: [String],
+        instruments: [String],
+        vocalType: String?,
+        acapella: Bool?
+    ) {
+        self.genre = genre
+        self.timing = timing
+        self.mood = mood
+        self.bassType = bassType
+        self.rhythm = rhythm
+        self.style = style
+        self.vibes = vibes
+        self.instruments = instruments
+        self.vocalType = vocalType
+        self.acapella = acapella
     }
 }
 
@@ -388,12 +448,8 @@ public actor TaggingEngine {
             predictedTags.append(contentsOf: fallbackPredictions)
         }
 
-        let userPredictions: UserTagPredictions? = predictedTags.isEmpty ? nil : UserTagPredictions(
-            genre: nil,
-            timing: nil,
-            mood: nil,
-            descriptive: predictedTags
-        )
+        // Categorize predicted tags using model metadata
+        let userPredictions: UserTagPredictions? = predictedTags.isEmpty ? nil : categorizePredictions(predictedTags)
 
         return TaggingResult(
             userPredictions: userPredictions,
@@ -434,6 +490,58 @@ public actor TaggingEngine {
     }
 
     // MARK: - Private Helpers
+
+    /// Categorize predicted tags into genre, timing, mood, and descriptive based on model metadata
+    private func categorizePredictions(_ tags: [String]) -> UserTagPredictions {
+        guard let metadata = loadedMetadata else {
+            // No metadata - fall back to putting everything in descriptive
+            return UserTagPredictions(genre: nil, timing: nil, mood: nil, descriptive: tags)
+        }
+
+        var genre: String? = nil
+        var timing: String? = nil
+        var moodTags: [String] = []
+        var descriptiveTags: [String] = []
+
+        // Build lookup: tag name (lowercased) -> category
+        var tagToCategory: [String: String] = [:]
+        for (category, categoryTags) in metadata.tags {
+            for tag in categoryTags {
+                tagToCategory[tag.lowercased()] = category.lowercased()
+            }
+        }
+
+        for tag in tags {
+            let category = tagToCategory[tag.lowercased()] ?? "descriptive"
+
+            switch category {
+            case "genre":
+                // Take first genre only (single-select)
+                if genre == nil {
+                    genre = tag
+                }
+            case "timing":
+                // Take first timing only (single-select)
+                if timing == nil {
+                    timing = tag
+                }
+            case "mood":
+                moodTags.append(tag)
+            default:
+                descriptiveTags.append(tag)
+            }
+        }
+
+        // Join mood tags with comma for the mood field
+        let moodString = moodTags.isEmpty ? nil : moodTags.joined(separator: ", ")
+
+        return UserTagPredictions(
+            genre: genre,
+            timing: timing,
+            mood: moodString,
+            descriptive: descriptiveTags
+        )
+    }
 
     /// Get or create the fallback EffNet extractor (lazy initialization)
     private func getOrCreateEffNetExtractor() throws -> EffNetExtractor {

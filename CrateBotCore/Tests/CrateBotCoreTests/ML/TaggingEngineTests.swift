@@ -66,4 +66,47 @@ final class TaggingEngineTests: XCTestCase {
         memcpy(buffer.floatChannelData![0], samples, samples.count * MemoryLayout<Float>.size)
         return buffer
     }
+
+    // MARK: - UserTagPredictions structured descriptive tests
+
+    func testUserTagPredictionsHasStructuredDescriptive() {
+        // Create predictions with organized descriptive output
+        let predictions = UserTagPredictions(
+            genre: "House",
+            timing: "Peak",
+            mood: "Uplifting",
+            bassType: "Walking",
+            rhythm: ["Broken", "Driving"],
+            style: ["Afro"],
+            vibes: ["Funky", "Dark"],
+            instruments: ["Congas", "Organ"],
+            vocalType: "Chanting",
+            acapella: false
+        )
+
+        XCTAssertEqual(predictions.bassType, "Walking")
+        XCTAssertEqual(predictions.rhythm, ["Broken", "Driving"])
+        XCTAssertEqual(predictions.vocalType, "Chanting")
+        XCTAssertFalse(predictions.acapella ?? true)
+    }
+
+    func testUserTagPredictionsDescriptiveArrayBackwardsCompat() {
+        // Old-style descriptive array should still work
+        let predictions = UserTagPredictions(
+            genre: "House",
+            timing: nil,
+            mood: nil,
+            descriptive: ["Funky", "Walking", "Congas"]
+        )
+
+        // The computed descriptive property returns tags in subcategory order:
+        // bassType -> rhythm -> style -> vibes -> instruments -> vocalType
+        // So "Walking" (bassType) comes first, then "Funky" (vibes), then "Congas" (instruments)
+        XCTAssertEqual(predictions.descriptive, ["Walking", "Funky", "Congas"])
+
+        // Verify the structured fields were populated correctly
+        XCTAssertEqual(predictions.bassType, "Walking")
+        XCTAssertEqual(predictions.vibes, ["Funky"])
+        XCTAssertEqual(predictions.instruments, ["Congas"])
+    }
 }
