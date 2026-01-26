@@ -26,6 +26,14 @@ except ImportError:
     LyricsVerifier = None
     VerificationResult = None
 
+# Import lyrics-first hook detector
+try:
+    from .lyrics_first_hook import LyricsFirstHookDetector
+    HAS_LYRICS_FIRST = True
+except ImportError:
+    HAS_LYRICS_FIRST = False
+    LyricsFirstHookDetector = None
+
 # Optional faster-whisper import
 try:
     from faster_whisper import WhisperModel
@@ -656,13 +664,17 @@ class HookTranscriber:
 class CachedHookTranscriber:
     """
     Hook transcriber with caching to avoid re-processing files.
+
+    Supports lyrics-first mode which attempts to detect hooks from lyrics
+    before falling back to Whisper transcription.
     """
 
     def __init__(
         self,
         model_size: str = HookTranscriber.DEFAULT_MODEL,
         cache_dir: Optional[str] = None,
-        enable_lyrics_verification: bool = True
+        enable_lyrics_verification: bool = True,
+        use_lyrics_first: bool = True
     ):
         """
         Initialize cached hook transcriber.
@@ -671,13 +683,32 @@ class CachedHookTranscriber:
             model_size: Whisper model size
             cache_dir: Directory for cache file
             enable_lyrics_verification: Whether to verify hooks against lyrics
+            use_lyrics_first: Whether to use lyrics-first mode when artist/title available
         """
+        self._model_size = model_size
+        self._use_lyrics_first = use_lyrics_first and HAS_LYRICS_FIRST
+        self._lyrics_first_detector: Optional['LyricsFirstHookDetector'] = None
+
         self.transcriber = HookTranscriber(
             model_size=model_size,
             enable_lyrics_verification=enable_lyrics_verification
         )
         self._cache: Dict[str, HookResult] = {}
-        self._stats = {'cache_hits': 0, 'transcriptions': 0, 'lyrics_verified': 0}
+        self._stats = {'cache_hits': 0, 'transcriptions': 0, 'lyrics_verified': 0, 'lyrics_first_hits': 0}
+
+    @property
+    def lyrics_first_detector(self) -> Optional['LyricsFirstHookDetector']:
+        """Lazy-load lyrics-first detector on first use."""
+        if self._lyrics_first_detector is None and self._use_lyrics_first:
+            try:
+                self._lyrics_first_detector = LyricsFirstHookDetector(
+                    enable_transcription_fallback=True,
+                    whisper_model=self._model_size
+                )
+                logger.debug("LyricsFirstHookDetector initialized")
+            except Exception as e:
+                logger.warning(f"Could not initialize LyricsFirstHookDetector: {e}")
+        return self._lyrics_first_detector
 
     @property
     def is_available(self) -> bool:
@@ -695,12 +726,15 @@ class CachedHookTranscriber:
         """
         Detect hook with caching.
 
+        Uses lyrics-first mode when artist/title are available and the mode is enabled.
+        Falls back to Whisper transcription if lyrics lookup fails or is disabled.
+
         Args:
             audio_path: Path to audio file
             skip_cache: If True, always re-transcribe
-            artist: Artist name for lyrics verification
-            title: Song title for lyrics verification
-            verify_lyrics: Whether to verify hook against lyrics
+            artist: Artist name for lyrics lookup/verification
+            title: Song title for lyrics lookup/verification
+            verify_lyrics: Whether to verify hook against lyrics (for transcription fallback)
 
         Returns:
             HookResult with detected hook
@@ -712,7 +746,30 @@ class CachedHookTranscriber:
             self._stats['cache_hits'] += 1
             return self._cache[cache_key]
 
-        # Transcribe and detect
+        # Use lyrics-first if artist/title available and enabled
+        if self._use_lyrics_first and artist and title:
+            detector = self.lyrics_first_detector
+            if detector:
+                try:
+                    lyrics_result = detector.detect_hook(
+                        audio_path=audio_path,
+                        artist=artist,
+                        title=title
+                    )
+                    result = lyrics_result.to_hook_result()
+                    self._stats['lyrics_first_hits'] += 1
+
+                    if lyrics_result.source == "lyrics":
+                        self._stats['lyrics_verified'] += 1
+
+                    # Cache and return
+                    self._cache[cache_key] = result
+                    return result
+                except Exception as e:
+                    logger.warning(f"Lyrics-first detection failed for {artist} - {title}: {e}")
+                    # Fall through to standard transcription
+
+        # Fall back to standard transcription
         result = self.transcriber.detect_hook(
             audio_path,
             artist=artist,
