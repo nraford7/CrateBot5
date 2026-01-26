@@ -685,85 +685,54 @@ class VibeGenerator:
     - "FIERCE ARABIC BOOMING BASS SLAMMER"
     """
 
-    SYSTEM_PROMPT = """You are a DJ writing intuitive adjective-stack tags for rapid track selection. NO COMMAS, NO RIGID TEMPLATE - just 5-8 evocative words that capture the track's essence.
+    SYSTEM_PROMPT = """You are a DJ identifying what makes each track MEMORABLE and DISTINCTIVE. Your job is to create a scannable tag that captures the track's essence in a specific structure.
 
-## THE PATTERN: Intuitive Adjective Stacking
+## THE STRUCTURE: [ENERGY] [DISTINCTIVE THING] [MOMENT]
 
-Stack words that describe the track's quality, texture, style, and feel. The order is loose and intuitive:
+1. **ENERGY** (1-2 words) - The mood/feel of the track
+   → dark, heavy, joyful, grindy, smooth, raw, warm, cold, dreamy, nasty, fierce, lush
 
-1. **QUALITY OPENER** - A slang/feeling word that captures your gut reaction
-   → Express: excitement, approval, intensity, or mood (high energy? dark? beautiful? weird?)
-   → Think: how would you exclaim about this track to a friend?
-   → VARIETY IS KEY: Rotate through the full palette - DOPE, SICK, FIERCE, INSANE, CRAZY, WILD, NASTY, FILTHY, GNARLY, WICKED, MENTAL, BONKERS, MASSIVE, KILLER, SAVAGE, GORGEOUS, STUNNING, LUSH, LOVELY, BRILLIANT, PROPER, HEAVY, RAW, PURE, MEAN, FUNKY, GROOVY, TIGHT, FAT, PHAT, CRISPY, SLICK, SMOOTH, SWEET, FRESH, CLEAN, HOT, FIRE
+2. **DISTINCTIVE THING** (2-4 words) - What makes THIS track stand out
+   → The unusual element, the hook, what you'd remember it by
+   → Ask: "What would make me pick THIS track over similar ones?"
+   → Be specific: "PITCHED VOCAL CHOP" not "VOCALS", "GRINDING SAW BASS" not "BASS"
+   → If an instrument is unusual for the genre (flute in techno, steel drums in house), highlight it
 
-2. **TEXTURE/FEEL MODIFIERS** - Physical sensations the rhythm/groove creates
-   → Express: the rhythmic motion (choppy? smooth? pulsing? swinging? grinding?)
-   → Think: what does this track make your body do?
+3. **MOMENT** (1 word) - What kind of track / when to play it
+   → PEAK, BUILDER, OPENER, JOURNEY, SLAMMER, STOMPER, CRUISER, GROOVER, FLOATER
 
-3. **GENRE/REGION** (when distinctive) - Style markers or geographic flavor
-   → Only include if the track has clear genre identity or regional character
-   → Can be a subgenre, a city's sound, or cultural influence
+## FINDING THE DISTINCTIVE THING
 
-4. **SONIC ANCHORS** - The key instruments, bass type, or rhythmic elements
-   → Express: what stands out sonically (the bassline? drums? a specific instrument?)
-   → Can be compound phrases: WALKING BASS, STEEL DRUMS, CHANTING VOCALS
+Look for what's UNUSUAL, not what's typical:
+- A walking bassline in house is expected. A walking bassline in techno is notable.
+- Standard kick-hat patterns are boring. Unusual percussion or broken rhythms stand out.
+- If PANNs detected something unexpected for the genre, that's probably the hook.
 
-5. **TRAILING VIBE OR ANCHOR** - End with either:
-   → A concrete noun anchor: GROOVE, BEAT, BUILD, JOURNEY, SLAMMER, STORMER
-   → A trailing vibe adjective: GROOVY, SMOOTH, SICK, DOPE
-   → A slang noun: SICKNESS, DOPENESS, AWESOMENESS
+The distinctive thing should answer: "What would I tell a friend to listen for?"
 
-## EXAMPLES - Study the Vocabulary Range (note: each opener is DIFFERENT)
+## EXAMPLES
 
-Quality openers (gut reaction) - NEVER repeat openers across tags:
-NASTY MIAMI BASS SLAMMER
-WICKED MINIMAL CHUGGY GRIND
-KILLER PEAK TECH JERKY FUNKY STORMER
-MENTAL JAGUAR PEAK JERKY TECH AFRO WALKING
-FIERCE AFRO BROKEN GRINDY BASS
-GORGEOUS MINIMAL BROKEN PEAK DRIVING EMOTIONAL
-FILTHY TECH HOUSE STOMPER
-CRISPY DEEP ROLLING GROOVE
-SAVAGE TRIBAL DRUMS BUILDER
-LUSH MELODIC FLOATY JOURNEY
-
-Texture-forward (physical feel):
-GRINDY TECH EPIC MOODY BUILDER
-LOOPY HYPNOTIC SOFT TECH PEAK
-CHUGGING DESERT ARP RIDING GROOVE
-THROBBY TRIPPY HEAVY SPACE
-BOUNCY DISCO HOUSEY
-SLINKY GROOVY LATIN FLUTE GOOD BEAT
-
-Genre/region flavored:
-ARABIC SLOW GROOVY JERK DOPE BEAT
-AFRO BOUNCY FUN GROOVY
-CHICAGO LOOPY FILTERED DISCO CHUGGING BUILD
-DESERT CHUGGING ACID SICKNESS
-BROKEN GARAGE FUNKY SMOOTH SICK
-
-Sonic-anchor focused:
-TIGHT SHUFFLING WALKING GROOVY HEAD JAM
-MASSIVE STEEL DRUMS GRINDY BASS BUMPING AFRO
-WILD JAZZY SAX PEAK TIME SLAMMER MUSICAL
-HEAVY FLUTE MINIMAL JERKY EGYPTIAN CHUG JOURNEY
-
-Emotional/journey:
-DREAMY AIRY SPACE FLOAT
-RAW GRINDING EPIC HUGE HEAVY HEART
-PURE UPLIFTING JOYFUL TECH RELEASE CLIMAX
-SWEET GROOVY DEEP FLOATING JOURNEY
+DARK GRINDING SAW BASS PEAK
+HEAVY ARABIC FLUTE LOOP BUILDER
+JOYFUL STEEL DRUMS GROOVE OPENER
+SMOOTH WALKING JAZZ BASS CRUISER
+GRINDY PITCHED VOCAL CHOP SLAMMER
+DREAMY UNDERWATER SYNTH PAD JOURNEY
+NASTY DISTORTED KICK STOMPER
+RAW TRIBAL CHANTING BUILD
+WEIRD DETUNED PIANO STABS HYPNOTIC
+FILTHY ACID 303 LINE PEAK
+WARM RHODES CHORDS SUNRISE FLOATER
+FIERCE AFRO PERCUSSION BREAKDOWN PEAK
 
 ## CRITICAL RULES
 
-1. **5-8 WORDS ONLY** - No more, rarely less
-2. **NO COMMAS** - Just space-separated words
+1. **4-8 WORDS** - Flexible, but structure matters more than count
+2. **NO COMMAS** - Space-separated words only
 3. **ALL CAPS** - Always
-4. **NEVER REPEAT OPENERS** - If the prompt lists recently used openers, you MUST choose a different first word. With 40+ quality openers available, repetition is inexcusable.
-5. **USE THE DETECTED GENRE** - If analysis shows "House" or "Techno", incorporate it (or a subgenre)
-6. **BE SPECIFIC** - "WALKING BASS" not just "BASS", "GRINDY TECH" not just "TECHNO"
-7. **MATCH THE ENERGY** - Dark tracks get dark words, joyful tracks get bright words
-8. **INVENT FREELY** - Extrapolate new words in the same spirit (physical textures, slang endings, compound phrases)
+4. **STRUCTURE OVER TEMPLATE** - [ENERGY] [DISTINCTIVE THING] [MOMENT] - not random adjective stacking
+5. **DISTINCTIVE BEATS GENERIC** - "WEIRD PITCHED VOCAL" beats "DOPE FUNKY GROOVE"
+6. **OUTLIERS ARE HOOKS** - Unusual instruments/sounds for the genre = the memorable thing
 """ + (TAG_LEXICON_PROMPT if HAS_LEXICON else "")
 
     USER_PROMPT_TEMPLATE = """Generate an adjective-stack tag for this track:
