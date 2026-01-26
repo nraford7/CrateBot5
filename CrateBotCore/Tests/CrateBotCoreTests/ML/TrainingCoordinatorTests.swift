@@ -216,6 +216,68 @@ final class TrainingCoordinatorTests: XCTestCase {
         XCTAssertLessThanOrEqual(metadata.trainedAt, afterCreation)
     }
 
+    func testCreateModelMetadataSavesDescriptiveSubCategories() async {
+        let coordinator = TrainingCoordinator()
+
+        // Include some descriptive tags that map to known sub-categories
+        let categorizedTags: [String: Set<String>] = [
+            "Genre": ["House", "Techno"],
+            "Descriptive": ["Funky", "Dreamy", "Piano", "Punchy", "Broken"]
+        ]
+        let tags = ["House", "Techno", "Funky", "Dreamy", "Piano", "Punchy", "Broken"]
+
+        let metadata = await coordinator.createModelMetadata(
+            name: "TestModel",
+            tags: tags,
+            trainingFileCount: 500,
+            accuracy: 0.85,
+            categorizedTags: categorizedTags
+        )
+
+        // Verify descriptive sub-categories are populated
+        XCTAssertNotNil(metadata.descriptiveSubCategories)
+
+        let subCategories = metadata.descriptiveSubCategories!
+
+        // Funky and Dreamy should be in Vibes
+        XCTAssertNotNil(subCategories["Vibes"])
+        XCTAssertTrue(subCategories["Vibes"]?.contains("Funky") ?? false)
+        XCTAssertTrue(subCategories["Vibes"]?.contains("Dreamy") ?? false)
+
+        // Piano should be in Instruments
+        XCTAssertNotNil(subCategories["Instruments"])
+        XCTAssertTrue(subCategories["Instruments"]?.contains("Piano") ?? false)
+
+        // Punchy should be in BassType
+        XCTAssertNotNil(subCategories["BassType"])
+        XCTAssertTrue(subCategories["BassType"]?.contains("Punchy") ?? false)
+
+        // Broken should be in Rhythm
+        XCTAssertNotNil(subCategories["Rhythm"])
+        XCTAssertTrue(subCategories["Rhythm"]?.contains("Broken") ?? false)
+    }
+
+    func testCreateModelMetadataNoDescriptiveSubCategoriesWhenNoDescriptiveTags() async {
+        let coordinator = TrainingCoordinator()
+
+        // Only genre tags, no descriptive tags
+        let categorizedTags: [String: Set<String>] = [
+            "Genre": ["House", "Techno"]
+        ]
+        let tags = ["House", "Techno"]
+
+        let metadata = await coordinator.createModelMetadata(
+            name: "TestModel",
+            tags: tags,
+            trainingFileCount: 100,
+            accuracy: 0.9,
+            categorizedTags: categorizedTags
+        )
+
+        // Should be nil when there are no descriptive tags to organize
+        XCTAssertNil(metadata.descriptiveSubCategories)
+    }
+
     // MARK: - Reset Tests
 
     func testResetReturnsToIdleState() async {

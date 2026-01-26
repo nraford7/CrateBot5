@@ -90,6 +90,10 @@ public actor TrainingCoordinator {
         /// Tags to train (nil means all discovered tags)
         public let selectedTags: Set<String>?
 
+        /// Tags organized by category (Genre, Timing, Mood, Descriptive)
+        /// Used to properly categorize tags in model metadata
+        public let tagsByCategory: [String: Set<String>]
+
         /// Fraction of data to use for validation
         public let validationSplit: Double
 
@@ -105,6 +109,7 @@ public actor TrainingCoordinator {
         public init(
             modelName: String = "CustomModel",
             selectedTags: Set<String>? = nil,
+            tagsByCategory: [String: Set<String>] = [:],
             validationSplit: Double = 0.2,
             minSamplesPerTag: Int = 50,
             tagFieldMapping: TrainingDataCollector.TagFieldMapping = .default,
@@ -112,6 +117,7 @@ public actor TrainingCoordinator {
         ) {
             self.modelName = modelName
             self.selectedTags = selectedTags
+            self.tagsByCategory = tagsByCategory
             self.validationSplit = validationSplit
             self.minSamplesPerTag = minSamplesPerTag
             self.tagFieldMapping = tagFieldMapping
@@ -610,7 +616,8 @@ public actor TrainingCoordinator {
                 tags: trainedTagNames,
                 tagGroups: tagGroupInfos,
                 trainingFileCount: validTracks.count,
-                accuracy: avgAccuracy
+                accuracy: avgAccuracy,
+                categorizedTags: options.tagsByCategory
             )
 
             let metadataURL = outputDirectory.appendingPathComponent("\(options.modelName).json")
@@ -678,16 +685,18 @@ public actor TrainingCoordinator {
     ///   - tagGroups: Multi-class tag group info
     ///   - trainingFileCount: Number of files used for training
     ///   - accuracy: Average validation accuracy
+    ///   - categorizedTags: Tags organized by category from training options
     /// - Returns: ModelMetadata instance
     public func createModelMetadata(
         name: String,
         tags: [String],
         tagGroups: [TagGroupInfo] = [],
         trainingFileCount: Int,
-        accuracy: Double
+        accuracy: Double,
+        categorizedTags: [String: Set<String>] = [:]
     ) -> ModelMetadata {
-        // Group tags by category (simplified - actual implementation might use tag registry)
-        let tagsByCategory = groupTagsByCategory(tags)
+        // Use provided categories or fall back to grouping all under "General"
+        let tagsByCategory = groupTagsByCategory(tags, categorizedTags: categorizedTags)
 
         // Get current feature pipeline version
         let pipelineVersion = currentPipelineVersion()
@@ -702,6 +711,13 @@ public actor TrainingCoordinator {
             )
         }
 
+        // Organize descriptive tags by sub-category
+        let descriptiveTags = tagsByCategory["Descriptive"] ?? []
+        let organizedDescriptive = DescriptiveTagMapping.organize(descriptiveTags)
+        let subCategoriesDict: [String: [String]] = Dictionary(
+            uniqueKeysWithValues: organizedDescriptive.map { ($0.key.rawValue, $0.value) }
+        )
+
         return ModelMetadata(
             name: name,
             version: "1.0.0",
@@ -711,7 +727,8 @@ public actor TrainingCoordinator {
             categories: Array(tagsByCategory.keys).sorted(),
             tags: tagsByCategory,
             tagGroups: tagGroupMetadata,
-            accuracy: accuracy
+            accuracy: accuracy,
+            descriptiveSubCategories: subCategoriesDict.isEmpty ? nil : subCategoriesDict
         )
     }
 
@@ -726,10 +743,34 @@ public actor TrainingCoordinator {
         _state = newState
     }
 
-    private func groupTagsByCategory(_ tags: [String]) -> [String: [String]] {
-        // Simplified categorization - in production this would use a tag registry
-        // For now, put all tags under "General"
-        return ["General": tags.sorted()]
+    private func groupTagsByCategory(_ tags: [String], categorizedTags: [String: Set<String>]) -> [String: [String]] {
+        // If categories were provided, use them
+        guard !categorizedTags.isEmpty else {
+            // Fallback to putting all under "General"
+            return ["General": tags.sorted()]
+        }
+
+        // Build a lookup from tag name (lowercased) to category
+        var tagToCategory: [String: String] = [:]
+        for (category, categoryTags) in categorizedTags {
+            for tag in categoryTags {
+                tagToCategory[tag.lowercased()] = category
+            }
+        }
+
+        // Group trained tags by their category
+        var result: [String: [String]] = [:]
+        for tag in tags {
+            let category = tagToCategory[tag.lowercased()] ?? "Descriptive"
+            result[category, default: []].append(tag)
+        }
+
+        // Sort tags within each category
+        for (category, categoryTags) in result {
+            result[category] = categoryTags.sorted()
+        }
+
+        return result
     }
 
     /// Get the current feature pipeline version
