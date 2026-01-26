@@ -296,6 +296,35 @@ class LyricsFirstHookDetector:
         # Detect chorus and extract hook
         chorus_result = analyzer.detect_chorus(lyrics)
 
+        # Handle case where no chorus could be detected
+        if chorus_result is None:
+            # Try to extract hook phrase directly from repeated phrases
+            hook = analyzer.extract_hook_phrase(lyrics)
+            if not hook:
+                return LyricsFirstResult(
+                    hook=None,
+                    confidence=0.3,
+                    source="lyrics",
+                    occurrences=0,
+                    lyrics_source=lyrics_source,
+                    audio_verified=None,
+                    all_candidates=[],
+                    full_transcription=None
+                )
+            # Continue with extracted hook
+            repeated_phrases = analyzer.find_repeated_phrases(lyrics)
+            confidence = self._calculate_lyrics_confidence(hook, 1, repeated_phrases)
+            return LyricsFirstResult(
+                hook=hook,
+                confidence=confidence,
+                source="lyrics",
+                occurrences=1,
+                lyrics_source=lyrics_source,
+                audio_verified=None,
+                all_candidates=repeated_phrases[:5],
+                full_transcription=None
+            )
+
         # Handle instrumental tracks
         if chorus_result.is_instrumental:
             return LyricsFirstResult(

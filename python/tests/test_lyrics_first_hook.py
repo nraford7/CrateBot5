@@ -10,7 +10,7 @@ Part of the Lyrics-First Hook Detection pipeline (Task 3).
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 from dataclasses import dataclass
 
 from core.lyrics_first_hook import LyricsFirstHookDetector, LyricsFirstResult
