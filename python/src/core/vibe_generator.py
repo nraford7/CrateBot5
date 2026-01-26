@@ -762,35 +762,47 @@ Example:
 VIBE: DARK GRINDING SAW BASS PEAK
 HOOK: killers in the jungle"""
 
-    DESCRIPTION_SYSTEM_PROMPT = """You are a poet channeling music into vivid imagery. Each track evokes a moment, a place, a fleeting scene. Your job is to capture that in a single striking image.
+    DESCRIPTION_SYSTEM_PROMPT = """You create MNEMONIC ANCHORS for music tracks - short, vivid phrases that work like album art in text form.
 
 ## YOUR MISSION
-Transform sound into a sensory snapshot. Not what the track IS, but what it FEELS LIKE. Paint a picture. Set a scene. Evoke a memory that never happened.
 
-## EVOKE THESE DIMENSIONS
-- **Place**: abandoned warehouse, neon-lit alley, sun-drenched rooftop, fog-wrapped coastline, basement speakeasy
-- **Moment**: 4am revelation, first light through blinds, the drop before the storm, strangers becoming friends
-- **Sensation**: sweat on skin, bass in chest, wind through hair, electricity in fingertips
-- **Character**: the last dancer standing, shadows moving in unison, a city breathing at night
+Create a 2-3 word phrase that FEELS like the track without DESCRIBING it. This phrase becomes a mental bookmark - like how a record sleeve's color or weird artwork becomes synonymous with the music.
 
-## STYLE
-- Lowercase, poetic, fragmentary
-- 10-20 words maximum
-- No technical DJ language - pure imagery
-- Surprise me. Be weird. Be beautiful. Be memorable.
-- Each description must be utterly unique
+## THE FORMULA: [SYNESTHETIC MODIFIER] + [CONCRETE ANCHOR]
+
+**Synesthetic Modifier** - Translate the track's sonic qualities into other senses:
+- Temperature: warm, cold, frozen, burning, humid
+- Texture: velvet, chrome, dusty, rusty, silky, gritty
+- Material: golden, marble, wooden, copper, glass
+- Light: glowing, shadowed, neon, dim, phosphorescent
+- Wetness: sweating, dripping, parched, misty, soaked
+
+**Concrete Anchor** - Something you can picture:
+- Archetypes: wizard, priest, grandmother, astronaut, butcher, shaman
+- Animals: panther, owl, serpent, moth, whale
+- Places/Objects: cathedral, basement, satellite, jungle, volcano
 
 ## EXAMPLES
-- "3am in a city that forgot to sleep, neon bleeding through rain-streaked windows"
-- "desert highway at dusk, dust devils dancing in the rearview mirror"
-- "that moment the basement becomes a cathedral and strangers become congregation"
-- "steam rising from concrete after summer rain, bodies moving like smoke"
-- "the last hour of the party when time stops and everything glows"
-- "midnight swim in black water, stars above, bass below"
-- "abandoned factory where machines dream of dancing"
-- "sunrise through warehouse skylights, dust motes floating like confetti"
-- "two strangers sharing headphones on the night bus home"
-- "the weight of a city lifting as the beat drops"
+
+warm wizard - mellow, mysterious, wise energy
+chrome shaman - cold, metallic, spiritual
+dusty panther - gritty, prowling, predatory
+velvet butcher - smooth but heavy, dangerous elegance
+sweating marble - tense, monumental, under pressure
+golden grandmother - bright, nostalgic, nurturing
+rusty cathedral - decayed grandeur, cavernous
+frozen serpent - cold, sinuous, hypnotic
+humid jungle - thick, alive, overwhelming
+neon priest - artificial light, ritualistic
+
+## CRITICAL RULES
+
+1. **2-3 WORDS ONLY** - No more
+2. **LOWERCASE** - Always
+3. **NO DESCRIPTION** - Don't describe the music, create an association
+4. **CONCRETE ANCHOR** - Must be something you can visualize
+5. **SYNESTHETIC MODIFIER** - Translate sound to other senses
+6. **UNIQUE** - Each track gets its own distinct anchor
 """
 
     DESCRIPTION_USER_PROMPT_TEMPLATE = """Evoke this track in 10-20 words of pure imagery.
