@@ -57,4 +57,48 @@ final class TagGroupRegistryTests: XCTestCase {
         // Should NOT match unrelated tags
         XCTAssertNil(registry.groupName(for: "Stalking"))
     }
+
+    func testDefaultGroupsIncludeExpandedBassType() {
+        let registry = TagGroupRegistry.defaultGroups
+
+        // BassType should have 4 tags
+        XCTAssertNotNil(registry.groupName(for: "Punchy"))
+        XCTAssertNotNil(registry.groupName(for: "Walking"))
+        XCTAssertNotNil(registry.groupName(for: "BoomingBass"))
+        XCTAssertNotNil(registry.groupName(for: "GrindyBass"))
+
+        // All should be in same group
+        XCTAssertEqual(registry.groupName(for: "Punchy"), registry.groupName(for: "BoomingBass"))
+    }
+
+    func testDefaultGroupsIncludeVocalType() {
+        let registry = TagGroupRegistry.defaultGroups
+
+        // VocalType should exist with all 5 tags
+        XCTAssertNotNil(registry.groupName(for: "Singing"))
+        XCTAssertNotNil(registry.groupName(for: "Chanting"))
+        XCTAssertNotNil(registry.groupName(for: "Spoken Word"))
+        XCTAssertNotNil(registry.groupName(for: "Rap"))
+        XCTAssertNotNil(registry.groupName(for: "Instrumental"))
+
+        // All should be in same group
+        XCTAssertEqual(registry.groupName(for: "Singing"), registry.groupName(for: "Instrumental"))
+    }
+
+    func testOldVibeGroupRemoved() {
+        let registry = TagGroupRegistry.defaultGroups
+
+        // Old Vibe group (Dark, Dope) should NOT exist as a multi-class group
+        // These become binary vibes instead
+        let darkGroup = registry.groupName(for: "Dark")
+        let dopeGroup = registry.groupName(for: "Dope")
+
+        // They should either be nil (not in any group) or not in a "Vibe" group
+        if let darkGroup = darkGroup {
+            XCTAssertNotEqual(darkGroup, "Vibe")
+        }
+        if let dopeGroup = dopeGroup {
+            XCTAssertNotEqual(dopeGroup, "Vibe")
+        }
+    }
 }

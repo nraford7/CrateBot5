@@ -160,12 +160,10 @@ public struct TagGroupRegistry: Codable, Sendable, Equatable {
 
     // MARK: - Default Groups for Subjective Tags
 
-    public static var defaultGroups: TagGroupRegistry {
-        var registry = TagGroupRegistry()
-        registry.addGroup(name: "BassType", tags: ["Walking", "Rolling", "Punchy", "Deep", "Subby"])
-        registry.addGroup(name: "Vibe", tags: ["Dope", "Chill", "Dark", "Uplifting", "Melancholic"])
-        registry.addGroup(name: "Energy", tags: ["Low", "Medium", "High", "Peak"])
-        registry.addGroup(name: "Cultural", tags: ["Asian", "Latin", "African", "MiddleEastern", "European"])
-        return registry
-    }
+    public static let defaultGroups = TagGroupRegistry(groups: [
+        "BassType": ["Punchy", "Walking", "BoomingBass", "GrindyBass"],
+        "VocalType": ["Singing", "Chanting", "Spoken Word", "Rap", "Instrumental"],
+        "Energy": ["Low", "Medium", "High", "Peak"],
+        "Cultural": ["Asian", "Latin", "African", "MiddleEastern", "European"]
+    ])
 }
