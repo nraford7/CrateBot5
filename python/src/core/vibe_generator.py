@@ -805,17 +805,22 @@ neon priest - artificial light, ritualistic
 6. **UNIQUE** - Each track gets its own distinct anchor
 """
 
-    DESCRIPTION_USER_PROMPT_TEMPLATE = """Evoke this track in 10-20 words of pure imagery.
+    DESCRIPTION_USER_PROMPT_TEMPLATE = """Create a mnemonic anchor for this track.
 
 VIBE TAG: {vibe}
 {track_context}
 {context}
 
-Close your eyes. Let the sound paint a scene. Where are you? What do you see? What do you feel?
+The vibe tag above captures WHAT makes the track distinctive.
+Now translate that into a 2-3 word phrase that FEELS like the track.
 
-Write a single poetic fragment - lowercase, vivid, surprising. No genre words, no DJ speak. Just the image.
+Use: [synesthetic modifier] + [concrete anchor]
+- Modifier from senses: warm, cold, dusty, chrome, velvet, sweating, golden, rusty, frozen, humid
+- Anchor you can picture: wizard, panther, cathedral, grandmother, shaman, satellite, serpent
 
-Respond with ONLY the poetic fragment. No quotes."""
+This becomes the track's mental bookmark - like album art in text form.
+
+Respond with ONLY the 2-3 word anchor. Lowercase. No quotes."""
 
     def __init__(self, api_key: Optional[str] = None, model: str = CLAUDE_MODEL):
         """
