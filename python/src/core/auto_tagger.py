@@ -717,8 +717,18 @@ class AutoTagger:
                     if not silent:
                         print(f"  Transcribing vocals...")
 
+                    # Extract artist/title for lyrics verification
+                    artist = existing_tags.get('artist', '')
+                    title = existing_tags.get('title', '')
+
                     # Get transcription - Claude will identify hook from this
-                    hook_result = hook_transcriber.detect_hook(mp3_path)
+                    # Pass artist/title to enable lyrics verification
+                    hook_result = hook_transcriber.detect_hook(
+                        mp3_path,
+                        artist=artist,
+                        title=title,
+                        verify_lyrics=True
+                    )
 
                     if hook_result.transcription:
                         vocal_transcription = hook_result.transcription
