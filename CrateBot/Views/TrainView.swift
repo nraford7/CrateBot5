@@ -62,6 +62,21 @@ enum ID3Field: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Convert to ID3FrameType (for tag writing)
+    var writeFrameType: ID3FrameType {
+        switch self {
+        case .artist: return .artist
+        case .albumArtist: return .albumArtist
+        case .album: return .album
+        case .genre: return .genre
+        case .grouping: return .contentGroup
+        case .comments: return .comments
+        case .composer: return .composer
+        case .trackDescription: return .subtitle
+        case .bpm, .category, .movementName, .work: return .comments  // Fallback
+        }
+    }
+
     /// The ID3v2.3 frame identifier
     var frameID: String {
         switch self {
@@ -114,6 +129,16 @@ struct TagMappingConfiguration: Equatable, Codable {
             timingField: timingField.coreFieldType ?? .album,
             moodField: moodField.coreFieldType ?? .contentGroup,
             descriptiveField: descriptiveField.coreFieldType ?? .comments
+        )
+    }
+
+    /// Convert to WriteFieldMapping for ID3 tag writing
+    var writeMapping: WriteFieldMapping {
+        .init(
+            genreFrame: genreField.writeFrameType,
+            timingFrame: timingField.writeFrameType,
+            moodFrame: moodField.writeFrameType,
+            descriptiveFrame: descriptiveField.writeFrameType
         )
     }
 
@@ -375,7 +400,7 @@ struct TrainView: View {
             if let summary = viewModel.trainingSummary {
                 Task {
                     do {
-                        try await appState.loadModel(from: summary.modelURL)
+                        try await appState.loadModel(from: summary.modelURL, modelName: summary.modelName)
                         appState.showToast("Model '\(summary.modelName)' loaded", kind: .success)
                     } catch {
                         print("Failed to load trained model: \(error)")

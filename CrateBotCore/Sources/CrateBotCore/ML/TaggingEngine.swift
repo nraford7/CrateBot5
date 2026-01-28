@@ -170,11 +170,13 @@ public actor TaggingEngine {
     /// Load all classifiers from a model directory
     /// - Parameters:
     ///   - modelDirectory: Directory containing .mlmodel files and metadata JSON
+    ///   - modelName: Optional model name for locating metadata file (defaults to directory name)
     ///   - progress: Optional async callback for loading progress (0.0 to 1.0)
     ///   - featureConfig: Optional feature config override (defaults to auto-detection from metadata)
     /// - Returns: Number of classifiers loaded and the model name
     public func loadModel(
         from modelDirectory: URL,
+        modelName: String? = nil,
         progress: ((Double) async -> Void)? = nil,
         featureConfig: CombinedFeatureExtractor.FeatureConfig? = nil
     ) async throws -> (classifierCount: Int, modelName: String) {
@@ -196,8 +198,16 @@ public actor TaggingEngine {
         multiClassClassifiers.removeAll()
 
         // Load metadata first to detect feature dimension
-        let metadataURL = modelDirectory.appendingPathComponent("metadata.json")
-        let metadata = try? ModelMetadata.load(from: metadataURL)
+        // Use modelName.json if provided, otherwise fall back to metadata.json for legacy models
+        let effectiveModelName = modelName ?? modelDirectory.lastPathComponent
+        let metadataURL = modelDirectory.appendingPathComponent("\(effectiveModelName).json")
+        var metadata = try? ModelMetadata.load(from: metadataURL)
+
+        // Fall back to legacy metadata.json if model-named file not found
+        if metadata == nil {
+            let legacyMetadataURL = modelDirectory.appendingPathComponent("metadata.json")
+            metadata = try? ModelMetadata.load(from: legacyMetadataURL)
+        }
         loadedMetadata = metadata
 
         // Detect feature config from metadata if not provided
@@ -281,11 +291,11 @@ public actor TaggingEngine {
             }
         }
 
-        // Get model name from directory or metadata
-        let modelName = modelDirectory.lastPathComponent
-        loadedModelName = modelName
+        // Use provided model name, or fall back to directory name
+        let resolvedModelName = modelName ?? modelDirectory.lastPathComponent
+        loadedModelName = resolvedModelName
 
-        return (userClassifiers.count + multiClassClassifiers.count, modelName)
+        return (userClassifiers.count + multiClassClassifiers.count, resolvedModelName)
     }
 
     /// Load user-trained model (legacy single-classifier support)

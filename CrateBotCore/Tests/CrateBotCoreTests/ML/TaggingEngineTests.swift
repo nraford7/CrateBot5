@@ -110,4 +110,41 @@ final class TaggingEngineTests: XCTestCase {
         XCTAssertEqual(predictions.vibes, ["Funky"])
         XCTAssertEqual(predictions.instruments, ["Congas"])
     }
+
+    // MARK: - Model loading with modelName parameter
+
+    func testLoadModelWithModelName() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let metadata = ModelMetadata(
+            name: "TestModel",
+            version: "1.0",
+            pipelineVersion: "1.0",
+            trainedAt: Date(),
+            trainingFileCount: 100,
+            categories: ["Genre"],
+            tags: ["Genre": ["House", "Techno"]],
+            tagGroups: [],
+            accuracy: 0.85,
+            featureDimension: 1680
+        )
+        // Save metadata with model name (the new convention)
+        let metadataURL = tempDir.appendingPathComponent("TestModel.json")
+        try metadata.save(to: metadataURL)
+
+        // Create a dummy .mlmodel directory (empty directory is enough for file listing)
+        // Note: This won't be a valid model, but we can verify the metadata loading path
+        let dummyModelDir = tempDir.appendingPathComponent("House.mlmodel")
+        try FileManager.default.createDirectory(at: dummyModelDir, withIntermediateDirectories: true)
+
+        let engine = try TaggingEngine()
+        // loadModel will find the .mlmodel directory but fail to load it as a classifier
+        // Still, we can verify the model name is returned correctly based on the parameter
+        let (count, name) = try await engine.loadModel(from: tempDir, modelName: "TestModel")
+        XCTAssertEqual(name, "TestModel", "Model name should match the provided modelName parameter")
+        // No classifiers will actually load since the model file is empty
+        XCTAssertEqual(count, 0)
+    }
 }

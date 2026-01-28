@@ -47,8 +47,11 @@ final class AppState {
     // MARK: - Model Loading
 
     /// Load a trained model from a directory
+    /// - Parameters:
+    ///   - modelDirectory: Directory containing .mlmodel files and metadata JSON
+    ///   - modelName: Optional model name for locating metadata file (defaults to directory name)
     @MainActor
-    func loadModel(from modelDirectory: URL) async throws {
+    func loadModel(from modelDirectory: URL, modelName: String? = nil) async throws {
         // Set loading state
         isLoadingModel = true
         modelLoadingProgress = 0.0
@@ -67,7 +70,7 @@ final class AppState {
         }
 
         // Load model with progress reporting
-        let (count, name) = try await engine.loadModel(from: modelDirectory) { @MainActor [weak self] progress in
+        let (count, name) = try await engine.loadModel(from: modelDirectory, modelName: modelName) { @MainActor [weak self] progress in
             self?.modelLoadingProgress = progress
         }
 
@@ -77,7 +80,7 @@ final class AppState {
 
         // Update state on main actor
         modelLoaded = true
-        modelName = name
+        self.modelName = name
         loadedTagNames = await engine.loadedTags
 
         // Save as default model (copy into Application Support if needed)
