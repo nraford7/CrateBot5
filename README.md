@@ -2,20 +2,19 @@
 
 Audio fingerprinting and intelligent music analysis suite for DJs.
 
-**CrateBot** uses 135-dimensional machine learning models to analyze your music library and suggest songs you might want to use while playing live. Think of it as a DJ's intelligent crate-digging assistant.
+**CrateBot** uses machine learning to analyze your music library and suggest songs you might want to use while playing live. Think of it as a DJ's intelligent crate-digging assistant.
 
 > Built with Claude Code by someone who has basically never written a line of code in his life. See: [The Road Runner Economy](https://nraford7.github.io/road-runner-economy/)
 
 ## What It Does
 
 - **ML-powered tagging**: Predict Genre, Timing, Mood, and Descriptive tags for your tracks
-- **184-dimensional feature vectors**: Combines librosa, Essentia, PANNs, CLAP, and Jamendo analysis
+- **2192-dimensional feature vectors**: EffNet (1280) + Jamendo genres (400) + CLAP (512) embeddings
+- **Native Swift training**: Train custom models on your own tagged library using CoreML
 - **Vibe generation**: Claude API-powered tags that capture what makes each track *distinctive*
 - **Mnemonic anchors**: Album-art-like memory hooks (2-3 word phrases that *feel* like the track)
 - **Hook detection**: Lyrics-first detection with Whisper fallback for finding memorable vocal moments
-- **PANNs integration**: Instrument and sound detection
-- **CLAP embeddings**: Semantic audio understanding
-- **Real-time progress**: WebSocket updates for long analysis tasks
+- **Real-time progress**: Live updates for long analysis tasks
 - **Checkpoint recovery**: Resume interrupted training
 
 ## Vibe System
@@ -56,20 +55,13 @@ CrateBot uses a **lyrics-first** approach for detecting hooks (memorable vocal p
 2. **Analyze for repetition** - find chorus sections and repeated phrases
 3. **Fall back to Whisper** transcription if no lyrics available
 
-This dramatically improves accuracy for known tracks since lyrics are "ground truth" with no hallucination risk. Whisper can struggle with processed vocals (reverb, autotune, beat-synced mixing).
-
-```python
-# Automatic when using CachedHookTranscriber with artist/title
-transcriber = CachedHookTranscriber(use_lyrics_first=True)
-result = transcriber.detect_hook(path, artist="Artist", title="Song")
-print(result.hook)  # "feel the groove tonight"
-```
+This dramatically improves accuracy for known tracks since lyrics are "ground truth" with no hallucination risk.
 
 See [docs/LYRICS-FIRST-HOOK-DETECTION.md](docs/LYRICS-FIRST-HOOK-DETECTION.md) for details.
 
 ## Architecture
 
-Built with **SwiftUI** frontend and **Python FastAPI** backend.
+Built with **SwiftUI** and **CoreML** for fully native macOS performance.
 
 ```
 CrateBot5/
@@ -78,60 +70,48 @@ CrateBot5/
 │   ├── App/              # App entry, state management
 │   └── Views/            # SwiftUI views
 ├── CrateBotCore/         # Swift Package
-│   ├── Audio/            # Audio file processing
-│   ├── ML/               # CoreML tagging engine
+│   ├── Audio/            # Feature extraction, playback
+│   ├── ML/               # Training, inference (CoreML)
 │   ├── Tags/             # ID3 tag management
-│   ├── Networking/       # Backend API client
+│   ├── Data/             # SwiftData models, caching
+│   ├── Integrations/     # External API clients
 │   └── Resources/        # ML models (.mlpackage)
-├── backend/              # FastAPI server (Python)
-│   ├── api_server.py     # REST API + WebSocket endpoints
-│   ├── task_manager.py   # Async task handling
-│   └── models/           # Pydantic schemas
-└── python/               # Python core modules
-    ├── src/core/         # Audio analysis, vibe generation
-    └── tests/            # Test suite
+├── CrateBotModelLab/     # Model experimentation app
+└── Models/               # Trained models directory
 ```
-
-## API Endpoints
-
-- `POST /api/v1/train/start` - Start model training
-- `POST /api/v1/tag/file` - Tag a single file
-- `POST /api/v1/tag/batch` - Batch tagging
-- `POST /api/v1/vibe/file` - Generate vibe description
-- `GET /api/v1/model/info` - Current model info
-- `POST /api/v1/model/load` - Load a model
-- `WebSocket /api/v1/ws/progress/{task_id}` - Real-time progress
 
 ## Getting Started
 
-```bash
-# Install dependencies
-cd python
-pip install -r requirements.txt
-
-# Run server
-cd ..
-python backend/run_server.py
-```
-
-API docs available at: http://127.0.0.1:8742/docs
+1. **Open in Xcode**: `open CrateBot.xcodeproj`
+2. **Build and Run**: Cmd+R
+3. **Add Music Folders**: Grant access to your DJ library
+4. **Train a Model**: Tag some tracks, then train on your library
 
 ## Requirements
 
-- Python 3.10+
-- macOS (Windows/Linux planned)
-- Anthropic API key (for vibe generation)
+- macOS 14.0+ (Sonoma)
+- Xcode 15.0+
+- Anthropic API key (optional, for vibe generation)
 
 ## Key Features
 
 | Feature | Description |
 |---------|-------------|
-| Feature tracking | FeatureConfig metadata in models |
-| Tag transformation | Centralized in taxonomy.py |
-| Model loading | Lazy loading (instant startup) |
-| Multi-label training | Process-based parallelism (fast) |
-| Training validation | Pre-validation + clear error messages |
-| Model reload | Automatic after training |
+| Native Swift | No Python dependencies, pure macOS performance |
+| Feature caching | SwiftData persistence for extracted features |
+| Configurable tag groups | Define mutually exclusive tags for multi-class training |
+| Checkpoint recovery | Resume interrupted training sessions |
+| Security-scoped bookmarks | Sandbox-safe access to music folders |
+
+## Training Your Own Model
+
+1. **Tag your tracks** using ID3 metadata (Genre, Mood, etc.)
+2. **Configure field mapping** to tell CrateBot which ID3 frames to read
+3. **Set up tag groups** for mutually exclusive categories (e.g., Energy: Low/Medium/High)
+4. **Train** - CrateBot extracts features and trains CoreML classifiers
+5. **Use** - Tag new tracks with your trained model
+
+See [docs/SWIFT-TRAINING-PIPELINE.md](docs/SWIFT-TRAINING-PIPELINE.md) for detailed pipeline documentation.
 
 ## Status
 
