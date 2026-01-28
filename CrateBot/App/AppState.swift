@@ -1,5 +1,8 @@
 import SwiftUI
 import CrateBotCore
+import os.log
+
+private let logger = Logger(subsystem: "com.cratebot", category: "AppState")
 
 @Observable
 final class AppState {
@@ -118,18 +121,18 @@ final class AppState {
                 pathToPersist = destURL.path
             }
         } catch {
-            print("Failed to copy model into default location: \(error)")
+            logger.error("Failed to copy model into default location: \(error.localizedDescription)")
         }
 
         UserDefaults.standard.set(pathToPersist, forKey: "lastLoadedModelPath")
         do {
             try await modelManager.saveDefaultModelPath(pathToPersist)
         } catch {
-            print("Failed to persist default model path: \(error)")
+            logger.error("Failed to persist default model path: \(error.localizedDescription)")
         }
         await modelManager.setDefaultModel(name: URL(fileURLWithPath: pathToPersist).lastPathComponent)
 
-        print("Loaded model '\(name)' with \(count) classifiers: \(loadedTagNames)")
+        logger.info("Loaded model '\(name)' with \(count) classifiers: \(self.loadedTagNames)")
     }
 
     /// Load the default/bundled model on app startup
@@ -143,7 +146,7 @@ final class AppState {
                     try await loadModel(from: url)
                     return
                 } catch {
-                    print("Failed to load last model: \(error)")
+                    logger.warning("Failed to load last model: \(error.localizedDescription)")
                 }
             }
         }
@@ -154,7 +157,7 @@ final class AppState {
                     try await loadModel(from: url)
                     return
                 } catch {
-                    print("Failed to load persisted default model: \(error)")
+                    logger.warning("Failed to load persisted default model: \(error.localizedDescription)")
                 }
             }
         }
@@ -165,7 +168,7 @@ final class AppState {
                 try await loadModel(from: latestModelDir)
                 return
             } catch {
-                print("Failed to load latest trained model: \(error)")
+                logger.warning("Failed to load latest trained model: \(error.localizedDescription)")
             }
         }
 
@@ -175,7 +178,7 @@ final class AppState {
                 try await loadModel(from: bundledModelURL)
                 return
             } catch {
-                print("Failed to load bundled model: \(error)")
+                logger.warning("Failed to load bundled model: \(error.localizedDescription)")
             }
         }
 
@@ -192,7 +195,7 @@ final class AppState {
                 try await loadModel(from: firstModel)
             }
         } catch {
-            print("No models available: \(error)")
+            logger.info("No models available: \(error.localizedDescription)")
         }
     }
 
@@ -283,7 +286,9 @@ final class AppState {
             if startAccessImmediately {
                 // Start security-scoped access immediately while NSOpenPanel's grant is active
                 self.securityAccessActive = url.startAccessingSecurityScopedResource()
-                print("QueuedFile startAccessImmediately: \(securityAccessActive) for \(url.path)")
+                let accessActive = self.securityAccessActive
+                let filePath = url.path
+                logger.debug("QueuedFile startAccessImmediately: \(accessActive) for \(filePath)")
 
                 // Create bookmark while we have access
                 if self.securityAccessActive {
@@ -312,7 +317,8 @@ final class AppState {
                     bookmarkDataIsStale: &isStale
                 ) {
                     let started = resolvedURL.startAccessingSecurityScopedResource()
-                    print("QueuedFile startAccess (bookmark): \(started) for \(url.path)")
+                    let filePath = url.path
+                    logger.debug("QueuedFile startAccess (bookmark): \(started) for \(filePath)")
                     if started {
                         securityAccessActive = true
                         return true
@@ -322,7 +328,8 @@ final class AppState {
 
             // Try direct access
             let started = url.startAccessingSecurityScopedResource()
-            print("QueuedFile startAccess (direct): \(started) for \(url.path)")
+            let filePath = url.path
+            logger.debug("QueuedFile startAccess (direct): \(started) for \(filePath)")
             if started {
                 securityAccessActive = true
                 return true

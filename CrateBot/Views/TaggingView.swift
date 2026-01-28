@@ -2,6 +2,9 @@ import SwiftUI
 import CrateBotCore
 import UniformTypeIdentifiers
 import AppKit
+import os.log
+
+private let logger = Logger(subsystem: "com.cratebot", category: "TaggingView")
 
 struct TaggingView: View {
     @Environment(AppState.self) private var appState
@@ -515,7 +518,7 @@ struct TaggingView: View {
                 do {
                     try appState.bookmarkManager.addFolderAccess(url)
                 } catch {
-                    print("Failed to bookmark folder: \(error)")
+                    logger.warning("Failed to bookmark folder: \(error.localizedDescription)")
                 }
                 let mp3s = findMP3Files(in: url)
                 filesToAdd.append(contentsOf: mp3s.map { ($0, false) })
@@ -728,16 +731,16 @@ struct TaggingView: View {
             var mutableFile = file
 
             if hasFolderAccess {
-                print("TaggingView: using folder-scoped access for \(file.url.path)")
+                logger.debug("Using folder-scoped access for \(file.url.path)")
             } else {
                 startedFileAccess = mutableFile.startAccess()
-                print("TaggingView: started file access: \(startedFileAccess) for \(file.url.path)")
+                logger.debug("Started file access: \(startedFileAccess) for \(file.url.path)")
             }
 
             // Defer cleanup to after ALL file operations complete (end of for loop iteration)
             defer {
                 if startedFileAccess {
-                    print("TaggingView: stopping file access for \(file.url.path)")
+                    logger.debug("Stopping file access for \(file.url.path)")
                     mutableFile.stopAccess()
                     Task { @MainActor in
                         if index < appState.queuedFiles.count {
@@ -765,7 +768,9 @@ struct TaggingView: View {
             do {
                 let result = try await engine.analyze(url: file.url)
 
-                var tagsToWrite = TagsToWrite(overwrite: overwrite)
+                // Load user's field mapping configuration to write tags to correct ID3 frames
+                let tagMappingConfig = TagMappingConfiguration.load()
+                var tagsToWrite = TagsToWrite(overwrite: overwrite, fieldMapping: tagMappingConfig.writeMapping)
                 var writtenTags = AppState.WrittenTags()
 
                 if let user = result.userPredictions {

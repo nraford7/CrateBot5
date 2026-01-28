@@ -3,6 +3,9 @@ import CrateBotCore
 import AppKit
 import Combine
 import UniformTypeIdentifiers
+import os.log
+
+private let logger = Logger(subsystem: "com.cratebot", category: "TrainView")
 
 // MARK: - ID3 Field Configuration
 
@@ -406,7 +409,7 @@ struct TrainView: View {
                         try await appState.loadModel(from: summary.modelURL, modelName: summary.modelName)
                         appState.showToast("Model '\(summary.modelName)' loaded", kind: .success)
                     } catch {
-                        print("Failed to load trained model: \(error)")
+                        logger.error("Failed to load trained model: \(error.localizedDescription)")
                         appState.showToast("Failed to load model: \(error.localizedDescription)", kind: .error)
                     }
                 }

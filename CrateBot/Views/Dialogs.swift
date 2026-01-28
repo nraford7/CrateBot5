@@ -1,5 +1,8 @@
 import SwiftUI
 import CrateBotCore
+import os.log
+
+private let logger = Logger(subsystem: "com.cratebot", category: "Dialogs")
 
 // MARK: - ConfirmationDialog ViewModifier
 
@@ -200,7 +203,7 @@ struct ProgressDialog: View {
         message: "This will remove all files from the queue.",
         isPresented: $showConfirm
     ) {
-        print("Queue cleared!")
+        logger.debug("Queue cleared!")
     }
 }
 
@@ -230,7 +233,7 @@ struct ProgressDialog: View {
         prompt: "Enter new name",
         text: $modelName
     ) { newName in
-        print("Renamed to: \(newName)")
+        logger.debug("Renamed to: \(newName)")
     }
 }
 
@@ -242,7 +245,7 @@ struct ProgressDialog: View {
         prompt: "Enter playlist name",
         text: $newName
     ) { name in
-        print("Created: \(name)")
+        logger.debug("Created: \(name)")
     }
 }
 
@@ -252,7 +255,7 @@ struct ProgressDialog: View {
         progress: 0.35,
         status: "Processing file 3 of 10..."
     ) {
-        print("Cancelled!")
+        logger.debug("Cancelled!")
     }
 }
 
