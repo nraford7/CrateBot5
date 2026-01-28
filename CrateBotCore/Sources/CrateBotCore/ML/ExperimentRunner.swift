@@ -180,7 +180,10 @@ public actor ExperimentRunner {
         tracks = await dataCollector.extractFeatures(for: tracks)
 
         // Filter to tracks with features
-        let tracksWithFeatures = tracks.filter { $0.features != nil && !$0.features!.isEmpty }
+        let tracksWithFeatures = tracks.filter { track in
+            guard let features = track.features else { return false }
+            return !features.isEmpty
+        }
 
         // Sample if needed
         let sampledTracks = sampler.sample(

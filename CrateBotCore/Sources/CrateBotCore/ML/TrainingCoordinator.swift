@@ -464,7 +464,10 @@ public actor TrainingCoordinator {
             }
 
             // Filter to only tracks with features
-            let validTracks = tracksWithFeatures.filter { $0.features != nil && !$0.features!.isEmpty }
+            let validTracks = tracksWithFeatures.filter { track in
+                guard let features = track.features else { return false }
+                return !features.isEmpty
+            }
             let tracksWithInvalidFeatures = tracksWithFeatures.count - validTracks.count
 
             guard !validTracks.isEmpty else {
