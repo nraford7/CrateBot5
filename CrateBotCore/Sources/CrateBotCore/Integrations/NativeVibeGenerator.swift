@@ -130,7 +130,7 @@ public actor NativeVibeGenerator {
             throw NativeVibeError.apiKeyNotConfigured
         }
 
-        logger.info("Generating vibe for context: \(context.genre) at \(context.tempo) BPM")
+        logger.info("Generating vibe for: \(context.genre) | \(context.tempo) BPM | \(context.mood)")
 
         // Build the prompt
         let prompt = Self.buildPrompt(context: context)
@@ -222,8 +222,8 @@ public actor NativeVibeGenerator {
     /// - Parameter response: The raw API response text
     /// - Returns: The extracted vibe, or nil if not found
     public static func parseVibeFromResponse(_ response: String) -> String? {
-        // Look for "VIBE:" pattern (case-sensitive for now, as instructed in prompt)
-        let pattern = "VIBE:\\s*(.+?)(?:\\n|$)"
+        // Look for "VIBE:" pattern (case-insensitive to handle model variations)
+        let pattern = "(?i)VIBE:\\s*(.+?)(?:\\n|$)"
 
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []),
               let match = regex.firstMatch(
