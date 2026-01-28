@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import CrateBotCore
 import AppKit
+import os.log
 
 @main
 struct CrateBotApp: App {
@@ -55,7 +56,42 @@ struct CrateBotApp: App {
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // Log the error
+            Logger(subsystem: "com.cratebot", category: "App")
+                .error("ModelContainer creation failed: \(error.localizedDescription). Attempting recovery...")
+
+            // Try to recover by deleting corrupted database
+            guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+                Logger(subsystem: "com.cratebot", category: "App")
+                    .error("Cannot access Application Support directory, using in-memory storage")
+                let memoryConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+                do {
+                    return try ModelContainer(for: schema, configurations: [memoryConfig])
+                } catch {
+                    fatalError("Cannot create even in-memory ModelContainer: \(error)")
+                }
+            }
+            let dbPath = appSupport.appendingPathComponent("default.store")
+
+            do {
+                if FileManager.default.fileExists(atPath: dbPath.path) {
+                    try FileManager.default.removeItem(at: dbPath)
+                    Logger(subsystem: "com.cratebot", category: "App")
+                        .info("Removed corrupted database, retrying...")
+                }
+                return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            } catch {
+                // Last resort: use in-memory storage
+                Logger(subsystem: "com.cratebot", category: "App")
+                    .error("Recovery failed, using in-memory storage: \(error.localizedDescription)")
+                let memoryConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+                do {
+                    return try ModelContainer(for: schema, configurations: [memoryConfig])
+                } catch {
+                    // This should never happen with in-memory, but handle it
+                    fatalError("Cannot create even in-memory ModelContainer: \(error)")
+                }
+            }
         }
     }()
 
