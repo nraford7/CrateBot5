@@ -201,15 +201,19 @@ public actor ModelTrainer {
         config: TrainingConfig = TrainingConfig(),
         progress: ((TrainingProgress) async -> Void)? = nil
     ) async throws -> [TrainingResult] {
-        // Filter tracks that have features
-        let tracksWithFeatures = tracks.filter { $0.features != nil && !$0.features!.isEmpty }
+        // Filter tracks that have features (using safe unwrapping)
+        let tracksWithFeatures = tracks.compactMap { track -> TaggedTrack? in
+            guard let features = track.features, !features.isEmpty else { return nil }
+            return track
+        }
 
-        guard !tracksWithFeatures.isEmpty else {
+        guard let firstTrack = tracksWithFeatures.first,
+              let features = firstTrack.features else {
             throw TrainerError.noFeaturesAvailable
         }
 
-        // Determine feature count from first track
-        let featureCount = tracksWithFeatures[0].features!.count
+        // Determine feature count from first track (now safe)
+        let featureCount = features.count
 
         // Create output directory if needed
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
