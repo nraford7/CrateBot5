@@ -32,7 +32,10 @@ let package = Package(
         .testTarget(
             name: "CrateBotCoreTests",
             dependencies: ["CrateBotCore"],
-            path: "Tests/CrateBotCoreTests"
+            path: "Tests/CrateBotCoreTests",
+            resources: [
+                .copy("Resources/example.mp3")
+            ]
         ),
     ]
 )

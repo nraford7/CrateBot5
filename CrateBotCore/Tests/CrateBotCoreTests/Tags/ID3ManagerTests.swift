@@ -472,13 +472,11 @@ final class ID3ManagerTests: XCTestCase {
     // MARK: - ID3Manager Essentia Write/Read Tests
 
     /// Helper to create a writable test MP3 file
-    /// Note: Uses a bundled test resource path to avoid sandbox permission issues
+    /// Note: Uses a bundled test resource to avoid sandbox permission issues
     private func createWritableTestMP3() throws -> (url: URL, cleanup: () -> Void) {
-        // Try to find an example MP3 in the ID3TagEditor dependency
-        let exampleURL = URL(fileURLWithPath: "/Users/noahraford/CrateBot4/.worktrees/swift-ui-phase/CrateBotCore/.build/checkouts/ID3TagEditor/Tests/Examples/example.mp3")
-
-        guard FileManager.default.fileExists(atPath: exampleURL.path) else {
-            throw XCTSkip("Example MP3 file not available")
+        // Find the example MP3 in the test bundle
+        guard let exampleURL = Bundle.module.url(forResource: "example", withExtension: "mp3") else {
+            throw XCTSkip("Example MP3 file not found in test bundle")
         }
 
         // Create temp directory with unique name
