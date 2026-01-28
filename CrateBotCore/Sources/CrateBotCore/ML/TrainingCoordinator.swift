@@ -94,27 +94,19 @@ public actor TrainingCoordinator {
         /// Used to properly categorize tags in model metadata
         public let tagsByCategory: [String: Set<String>]
 
-        /// Fraction of data to use for validation
-        public let validationSplit: Double
-
-        /// Minimum samples required per tag
-        public let minSamplesPerTag: Int
-
         /// Mapping of ID3 fields to training categories
         public let tagFieldMapping: TrainingDataCollector.TagFieldMapping
 
         /// Registry of mutually exclusive tag groups for multi-class classification
         public let tagGroupRegistry: TagGroupRegistry
 
-        /// Training hyperparameters configuration
+        /// Training hyperparameters configuration (includes minSamplesPerTag, validationSplit)
         public let configuration: TrainingConfiguration
 
         public init(
             modelName: String = "CustomModel",
             selectedTags: Set<String>? = nil,
             tagsByCategory: [String: Set<String>] = [:],
-            validationSplit: Double = 0.2,
-            minSamplesPerTag: Int = 50,
             tagFieldMapping: TrainingDataCollector.TagFieldMapping = .default,
             tagGroupRegistry: TagGroupRegistry = .defaultGroups,
             configuration: TrainingConfiguration = .default
@@ -122,8 +114,6 @@ public actor TrainingCoordinator {
             self.modelName = modelName
             self.selectedTags = selectedTags
             self.tagsByCategory = tagsByCategory
-            self.validationSplit = validationSplit
-            self.minSamplesPerTag = minSamplesPerTag
             self.tagFieldMapping = tagFieldMapping
             self.tagGroupRegistry = tagGroupRegistry
             self.configuration = configuration

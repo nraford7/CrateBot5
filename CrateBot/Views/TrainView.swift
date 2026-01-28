@@ -265,13 +265,16 @@ final class TrainingViewModel: ObservableObject {
         if !selectedTags.mood.isEmpty { tagsByCategory["Mood"] = selectedTags.mood }
         if !selectedTags.descriptive.isEmpty { tagsByCategory["Descriptive"] = selectedTags.descriptive }
 
+        // Build configuration with user's settings
+        var config = TrainingConfiguration.default
+        config.minSamplesPerTag = minSamplesPerTag
+
         let options = TrainingCoordinator.TrainingOptions(
             modelName: trimmedName,
             selectedTags: selectedTags.allTags,
             tagsByCategory: tagsByCategory,
-            validationSplit: 0.2,
-            minSamplesPerTag: minSamplesPerTag,
-            tagFieldMapping: tagMapping.coreMapping
+            tagFieldMapping: tagMapping.coreMapping,
+            configuration: config
         )
 
         trainingTask = Task {

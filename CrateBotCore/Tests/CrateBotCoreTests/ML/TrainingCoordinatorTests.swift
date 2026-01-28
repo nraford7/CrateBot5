@@ -83,23 +83,28 @@ final class TrainingCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(options.modelName, "CustomModel")
         XCTAssertNil(options.selectedTags)
-        XCTAssertEqual(options.validationSplit, 0.2, accuracy: 0.001)
-        XCTAssertEqual(options.minSamplesPerTag, 50)
+        // validationSplit and minSamplesPerTag now live in configuration
+        XCTAssertEqual(options.configuration.validationSplit, 0.2, accuracy: 0.001)
+        XCTAssertEqual(options.configuration.minSamplesPerTag, 50)
     }
 
     func testTrainingOptionsCustomValues() {
         let selectedTags: Set<String> = ["House", "Techno", "Ambient"]
+        var config = TrainingConfiguration.default
+        config.validationSplit = 0.3
+        config.minSamplesPerTag = 100
+
         let options = TrainingCoordinator.TrainingOptions(
             modelName: "MyCustomModel",
             selectedTags: selectedTags,
-            validationSplit: 0.3,
-            minSamplesPerTag: 100
+            configuration: config
         )
 
         XCTAssertEqual(options.modelName, "MyCustomModel")
         XCTAssertEqual(options.selectedTags, selectedTags)
-        XCTAssertEqual(options.validationSplit, 0.3, accuracy: 0.001)
-        XCTAssertEqual(options.minSamplesPerTag, 100)
+        // validationSplit and minSamplesPerTag now accessed via configuration
+        XCTAssertEqual(options.configuration.validationSplit, 0.3, accuracy: 0.001)
+        XCTAssertEqual(options.configuration.minSamplesPerTag, 100)
     }
 
     // MARK: - TrainingSummary Tests
