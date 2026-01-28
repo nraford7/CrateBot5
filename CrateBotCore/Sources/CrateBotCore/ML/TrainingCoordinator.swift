@@ -493,6 +493,16 @@ public actor TrainingCoordinator {
             let outputDirectory = try await modelManager.modelsDirectory()
                 .appendingPathComponent(options.modelName)
 
+            // Clean stale models from previous training runs
+            // This prevents old .mlmodel files from persisting when retraining
+            // with a different set of tags (Fresh Eyes issue #3)
+            let fileManager = FileManager.default
+            if fileManager.fileExists(atPath: outputDirectory.path) {
+                logger.info("Cleaning existing model directory: \(outputDirectory.path)")
+                try fileManager.removeItem(at: outputDirectory)
+            }
+            try fileManager.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+
             let trainingConfig = TrainingConfig(
                 validationSplit: options.configuration.validationSplit,
                 minSamplesPerTag: options.configuration.minSamplesPerTag,
