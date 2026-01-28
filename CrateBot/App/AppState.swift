@@ -44,6 +44,27 @@ final class AppState {
     private(set) var taggingEngine: TaggingEngine?
     private let modelManager = ModelManager()
 
+    // MARK: - Secure Credentials
+
+    /// Get the Anthropic API key from Keychain
+    var anthropicAPIKey: String? {
+        KeychainManager.shared.retrieve(key: .anthropicAPIKey)
+    }
+
+    /// Set the Anthropic API key in Keychain
+    func setAnthropicAPIKey(_ key: String?) throws {
+        if let key = key, !key.isEmpty {
+            try KeychainManager.shared.save(key, for: .anthropicAPIKey)
+        } else {
+            try KeychainManager.shared.delete(key: .anthropicAPIKey)
+        }
+    }
+
+    /// Check if API key is configured
+    var hasAnthropicAPIKey: Bool {
+        KeychainManager.shared.exists(key: .anthropicAPIKey)
+    }
+
     // MARK: - Model Loading
 
     /// Load a trained model from a directory
