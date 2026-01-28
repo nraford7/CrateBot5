@@ -122,11 +122,31 @@ public struct TrainingProgress: Sendable {
     /// Total number of tags to train
     public let totalTags: Int
 
-    public init(phase: Phase, currentTag: String?, tagsCompleted: Int, totalTags: Int) {
+    /// Current item being processed (e.g., "house.mlmodel" or "track_01.mp3")
+    public let currentItem: String?
+
+    /// Validation accuracy for the current/last trained tag
+    public let accuracy: Double?
+
+    /// Optional status message
+    public let message: String?
+
+    public init(
+        phase: Phase,
+        currentTag: String? = nil,
+        tagsCompleted: Int = 0,
+        totalTags: Int = 0,
+        currentItem: String? = nil,
+        accuracy: Double? = nil,
+        message: String? = nil
+    ) {
         self.phase = phase
         self.currentTag = currentTag
         self.tagsCompleted = tagsCompleted
         self.totalTags = totalTags
+        self.currentItem = currentItem
+        self.accuracy = accuracy
+        self.message = message
     }
 
     /// Progress as a fraction (0.0 to 1.0)
