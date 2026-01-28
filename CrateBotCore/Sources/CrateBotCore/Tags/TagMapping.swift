@@ -188,6 +188,90 @@ public struct ExtractedTags: Sendable, Equatable {
     }
 }
 
+// MARK: - Write Field Mapping
+
+/// Configuration for which ID3 frames to write each category to.
+/// This allows the write operation to match the user's configured field mapping
+/// used during training data collection.
+public struct WriteFieldMapping: Sendable, Equatable, Codable {
+    /// Frame to write genre to (default: TCON)
+    public var genreFrame: ID3FrameType
+
+    /// Frame to write timing to (default: TALB)
+    public var timingFrame: ID3FrameType
+
+    /// Frame to write mood to (default: TIT1)
+    public var moodFrame: ID3FrameType
+
+    /// Frame to write descriptive/comments to (default: COMM)
+    public var descriptiveFrame: ID3FrameType
+
+    public init(
+        genreFrame: ID3FrameType = .genre,
+        timingFrame: ID3FrameType = .album,
+        moodFrame: ID3FrameType = .contentGroup,
+        descriptiveFrame: ID3FrameType = .comments
+    ) {
+        self.genreFrame = genreFrame
+        self.timingFrame = timingFrame
+        self.moodFrame = moodFrame
+        self.descriptiveFrame = descriptiveFrame
+    }
+
+    /// Default field mapping (legacy behavior)
+    public static let `default` = WriteFieldMapping()
+}
+
+/// ID3 frame types for configurable field mapping
+public enum ID3FrameType: String, Sendable, CaseIterable, Codable {
+    case title          // TIT2
+    case artist         // TPE1
+    case albumArtist    // TPE2
+    case album          // TALB
+    case genre          // TCON
+    case contentGroup   // TIT1 (Grouping)
+    case comments       // COMM
+    case composer       // TCOM
+    case subtitle       // TIT3
+    case conductor      // TPE3
+    case lyricist       // TEXT
+    case fileOwner      // TOWN
+
+    public var frameID: String {
+        switch self {
+        case .title: return "TIT2"
+        case .artist: return "TPE1"
+        case .albumArtist: return "TPE2"
+        case .album: return "TALB"
+        case .genre: return "TCON"
+        case .contentGroup: return "TIT1"
+        case .comments: return "COMM"
+        case .composer: return "TCOM"
+        case .subtitle: return "TIT3"
+        case .conductor: return "TPE3"
+        case .lyricist: return "TEXT"
+        case .fileOwner: return "TOWN"
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .title: return "Title"
+        case .artist: return "Artist"
+        case .albumArtist: return "Album Artist"
+        case .album: return "Album"
+        case .genre: return "Genre"
+        case .contentGroup: return "Grouping"
+        case .comments: return "Comments"
+        case .composer: return "Composer"
+        case .subtitle: return "Subtitle"
+        case .conductor: return "Conductor"
+        case .lyricist: return "Lyricist"
+        case .fileOwner: return "File Owner"
+        }
+    }
+}
+
 // MARK: - Tags to Write
 
 /// Tags to write to an MP3 file's ID3 metadata.
@@ -235,6 +319,10 @@ public struct TagsToWrite: Sendable, Equatable {
     /// Whether to overwrite existing tags (default: true)
     public var overwrite: Bool
 
+    /// Field mapping configuration for which ID3 frames to write to.
+    /// When nil, uses default mapping (genre=TCON, timing=TALB, mood=TIT1, comments=COMM)
+    public var fieldMapping: WriteFieldMapping?
+
     /// Creates a new TagsToWrite instance.
     public init(
         genre: String? = nil,
@@ -249,7 +337,8 @@ public struct TagsToWrite: Sendable, Equatable {
         essentiaGenres: String? = nil,
         essentiaMoods: String? = nil,
         essentiaInstruments: String? = nil,
-        overwrite: Bool = true
+        overwrite: Bool = true,
+        fieldMapping: WriteFieldMapping? = nil
     ) {
         self.genre = genre
         self.subGenre = subGenre
@@ -264,6 +353,7 @@ public struct TagsToWrite: Sendable, Equatable {
         self.essentiaMoods = essentiaMoods
         self.essentiaInstruments = essentiaInstruments
         self.overwrite = overwrite
+        self.fieldMapping = fieldMapping
     }
 
     /// Returns `true` if all tag values are nil.

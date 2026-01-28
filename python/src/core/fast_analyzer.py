@@ -20,7 +20,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing
 import os
 
-# Import Essentia analyzer
+# Import Essentia analyzer (now includes MTG-Jamendo mood/theme: 8 basic + 56 Jamendo = 64 features)
 from .essentia_analyzer import EssentiaAnalyzer, ESSENTIA_FEATURE_COUNT, HAS_ESSENTIA
 
 # Import PANNs analyzer for sound detection
@@ -38,13 +38,8 @@ except ImportError:
     HAS_CLAP = False
     CLAP_FEATURE_COUNT = 32
 
-# Import Jamendo classifier for mood/theme predictions
-try:
-    from .jamendo_classifier import JamendoClassifier, is_jamendo_available, JAMENDO_FEATURE_COUNT
-    HAS_JAMENDO = is_jamendo_available()
-except ImportError:
-    HAS_JAMENDO = False
-    JAMENDO_FEATURE_COUNT = 56
+# Note: Jamendo CLAP classifier removed - Essentia MTG-Jamendo model provides
+# the same 56 mood/theme features, trained on real data by the MTG team.
 
 # PANNs feature labels we care about for DJ music
 # These are the exact labels from AudioSet that we'll extract scores for
@@ -88,13 +83,18 @@ class FastAudioAnalyzer:
     CrateBot4: Uses lazy model loading for faster startup.
     """
 
-    # 57 base + 8 Essentia + 32 PANNs + 32 CLAP + 55 Jamendo = 184 total
-    FEATURE_VECTOR_SIZE = 57 + ESSENTIA_FEATURE_COUNT + PANNS_FEATURE_COUNT + CLAP_FEATURE_COUNT + JAMENDO_FEATURE_COUNT
+    # Feature vector breakdown:
+    # - 57 base librosa (MFCC, spectral, chroma, contrast, tonnetz, rhythmic, harmonic, timbral, dynamic)
+    # - 583 Essentia (8 basic + 56 MTG-Jamendo mood/theme + 519 Discogs genre/style)
+    # - 32 PANNs (14 genres + 8 instruments + 5 drums + 3 vocals + 2 mood)
+    # - 32 CLAP (8 segments × 4 statistics from 512-dim embedding)
+    # Total: 57 + 583 + 32 + 32 = 704 features
+    # Note: MTG-Jamendo mood/theme is included in Essentia (56 tags), no need for separate CLAP-based classifier
+    FEATURE_VECTOR_SIZE = 57 + ESSENTIA_FEATURE_COUNT + PANNS_FEATURE_COUNT + CLAP_FEATURE_COUNT
 
     def __init__(self, sample_rate: int = 22050, duration: float = 45.0,
                  offset_percent: float = 0.33, use_panns: bool = True,
-                 use_clap: bool = True, use_jamendo: bool = True,
-                 lazy_load: bool = True):
+                 use_clap: bool = True, lazy_load: bool = True):
         """
         Initialize fast analyzer.
 
@@ -104,7 +104,6 @@ class FastAudioAnalyzer:
             offset_percent: Start position as percentage of track (default 0.33 = 33%)
             use_panns: Whether to use PANNs for sound detection (default True)
             use_clap: Whether to use CLAP for semantic embeddings (default True)
-            use_jamendo: Whether to use Jamendo mood predictions (default True)
             lazy_load: CrateBot4 - If True (default), use lazy model loading for faster startup
         """
         self.sample_rate = sample_rate
@@ -115,13 +114,11 @@ class FastAudioAnalyzer:
         # CrateBot4: Configure which optional models to use (don't load yet if lazy)
         self.use_panns = use_panns and HAS_PANNS
         self.use_clap = use_clap and HAS_CLAP
-        self.use_jamendo = use_jamendo and HAS_JAMENDO
 
         # CrateBot4: Store references (loaded lazily via properties)
         self._essentia_analyzer = None
         self._panns_analyzer = None
         self._clap_analyzer = None
-        self._jamendo_classifier = None
 
         # For backward compatibility, load immediately if lazy_load=False
         if not lazy_load:
@@ -136,11 +133,6 @@ class FastAudioAnalyzer:
                     self._clap_analyzer = CLAPAnalyzer(auto_load=True)
                 except Exception:
                     self.use_clap = False
-            if self.use_jamendo:
-                try:
-                    self._jamendo_classifier = JamendoClassifier(auto_load=True)
-                except Exception:
-                    self.use_jamendo = False
 
     # CrateBot4: Lazy-loaded model properties
     @property
@@ -173,16 +165,6 @@ class FastAudioAnalyzer:
             if self._clap_analyzer is None:
                 self.use_clap = False
         return self._clap_analyzer
-
-    @property
-    def jamendo_classifier(self):
-        """Lazy-load Jamendo classifier on first access."""
-        if self._jamendo_classifier is None and self.use_jamendo:
-            from .model_loader import ModelLoader
-            self._jamendo_classifier = ModelLoader.get_jamendo_classifier()
-            if self._jamendo_classifier is None:
-                self.use_jamendo = False
-        return self._jamendo_classifier
 
     def extract_features(self, audio_path: str) -> Dict[str, Any]:
         """
@@ -337,15 +319,8 @@ class FastAudioAnalyzer:
                 features['clap_available'] = False
                 features['clap_status'] = f'extraction_failed: {str(e)}'
 
-            # ===== PHASE 6: JAMENDO MOOD PREDICTIONS =====
-            # Note: Jamendo uses CLAP embeddings, so must come after CLAP
-            try:
-                jamendo_features = self._extract_jamendo_features(audio_path, features)
-                features.update(jamendo_features)
-            except Exception as e:
-                features.update(self._get_default_jamendo_features())
-                features['jamendo_available'] = False
-                features['jamendo_status'] = f'extraction_failed: {str(e)}'
+            # Note: Jamendo mood/theme features are included in Essentia (56 MTG-Jamendo tags)
+            # No separate CLAP-based Jamendo classifier needed.
 
             # Skip chromaprint for training (not needed for ML)
             features['fingerprint'] = None
@@ -675,35 +650,6 @@ class FastAudioAnalyzer:
             vector.append(float(features.get(f'clap_seg{i}_energy', 0.0)))
         return np.array(vector, dtype=np.float32)
 
-    def _extract_jamendo_features(self, audio_path: str, features: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract Jamendo mood/theme predictions using CLAP embeddings."""
-        if not self.use_jamendo or self.jamendo_classifier is None:
-            return self._get_default_jamendo_features()
-
-        return self.jamendo_classifier.extract_features(audio_path, features)
-
-    def _get_default_jamendo_features(self) -> Dict[str, Any]:
-        """Return default Jamendo features when not available."""
-        if self.jamendo_classifier is not None:
-            return self.jamendo_classifier._get_default_features()
-
-        from .jamendo_classifier import JAMENDO_TAGS
-        features = {'jamendo_available': False}
-        for tag in JAMENDO_TAGS:
-            features[f'jamendo_{tag}'] = 0.5
-        return features
-
-    def _get_jamendo_feature_vector(self, features: Dict[str, Any]) -> np.ndarray:
-        """Extract Jamendo portion of feature vector."""
-        if self.jamendo_classifier is not None:
-            return self.jamendo_classifier.get_feature_vector(features)
-
-        from .jamendo_classifier import JAMENDO_TAGS
-        vector = []
-        for tag in JAMENDO_TAGS:
-            vector.append(float(features.get(f'jamendo_{tag}', 0.5)))
-        return np.array(vector, dtype=np.float32)
-
     def _create_feature_vector(self, features: Dict[str, Any]) -> np.ndarray:
         """Create a flat feature vector from all extracted features."""
         flattened_features = []
@@ -773,7 +719,7 @@ class FastAudioAnalyzer:
         flattened_features.append(float(features.get('rms_std', 0.0)))
         flattened_features.append(float(features.get('loudness_variation', 0.0)))
 
-        # Essentia (8 values)
+        # Essentia (583 values: 8 basic + 56 MTG-Jamendo mood/theme + 519 Discogs genre/style)
         essentia_vec = self.essentia_analyzer.get_feature_vector(features)
         flattened_features.extend(essentia_vec.tolist())
 
@@ -785,9 +731,7 @@ class FastAudioAnalyzer:
         clap_vec = self._get_clap_feature_vector(features)
         flattened_features.extend(clap_vec.tolist())
 
-        # Jamendo (56 values: mood/theme predictions)
-        jamendo_vec = self._get_jamendo_feature_vector(features)
-        flattened_features.extend(jamendo_vec.tolist())
+        # Note: Jamendo mood/theme is already included in Essentia (56 MTG-Jamendo tags)
 
         # Clean and convert
         clean_features = []
@@ -832,6 +776,7 @@ class ParallelFeatureExtractor:
     Parallel feature extraction using multiprocessing.
 
     Provides ~4x speedup on 4-core machines, ~8x on 8-core.
+    Uses hardware configuration from HardwareConfig.
     """
 
     def __init__(self, n_workers: int = None, sample_rate: int = 22050, duration: float = 30.0):
@@ -839,12 +784,16 @@ class ParallelFeatureExtractor:
         Initialize parallel extractor.
 
         Args:
-            n_workers: Number of worker processes. Default: CPU count - 1
+            n_workers: Number of worker processes. Default: from HardwareConfig
             sample_rate: Audio sample rate
             duration: Duration in seconds to analyze
         """
         if n_workers is None:
-            n_workers = max(1, multiprocessing.cpu_count() - 1)
+            try:
+                from .hardware_config import get_hardware_config
+                n_workers = get_hardware_config().num_workers
+            except ImportError:
+                n_workers = max(1, multiprocessing.cpu_count() - 1)
         self.n_workers = n_workers
         self.sample_rate = sample_rate
         self.duration = duration

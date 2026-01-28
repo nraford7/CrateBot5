@@ -12,9 +12,9 @@ FUZZY_MATCH_THRESHOLD = 0.85  # Minimum similarity for fuzzy tag matching
 # =============================================================================
 # Review Confidence Thresholds
 # =============================================================================
-GENRE_CONFIDENCE_THRESHOLD = 0.6   # Below this, flag for review
-ALBUM_CONFIDENCE_THRESHOLD = 0.6   # Below this, flag for review
-COMMENTS_CONFIDENCE_THRESHOLD = 0.4  # Below this, flag for review
+GENRE_CONFIDENCE_THRESHOLD = 0.65   # Below this, flag for review
+ALBUM_CONFIDENCE_THRESHOLD = 0.65   # Below this, flag for review (actually timing)
+COMMENTS_CONFIDENCE_THRESHOLD = 0.65  # Below this, flag for review (actually descriptive)
 
 # =============================================================================
 # Training Configuration
@@ -42,7 +42,7 @@ ANALYSIS_START_OFFSET = 0.33       # Start at 33% into track (skip intro)
 # =============================================================================
 # Feature Cache
 # =============================================================================
-CACHE_VERSION = 7                  # Increment to invalidate cache (v7: added CLAP + Jamendo)
+CACHE_VERSION = 10                 # Increment to invalidate cache (v10: removed Jamendo CLAP classifier, 759->704 features)
 CACHE_MTIME_TOLERANCE = 1.0        # Seconds tolerance for file modification
 
 # =============================================================================
@@ -103,7 +103,11 @@ TAXONOMY_ID3_MAPPING = {
 # Values in the Genre ID3 tag that are ACTUAL genres (not timing)
 # Everything else in the Genre tag is assumed to be a timing value,
 # and those tracks default to "House" genre.
+#
+# Expanded to include common sub-genres and variations to prevent
+# misclassification as timing values.
 ACTUAL_GENRE_VALUES = {
+    # Core genres
     "House",
     "Techno",
     "Jungle",
@@ -112,5 +116,53 @@ ACTUAL_GENRE_VALUES = {
     "PartyBreaks",
     "Acapella",
     "Dub/Reggae",
+    # House sub-genres
+    "Deep House",
+    "Tech House",
+    "Acid House",
+    "Progressive House",
+    "Electro House",
+    "Afro House",
+    "Soulful House",
+    "Jackin House",
+    "Chicago House",
+    "Garage",
+    "UK Garage",
+    "Speed Garage",
+    # Techno sub-genres
+    "Acid Techno",
+    "Hard Techno",
+    "Minimal Techno",
+    "Detroit Techno",
+    "Industrial Techno",
+    "Melodic Techno",
+    # Jungle/DnB
+    "Drum and Bass",
+    "Drum & Bass",
+    "DnB",
+    "Breakbeat",
+    "Breaks",
+    "Liquid DnB",
+    # Other electronic
+    "Trance",
+    "Progressive",
+    "Electro",
+    "Disco",
+    "Funk",
+    "Soul",
+    "Dub",
+    "Reggae",
+    "Dancehall",
+    "Dubstep",
+    "Grime",
+    "UK Bass",
+    "Bass Music",
+    # Hip-hop variants
+    "Hip Hop",
+    "Hip-Hop",
+    "Trap",
+    "Boom Bap",
+    "R&B",
+    "RnB",
 }
 DEFAULT_GENRE_FOR_TIMING = "House"

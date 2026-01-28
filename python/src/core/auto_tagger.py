@@ -66,18 +66,44 @@ class AutoTagger:
 
     def train_from_directory(self, training_dir: str,
                              output_model_path: str = "models/cratebot.pkl",
-                             test_size: float = 0.2) -> Dict[str, Any]:
+                             test_size: float = 0.2,
+                             skip_validation: bool = False) -> Dict[str, Any]:
         """
         Train a model with interactive tag selection.
 
         Flow:
+        0. Validate all required components are ready (PANNs, CLAP, etc.)
         1. Scan all MP3s to discover tags
         2. Let user select which tags to train on
         3. Collect audio features for files with valid tags
         4. Train the model
+
+        Args:
+            training_dir: Directory containing MP3 files with tags
+            output_model_path: Where to save the trained model
+            test_size: Fraction of data for testing (default 0.2)
+            skip_validation: If True, skip pre-training validation (NOT RECOMMENDED)
         """
         from rich.console import Console
         console = Console()
+
+        # Step 0a: Auto-optimize hardware settings
+        from .auto_optimize import optimize_for_hardware
+        console.print("\n[bold cyan]Step 0a: Optimizing for hardware...[/bold cyan]")
+        optimize_for_hardware(verbose=True, apply_env=True)
+
+        # Step 0b: Pre-training validation (FAIL FAST if components missing)
+        if not skip_validation:
+            from .training_validator import validate_training_requirements
+            console.print("\n[bold cyan]Step 0b: Validating training requirements...[/bold cyan]")
+            validation = validate_training_requirements(
+                require_panns=True,
+                require_clap=True,
+                require_jamendo=False,  # Optional
+                require_essentia=False,  # Optional
+                verbose=True
+            )
+            validation.raise_if_failed()
 
         # Step 1: Scan for tags
         console.print("\n[bold cyan]Step 1: Scanning for tags...[/bold cyan]")
@@ -121,7 +147,8 @@ class AutoTagger:
 
     def train_from_directory_resume(self, training_dir: str,
                                      output_model_path: str = "models/cratebot.pkl",
-                                     test_size: float = 0.2) -> Dict[str, Any]:
+                                     test_size: float = 0.2,
+                                     skip_validation: bool = False) -> Dict[str, Any]:
         """
         Train a model using tag selections from the most recent checkpoint.
 
@@ -129,10 +156,17 @@ class AutoTagger:
         re-selecting tags interactively.
 
         Flow:
+        0. Validate all required components are ready
         1. Find most recent checkpoint for this training directory
         2. Use its selected_tags
         3. Re-extract features (will use new feature vector)
         4. Train the model
+
+        Args:
+            training_dir: Directory containing MP3 files with tags
+            output_model_path: Where to save the trained model
+            test_size: Fraction of data for testing (default 0.2)
+            skip_validation: If True, skip pre-training validation (NOT RECOMMENDED)
         """
         from rich.console import Console
         from .training_checkpoint import TrainingCheckpoint
@@ -140,6 +174,24 @@ class AutoTagger:
         from pathlib import Path as P
 
         console = Console()
+
+        # Step 0a: Auto-optimize hardware settings
+        from .auto_optimize import optimize_for_hardware
+        console.print("\n[bold cyan]Step 0a: Optimizing for hardware...[/bold cyan]")
+        optimize_for_hardware(verbose=True, apply_env=True)
+
+        # Step 0b: Pre-training validation (FAIL FAST if components missing)
+        if not skip_validation:
+            from .training_validator import validate_training_requirements
+            console.print("\n[bold cyan]Step 0b: Validating training requirements...[/bold cyan]")
+            validation = validate_training_requirements(
+                require_panns=True,
+                require_clap=True,
+                require_jamendo=False,
+                require_essentia=False,
+                verbose=True
+            )
+            validation.raise_if_failed()
 
         # Find most recent checkpoint for this directory
         checkpoint_dir = P.home() / ".cratebot" / "checkpoints"

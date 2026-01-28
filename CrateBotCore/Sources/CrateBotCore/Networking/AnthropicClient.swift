@@ -87,7 +87,8 @@ public struct MessageResponse: Codable, Sendable {
         self.usage = usage
     }
 
-    /// Convenience property to extract text from all content blocks
+    /// Convenience property to extract text from all content blocks.
+    /// Content blocks are joined without separator as they typically form continuous text.
     public var text: String {
         content.compactMap { $0.text }.joined()
     }
@@ -154,7 +155,7 @@ public actor AnthropicClient {
     /// The API version to use
     private static let apiVersion = "2023-06-01"
 
-    /// The default model to use
+    /// The default model to use (Claude Sonnet 4)
     public static let defaultModel = "claude-sonnet-4-20250514"
 
     private let session: URLSession
@@ -227,14 +228,19 @@ public actor AnthropicClient {
         // Handle errors
         guard (200...299).contains(httpResponse.statusCode) else {
             // Try to decode error response
-            if let errorResponse = try? decoder.decode(ErrorResponse.self, from: data) {
+            do {
+                let errorResponse = try decoder.decode(ErrorResponse.self, from: data)
                 throw AnthropicError.requestFailed(
                     statusCode: httpResponse.statusCode,
                     message: errorResponse.error.message
                 )
+            } catch is AnthropicError {
+                throw AnthropicError.requestFailed(statusCode: httpResponse.statusCode, message: "")
+            } catch {
+                logger.debug("Could not decode error response: \(error.localizedDescription)")
+                let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+                throw AnthropicError.requestFailed(statusCode: httpResponse.statusCode, message: message)
             }
-            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw AnthropicError.requestFailed(statusCode: httpResponse.statusCode, message: message)
         }
 
         do {

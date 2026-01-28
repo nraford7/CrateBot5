@@ -662,6 +662,26 @@ async def start_training(request: TrainingRequest, background_tasks: BackgroundT
             detail="No tags selected for training. Please select at least one tag from the tag selection dialog."
         )
 
+    # CrateBot5: Validate required ML models are available (fail fast)
+    try:
+        from core.training_validator import validate_training_requirements
+        validation = validate_training_requirements(
+            require_panns=True,
+            require_clap=True,
+            require_jamendo=False,
+            require_essentia=False,
+            verbose=False
+        )
+        if not validation.all_passed:
+            missing = [f.name for f in validation.required_failures]
+            fixes = [f.fix_command for f in validation.required_failures if f.fix_command]
+            detail = f"Required ML models not available: {', '.join(missing)}. "
+            if fixes:
+                detail += f"Run: {fixes[0]}"
+            raise HTTPException(status_code=400, detail=detail)
+    except ImportError as e:
+        logger.warning("Could not import training_validator: %s", e)
+
     # Create task
     task_id = task_manager.create_task("training")
 
@@ -671,6 +691,21 @@ async def start_training(request: TrainingRequest, background_tasks: BackgroundT
             """Wrapper that calls the training with progress updates."""
             from core.auto_tagger import AutoTagger
             from core.training_checkpoint import TrainingCheckpoint
+
+            # CrateBot5: Auto-optimize hardware settings before training
+            try:
+                from core.auto_optimize import optimize_for_hardware
+                logger.info("Auto-optimizing hardware settings...")
+                profile = optimize_for_hardware(verbose=False, apply_env=True)
+                logger.info(
+                    "Hardware optimized: %d workers, %d threads, device=%s, batch=%d",
+                    profile.recommended_workers,
+                    profile.recommended_torch_threads,
+                    profile.recommended_device,
+                    profile.recommended_batch_size
+                )
+            except Exception as e:
+                logger.warning("Auto-optimization failed (continuing anyway): %s", e)
 
             # Create fresh tagger for training
             tagger = AutoTagger(use_cache=True)

@@ -161,13 +161,19 @@ class PANNsAnalyzer:
 
         try:
             model_path = str(self.model_manager.get_model_path())
-            # Device selection: CUDA > MPS (Apple Silicon) > CPU
-            if torch.cuda.is_available():
-                self.device = 'cuda'
-            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                self.device = 'mps'
-            else:
-                self.device = 'cpu'
+
+            # Use hardware config for device selection if available
+            try:
+                from .hardware_config import get_hardware_config
+                self.device = get_hardware_config().device
+            except ImportError:
+                # Fallback: CUDA > MPS (Apple Silicon) > CPU
+                if torch.cuda.is_available():
+                    self.device = 'cuda'
+                elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                    self.device = 'mps'
+                else:
+                    self.device = 'cpu'
 
             # Suppress the benign "No network created" warning from panns_inference
             with warnings.catch_warnings():

@@ -250,6 +250,9 @@ public actor ID3Manager {
                 print("ID3Manager writeTags: perms=\(permissions?.stringValue ?? "nil") owner=\(owner ?? "nil") group=\(group ?? "nil")")
             }
 
+            // Get field mapping (use default if not specified)
+            let mapping = tags.fieldMapping ?? .default
+
             // Read file data directly using the URL (preserves security-scoped access)
             let mp3Data = try Data(contentsOf: url)
             print("ID3Manager writeTags: read OK (\(mp3Data.count) bytes) for \(url.lastPathComponent)")
@@ -264,11 +267,10 @@ public actor ID3Manager {
             if let existing = existingTag {
                 let reader = ID3TagContentReader(id3Tag: existing)
 
-                // Handle genre - write to TCON frame
-                // When overwrite is false, only write if existing is nil
+                // Handle genre - write to configured frame (default: TCON)
                 let existingGenre = reader.genre()
                 if let genre = tags.genre, tags.overwrite || existingGenre == nil {
-                    builder = builder.genre(frame: ID3FrameGenre(genre: nil, description: genre))
+                    builder = writeStringToFrame(builder, value: genre, frame: mapping.genreFrame, asGenre: true)
                 } else if let existingGenre {
                     builder = builder.genre(frame: ID3FrameGenre(
                         genre: existingGenre.identifier,
@@ -285,33 +287,37 @@ public actor ID3Manager {
                     builder = builder.mixArtist(frame: ID3FrameWithStringContent(content: existingMixArtist))
                 }
 
-                // Handle timing - write to album frame (TALB)
-                let existingAlbum = reader.album()
-                if let timing = tags.timing, tags.overwrite || existingAlbum == nil {
-                    builder = builder.album(frame: ID3FrameWithStringContent(content: timing))
-                } else if let existingAlbum {
-                    builder = builder.album(frame: ID3FrameWithStringContent(content: existingAlbum))
+                // Handle timing - write to configured frame (default: TALB, user may set TPE2)
+                let existingTimingValue = readFromFrame(reader, frame: mapping.timingFrame)
+                if let timing = tags.timing, tags.overwrite || existingTimingValue == nil {
+                    builder = writeStringToFrame(builder, value: timing, frame: mapping.timingFrame)
+                } else if let existingValue = existingTimingValue {
+                    builder = writeStringToFrame(builder, value: existingValue, frame: mapping.timingFrame)
                 }
 
-                // Handle mood - write to content group frame (TIT1)
-                let existingGrouping = reader.contentGrouping()
-                if let mood = tags.mood, tags.overwrite || existingGrouping == nil {
-                    builder = builder.contentGrouping(frame: ID3FrameWithStringContent(content: mood))
-                } else if let existingGrouping {
-                    builder = builder.contentGrouping(frame: ID3FrameWithStringContent(content: existingGrouping))
+                // Handle mood - write to configured frame (default: TIT1, user may set TALB)
+                let existingMoodValue = readFromFrame(reader, frame: mapping.moodFrame)
+                if let mood = tags.mood, tags.overwrite || existingMoodValue == nil {
+                    builder = writeStringToFrame(builder, value: mood, frame: mapping.moodFrame)
+                } else if let existingValue = existingMoodValue {
+                    builder = writeStringToFrame(builder, value: existingValue, frame: mapping.moodFrame)
                 }
 
-                // Handle comments - write to COMM frame (only first comment is used)
+                // Handle comments/descriptive - write to configured frame (default: COMM)
                 let existingComment = reader.comments().first
                 if let comments = tags.comments, tags.overwrite || existingComment == nil {
-                    builder = builder.comment(
-                        language: .eng,
-                        frame: ID3FrameWithLocalizedContent(
+                    if mapping.descriptiveFrame == .comments {
+                        builder = builder.comment(
                             language: .eng,
-                            contentDescription: "",
-                            content: comments
+                            frame: ID3FrameWithLocalizedContent(
+                                language: .eng,
+                                contentDescription: "",
+                                content: comments
+                            )
                         )
-                    )
+                    } else {
+                        builder = writeStringToFrame(builder, value: comments, frame: mapping.descriptiveFrame)
+                    }
                 } else if let existingComment {
                     builder = builder.comment(
                         language: existingComment.language,
@@ -379,36 +385,52 @@ public actor ID3Manager {
                     builder = builder.encodedBy(frame: ID3FrameWithStringContent(content: existingEncodedBy))
                 }
 
-                // Preserve other common frames
+                // Preserve other common frames (only if not used by mapping)
                 if let title = reader.title() {
                     builder = builder.title(frame: ID3FrameWithStringContent(content: title))
                 }
                 if let artist = reader.artist() {
                     builder = builder.artist(frame: ID3FrameWithStringContent(content: artist))
                 }
+                // Preserve album artist if not used for timing
+                if mapping.timingFrame != .albumArtist, let albumArtist = reader.albumArtist() {
+                    builder = builder.albumArtist(frame: ID3FrameWithStringContent(content: albumArtist))
+                }
+                // Preserve album if not used for timing or mood
+                if mapping.timingFrame != .album && mapping.moodFrame != .album, let album = reader.album() {
+                    builder = builder.album(frame: ID3FrameWithStringContent(content: album))
+                }
+                // Preserve content grouping if not used for mood
+                if mapping.moodFrame != .contentGroup, let grouping = reader.contentGrouping() {
+                    builder = builder.contentGrouping(frame: ID3FrameWithStringContent(content: grouping))
+                }
             } else {
-                // No existing tag - just write new values
+                // No existing tag - just write new values using configured mapping
                 if let genre = tags.genre {
-                    builder = builder.genre(frame: ID3FrameGenre(genre: nil, description: genre))
+                    builder = writeStringToFrame(builder, value: genre, frame: mapping.genreFrame, asGenre: true)
                 }
                 if let subGenre = tags.subGenre {
                     builder = builder.mixArtist(frame: ID3FrameWithStringContent(content: subGenre))
                 }
                 if let timing = tags.timing {
-                    builder = builder.album(frame: ID3FrameWithStringContent(content: timing))
+                    builder = writeStringToFrame(builder, value: timing, frame: mapping.timingFrame)
                 }
                 if let mood = tags.mood {
-                    builder = builder.contentGrouping(frame: ID3FrameWithStringContent(content: mood))
+                    builder = writeStringToFrame(builder, value: mood, frame: mapping.moodFrame)
                 }
                 if let comments = tags.comments {
-                    builder = builder.comment(
-                        language: .eng,
-                        frame: ID3FrameWithLocalizedContent(
+                    if mapping.descriptiveFrame == .comments {
+                        builder = builder.comment(
                             language: .eng,
-                            contentDescription: "",
-                            content: comments
+                            frame: ID3FrameWithLocalizedContent(
+                                language: .eng,
+                                contentDescription: "",
+                                content: comments
+                            )
                         )
-                    )
+                    } else {
+                        builder = writeStringToFrame(builder, value: comments, frame: mapping.descriptiveFrame)
+                    }
                 }
                 if let vibeShort = tags.vibeShort {
                     builder = builder.composer(frame: ID3FrameWithStringContent(content: vibeShort))
@@ -487,6 +509,84 @@ public actor ID3Manager {
             let nsError = error as NSError
             print("ID3Manager writeTags: failed domain=\(nsError.domain) code=\(nsError.code) userInfo=\(nsError.userInfo)")
             throw ID3Error.writeFailed(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Private Helpers for Configurable Field Mapping
+
+    /// Writes a string value to the specified frame type
+    private func writeStringToFrame(
+        _ builder: ID32v3TagBuilder,
+        value: String,
+        frame: ID3FrameType,
+        asGenre: Bool = false
+    ) -> ID32v3TagBuilder {
+        switch frame {
+        case .title:
+            return builder.title(frame: ID3FrameWithStringContent(content: value))
+        case .artist:
+            return builder.artist(frame: ID3FrameWithStringContent(content: value))
+        case .albumArtist:
+            return builder.albumArtist(frame: ID3FrameWithStringContent(content: value))
+        case .album:
+            return builder.album(frame: ID3FrameWithStringContent(content: value))
+        case .genre:
+            if asGenre {
+                return builder.genre(frame: ID3FrameGenre(genre: nil, description: value))
+            } else {
+                return builder.genre(frame: ID3FrameGenre(genre: nil, description: value))
+            }
+        case .contentGroup:
+            return builder.contentGrouping(frame: ID3FrameWithStringContent(content: value))
+        case .comments:
+            return builder.comment(
+                language: .eng,
+                frame: ID3FrameWithLocalizedContent(
+                    language: .eng,
+                    contentDescription: "",
+                    content: value
+                )
+            )
+        case .composer:
+            return builder.composer(frame: ID3FrameWithStringContent(content: value))
+        case .subtitle:
+            return builder.subtitle(frame: ID3FrameWithStringContent(content: value))
+        case .conductor:
+            return builder.conductor(frame: ID3FrameWithStringContent(content: value))
+        case .lyricist:
+            return builder.lyricist(frame: ID3FrameWithStringContent(content: value))
+        case .fileOwner:
+            return builder.fileOwner(frame: ID3FrameWithStringContent(content: value))
+        }
+    }
+
+    /// Reads a string value from the specified frame type
+    private func readFromFrame(_ reader: ID3TagContentReader, frame: ID3FrameType) -> String? {
+        switch frame {
+        case .title:
+            return reader.title()
+        case .artist:
+            return reader.artist()
+        case .albumArtist:
+            return reader.albumArtist()
+        case .album:
+            return reader.album()
+        case .genre:
+            return reader.genre()?.description
+        case .contentGroup:
+            return reader.contentGrouping()
+        case .comments:
+            return reader.comments().first?.content
+        case .composer:
+            return reader.composer()
+        case .subtitle:
+            return reader.subtitle()
+        case .conductor:
+            return reader.conductor()
+        case .lyricist:
+            return reader.lyricist()
+        case .fileOwner:
+            return reader.fileOwner()
         }
     }
 }

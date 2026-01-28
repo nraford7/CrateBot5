@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>CrateBot needs access to Desktop files you select for tagging.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>CrateBot needs access to Documents files you select for tagging.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>CrateBot needs access to Downloads files you select for tagging.</string>
+</dict>
+</plist>
