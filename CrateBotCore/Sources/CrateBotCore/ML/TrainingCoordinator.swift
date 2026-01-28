@@ -796,11 +796,12 @@ public actor TrainingCoordinator {
     public func currentPipelineVersion() -> FeaturePipelineVersion {
         // Return EffNet-based feature pipeline configuration
         // EffNet produces 1280-dimensional embeddings from mel spectrograms
+        // CLAP adds 512-dimensional semantic embeddings
         FeaturePipelineVersion(
-            extractorVersions: ["effnet": "v1"],
+            extractorVersions: ["effnet": "v1", "clap": "v1"],
             windowingParams: FeaturePipelineVersion.WindowingParams(
-                windowSize: 400,    // 25ms at 16kHz
-                hopSize: 160,       // 10ms at 16kHz
+                windowSize: 512,    // 32ms at 16kHz (MusiCNN/EffNet)
+                hopSize: 256,       // 16ms at 16kHz (MusiCNN/EffNet)
                 fftSize: 512        // EffNet FFT size
             ),
             normalizationParams: FeaturePipelineVersion.NormalizationParams(

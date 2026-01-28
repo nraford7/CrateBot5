@@ -14,6 +14,7 @@ public final class AudioAnalyzer: Sendable {
         case bufferCreationFailed
         case fileTooLong(URL, duration: Double)
         case bufferOverflow(URL, requiredBytes: UInt64)
+        case audioTooShort(URL, duration: Double, required: Double)
 
         public var errorDescription: String? {
             switch self {
@@ -32,6 +33,8 @@ public final class AudioAnalyzer: Sendable {
             case .bufferOverflow(let url, let requiredBytes):
                 let mbRequired = Double(requiredBytes) / 1_000_000
                 return "Audio file too large: \(url.lastPathComponent) requires \(String(format: "%.0f", mbRequired))MB buffer"
+            case .audioTooShort(let url, let duration, let required):
+                return "Audio too short: \(url.lastPathComponent) (\(String(format: "%.1f", duration))s) - needs \(String(format: "%.1f", required))s minimum"
             }
         }
     }
@@ -71,6 +74,11 @@ public final class AudioAnalyzer: Sendable {
     /// Maximum buffer size in bytes (UInt32.max)
     private let maxBufferBytes: UInt64 = UInt64(UInt32.max)
 
+    /// Minimum audio duration in seconds for EffNet processing
+    /// EffNet needs 128 time frames with hopSize=256 at 16kHz
+    /// Required samples = (127 * 256) + 512 = 33,024 samples = 2.064 seconds
+    public static let minimumDurationSeconds: Double = 2.1
+
     public init() {}
 
     /// Validate an audio file before processing to check for potential issues
@@ -103,7 +111,19 @@ public final class AudioAnalyzer: Sendable {
 
         let durationSeconds = Double(file.length) / sampleRate
 
-        // Check duration limit
+        // Check minimum duration for EffNet processing
+        if durationSeconds < Self.minimumDurationSeconds {
+            return ValidationResult(
+                url: url,
+                isValid: false,
+                error: .audioTooShort(url, duration: durationSeconds, required: Self.minimumDurationSeconds),
+                duration: durationSeconds,
+                sampleRate: sampleRate,
+                channels: channels
+            )
+        }
+
+        // Check maximum duration limit
         if durationSeconds > maxDurationSeconds {
             return ValidationResult(
                 url: url,

@@ -24,6 +24,7 @@ let package = Package(
                 .copy("Resources/Discogs_EffNet.mlpackage"),
                 .copy("Resources/Jamendo_MoodTheme.mlpackage"),
                 .copy("Resources/Jamendo_Instrument.mlpackage"),
+                .copy("Resources/CLAPAudioEncoder.mlpackage"),
                 .copy("Resources/genre_discogs400-discogs-effnet-1.json"),
                 .copy("Resources/mtg_jamendo_moodtheme-discogs-effnet-1.json"),
                 .copy("Resources/mtg_jamendo_instrument-discogs-effnet-1.json")

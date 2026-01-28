@@ -102,16 +102,16 @@ public actor CLAPExtractor {
         // Pad or truncate to fixed size
         melSpec = normalizeToFixedSize(melSpec, targetFrames: Self.targetFrames)
 
-        // Flatten to MLMultiArray format [1, 64, 1001]
-        // melSpec is [melBins][frames], we need to flatten correctly
+        // Flatten to MLMultiArray format [1, 1001, 64] (batch, time_frames, mel_bins)
+        // melSpec is [melBins][frames], we need to transpose to [frames][melBins]
         let inputArray = try MLMultiArray(
-            shape: [1, NSNumber(value: Self.melBins), NSNumber(value: Self.targetFrames)],
+            shape: [1, NSNumber(value: Self.targetFrames), NSNumber(value: Self.melBins)],
             dataType: .float32
         )
 
-        for melIdx in 0..<Self.melBins {
-            for frameIdx in 0..<Self.targetFrames {
-                let index = melIdx * Self.targetFrames + frameIdx
+        for frameIdx in 0..<Self.targetFrames {
+            for melIdx in 0..<Self.melBins {
+                let index = frameIdx * Self.melBins + melIdx
                 inputArray[index] = NSNumber(value: melSpec[melIdx][frameIdx])
             }
         }

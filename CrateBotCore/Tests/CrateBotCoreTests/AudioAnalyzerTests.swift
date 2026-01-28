@@ -68,9 +68,9 @@ final class AudioAnalyzerTests: XCTestCase {
     // MARK: - Validation Tests
 
     func testValidateValidAudioFile() throws {
-        // Create a valid short audio file
+        // Create a valid audio file (must be at least 2.1 seconds for CLAP processing)
         let sourceSampleRate: Double = 44100
-        let duration: Double = 1.0  // 1 second
+        let duration: Double = 2.5  // 2.5 seconds (above 2.1s minimum)
         let sampleCount = Int(sourceSampleRate * duration)
 
         let samples = (0..<sampleCount).map { i in
@@ -119,9 +119,9 @@ final class AudioAnalyzerTests: XCTestCase {
     }
 
     func testValidateFilesAsync() async throws {
-        // Create two valid audio files
+        // Create two valid audio files (must be at least 2.1 seconds for CLAP processing)
         let sourceSampleRate: Double = 44100
-        let sampleCount = Int(sourceSampleRate * 0.5)  // 0.5 seconds
+        let sampleCount = Int(sourceSampleRate * 2.5)  // 2.5 seconds (above 2.1s minimum)
 
         let samples = (0..<sampleCount).map { i in
             Float(sin(2.0 * .pi * 440.0 * Double(i) / sourceSampleRate))
@@ -239,8 +239,9 @@ final class AudioAnalyzerTests: XCTestCase {
 
     func testValidateStereoFile() throws {
         // Create a stereo audio file using standard format (non-interleaved)
+        // Must be at least 2.1 seconds for CLAP processing
         let sourceSampleRate: Double = 44100
-        let duration: Double = 0.5  // Short file
+        let duration: Double = 2.5  // 2.5 seconds (above 2.1s minimum)
         let sampleCount = Int(sourceSampleRate * duration)
 
         let samples = (0..<sampleCount).map { i in
