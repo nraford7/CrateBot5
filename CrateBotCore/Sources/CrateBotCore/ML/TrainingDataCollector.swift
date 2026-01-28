@@ -91,6 +91,27 @@ public actor TrainingDataCollector {
         }
     }
 
+    /// Reasons why a track's features were skipped during extraction
+    public enum TrackSkipReason: String, Sendable {
+        case featureDimensionMismatch = "Feature dimension mismatch"
+        case nonFiniteFeatures = "Non-finite values in features"
+        case audioTooShort = "Audio too short"
+        case extractionFailed = "Feature extraction failed"
+    }
+
+    /// Information about a track whose features were skipped
+    public struct SkippedFeatureTrack: Sendable {
+        public let url: URL
+        public let reason: TrackSkipReason
+        public let details: String?
+
+        public init(url: URL, reason: TrackSkipReason, details: String? = nil) {
+            self.url = url
+            self.reason = reason
+            self.details = details
+        }
+    }
+
     // MARK: - Dependencies
 
     private let id3Manager: ID3Manager
@@ -718,8 +739,9 @@ public actor TrainingDataCollector {
             }
 
             // Process batch concurrently - load audio and extract features in one step
-            // Capture augmentation config for use in task group
+            // Capture augmentation config and expected feature dimension for use in task group
             let augConfig = self.augmentationConfig
+            let expectedDimension = await extractor.featureDimension
             let batchResults = await withTaskGroup(of: (Int, TaggedTrack, [Float]?).self) { group in
                 for (localIndex, track) in batch.enumerated() {
                     group.addTask { [audioAnalyzer, extractor] in
@@ -734,6 +756,18 @@ public actor TrainingDataCollector {
                             // Dimension depends on featureConfig (1280, 1680, or 2192)
                             let features = try await extractor.extract(from: buffer)
 
+                            // Validate feature dimensions
+                            if features.count != expectedDimension {
+                                Self.debugLog("Track \(fileURL.lastPathComponent) has \(features.count) features, expected \(expectedDimension) - skipping")
+                                return (globalIndex, track, nil)
+                            }
+
+                            // Validate no NaN/Inf values
+                            if features.contains(where: { !$0.isFinite }) {
+                                Self.debugLog("Track \(fileURL.lastPathComponent) has non-finite features - skipping")
+                                return (globalIndex, track, nil)
+                            }
+
                             // Apply feature-level augmentation for training robustness
                             let augmentedFeatures = AudioAugmenter.augmentFeatures(
                                 features,
@@ -742,6 +776,7 @@ public actor TrainingDataCollector {
                             )
                             return (globalIndex, track, augmentedFeatures)
                         } catch {
+                            Self.debugLog("Track \(URL(fileURLWithPath: track.id).lastPathComponent) extraction failed: \(error.localizedDescription)")
                             return (globalIndex, track, nil)
                         }
                     }
