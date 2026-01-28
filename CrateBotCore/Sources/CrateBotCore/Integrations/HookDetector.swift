@@ -1,7 +1,7 @@
 import Foundation
 import os.log
 
-/// Detects memorable vocal hooks via the Python backend (Whisper-powered)
+/// Detects memorable vocal hooks using lyrics-first approach with Whisper fallback
 public actor HookDetector {
     private let logger = Logger(subsystem: "com.cratebot.core", category: "HookDetector")
     private let httpClient: HTTPClient

@@ -54,7 +54,7 @@ public struct VibeResult: Sendable {
     }
 }
 
-/// Actor for generating AI-powered vibe tags via the Python backend
+/// Actor for generating AI-powered vibe tags via Claude API
 public actor VibeGenerator {
     private let httpClient: HTTPClient
     private let logger = Logger(subsystem: "com.cratebot", category: "VibeGenerator")
