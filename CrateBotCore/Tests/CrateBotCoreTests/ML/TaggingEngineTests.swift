@@ -13,9 +13,10 @@ final class TaggingEngineTests: XCTestCase {
     func testAnalyzeWithSyntheticAudio() async throws {
         let engine = try TaggingEngine()
 
-        // Create synthetic audio buffer (1 second of noise at 16kHz)
+        // Create synthetic audio buffer (2.5 seconds of noise at 16kHz)
+        // MelSpectrogramGenerator requires at least 33,024 samples
         let sampleRate: Double = 16000
-        let samples = (0..<16000).map { _ in Float.random(in: -0.5...0.5) }
+        let samples = (0..<40000).map { _ in Float.random(in: -0.5...0.5) }
         let buffer = try createBuffer(samples: samples, sampleRate: sampleRate)
 
         let result = try await engine.analyze(buffer: buffer)

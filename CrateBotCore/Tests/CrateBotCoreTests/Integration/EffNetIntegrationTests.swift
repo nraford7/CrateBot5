@@ -6,9 +6,10 @@ final class EffNetIntegrationTests: XCTestCase {
 
     /// Test the full pipeline: Audio -> MelSpec -> EffNet -> Embeddings -> Essentia Classifiers
     func testFullPipeline() async throws {
-        // 1. Create synthetic test audio (1 second of mixed frequencies at 16kHz)
+        // 1. Create synthetic test audio (2.5 seconds of mixed frequencies at 16kHz)
+        // MelSpectrogramGenerator requires at least 33,024 samples
         let sampleRate: Double = 16000
-        let duration: Double = 1.0
+        let duration: Double = 2.5
         let samples = createTestAudioSamples(sampleRate: sampleRate, duration: duration)
         let buffer = try createBuffer(samples: samples, sampleRate: sampleRate)
 
@@ -39,16 +40,18 @@ final class EffNetIntegrationTests: XCTestCase {
     func testDifferentAudioProducesDifferentEmbeddings() async throws {
         let engine = try TaggingEngine()
 
-        // Create two different audio signals
+        // Create two different audio signals (2.5 seconds each)
+        // MelSpectrogramGenerator requires at least 33,024 samples
         let sampleRate: Double = 16000
+        let sampleCount = 40000
 
         // Audio 1: Low frequency tone (200 Hz)
-        let samples1 = (0..<16000).map { i in
+        let samples1 = (0..<sampleCount).map { i in
             Float(sin(2.0 * .pi * 200.0 * Double(i) / sampleRate))
         }
 
         // Audio 2: High frequency tone (4000 Hz)
-        let samples2 = (0..<16000).map { i in
+        let samples2 = (0..<sampleCount).map { i in
             Float(sin(2.0 * .pi * 4000.0 * Double(i) / sampleRate))
         }
 
@@ -69,17 +72,19 @@ final class EffNetIntegrationTests: XCTestCase {
     func testMelSpectrogramShape() throws {
         let generator = MelSpectrogramGenerator()
 
-        // Create 1 second of audio at 16kHz
-        let samples = [Float](repeating: 0.5, count: 16000)
+        // Create 2.5 seconds of audio at 16kHz (needs 33,024+ samples)
+        let sampleCount: AVAudioFrameCount = 40000
+        let samples = [Float](repeating: 0.5, count: Int(sampleCount))
         let format = AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16000)!
-        buffer.frameLength = 16000
-        memcpy(buffer.floatChannelData![0], samples, 16000 * MemoryLayout<Float>.size)
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: sampleCount)!
+        buffer.frameLength = sampleCount
+        memcpy(buffer.floatChannelData![0], samples, Int(sampleCount) * MemoryLayout<Float>.size)
 
         let melSpec = try generator.generate(from: buffer)
 
-        XCTAssertEqual(melSpec.count, 128, "Should have 128 mel bands")
-        XCTAssertEqual(melSpec[0].count, 96, "Should have 96 time frames")
+        // MelSpectrogramGenerator outputs [numMelBands][numTimeFrames] = [96][128]
+        XCTAssertEqual(melSpec.count, 96, "Should have 96 mel bands")
+        XCTAssertEqual(melSpec[0].count, 128, "Should have 128 time frames")
     }
 
     /// Test EssentiaLabels are properly loaded from JSON resources
