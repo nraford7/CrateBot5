@@ -101,4 +101,36 @@ final class TagGroupRegistryTests: XCTestCase {
             XCTAssertNotEqual(dopeGroup, "Vibe")
         }
     }
+
+    func testIsMultiClassAlias() {
+        let registry = TagGroupRegistry.defaultGroups
+
+        // Tags in groups should return true
+        XCTAssertTrue(registry.isMultiClass(tag: "Punchy"))
+        XCTAssertTrue(registry.isMultiClass(tag: "High"))
+        XCTAssertTrue(registry.isMultiClass(tag: "Singing"))
+
+        // Tags not in groups should return false
+        XCTAssertFalse(registry.isMultiClass(tag: "House"))
+        XCTAssertFalse(registry.isMultiClass(tag: "Techno"))
+    }
+
+    func testMultiClassTags() {
+        let registry = TagGroupRegistry.defaultGroups
+        let allTags = registry.multiClassTags
+
+        // Should contain all tags from all groups
+        XCTAssertTrue(allTags.contains("Punchy"))
+        XCTAssertTrue(allTags.contains("High"))
+        XCTAssertTrue(allTags.contains("Singing"))
+        XCTAssertTrue(allTags.contains("Latin"))
+
+        // Should not contain arbitrary tags
+        XCTAssertFalse(allTags.contains("House"))
+    }
+
+    func testEmptyRegistryMultiClassTags() {
+        let registry = TagGroupRegistry()
+        XCTAssertTrue(registry.multiClassTags.isEmpty)
+    }
 }

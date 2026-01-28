@@ -139,6 +139,17 @@ public struct TagGroupRegistry: Codable, Sendable, Equatable {
         groupName(for: tag) != nil
     }
 
+    /// Check if a tag belongs to any multi-class group
+    /// Alias for isGrouped(_:) for API clarity with training components
+    public func isMultiClass(tag: String) -> Bool {
+        isGrouped(tag)
+    }
+
+    /// Get all tags that should be excluded from binary training
+    public var multiClassTags: Set<String> {
+        Set(groups.values.flatMap { $0 })
+    }
+
     // MARK: - Codable
 
     private enum CodingKeys: String, CodingKey { case groups }
