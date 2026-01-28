@@ -27,8 +27,16 @@ public enum HTTPError: Error, LocalizedError, Sendable {
 
 /// Thread-safe HTTP client for backend communication
 public actor HTTPClient {
-    /// Default base URL for the CrateBot backend
-    public static let defaultBaseURL = URL(string: "http://127.0.0.1:8742")!
+    /// The base URL for the backend server.
+    /// Defaults to localhost:8742 but can be overridden via UserDefaults key "backendBaseURL".
+    /// For production, consider using HTTPS with a proper certificate.
+    public static var defaultBaseURL: URL {
+        if let customURL = UserDefaults.standard.string(forKey: "backendBaseURL"),
+           let url = URL(string: customURL) {
+            return url
+        }
+        return URL(string: "http://127.0.0.1:8742")!
+    }
 
     private let baseURL: URL
     private let session: URLSession
