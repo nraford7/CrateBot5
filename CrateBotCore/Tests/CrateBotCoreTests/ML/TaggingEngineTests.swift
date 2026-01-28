@@ -111,6 +111,31 @@ final class TaggingEngineTests: XCTestCase {
         XCTAssertEqual(predictions.instruments, ["Congas"])
     }
 
+    func testCustomTagsPreserved() {
+        // Tags including custom ones not in DescriptiveTagMapping
+        let predictions = UserTagPredictions(
+            genre: "House",
+            timing: "Peak",
+            mood: "Happy",
+            descriptive: ["Funky", "Groovy", "Driving", "Euphoric"]  // Groovy and Euphoric are custom
+        )
+
+        // Custom tags should be preserved
+        XCTAssertTrue(predictions.customTags.contains("Groovy"), "Custom tag 'Groovy' should be preserved")
+        XCTAssertTrue(predictions.customTags.contains("Euphoric"), "Custom tag 'Euphoric' should be preserved")
+
+        // Known tags should be in their categories
+        XCTAssertTrue(predictions.vibes.contains("Funky"), "Known tag 'Funky' should be in vibes")
+        XCTAssertTrue(predictions.rhythm.contains("Driving"), "Known tag 'Driving' should be in rhythm")
+
+        // All tags should appear in descriptive computed property
+        let allDescriptive = predictions.descriptive
+        XCTAssertTrue(allDescriptive.contains("Funky"))
+        XCTAssertTrue(allDescriptive.contains("Groovy"))
+        XCTAssertTrue(allDescriptive.contains("Driving"))
+        XCTAssertTrue(allDescriptive.contains("Euphoric"))
+    }
+
     // MARK: - Model loading with modelName parameter
 
     func testLoadModelWithModelName() async throws {

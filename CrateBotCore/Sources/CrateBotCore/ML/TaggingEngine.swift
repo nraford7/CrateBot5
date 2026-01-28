@@ -60,6 +60,7 @@ public struct UserTagPredictions: Sendable {
     public let instruments: [String]      // Binary predictions
     public let vocalType: String?         // From multi-class
     public let acapella: Bool?            // Binary (separate classifier)
+    public let customTags: [String]       // User-defined tags not in DescriptiveTagMapping
 
     // Legacy flat array (computed for backwards compatibility)
     public var descriptive: [String] {
@@ -70,6 +71,7 @@ public struct UserTagPredictions: Sendable {
         result.append(contentsOf: vibes)
         result.append(contentsOf: instruments)
         if let vocal = vocalType { result.append(vocal) }
+        result.append(contentsOf: customTags)
         return result
     }
 
@@ -93,6 +95,10 @@ public struct UserTagPredictions: Sendable {
         self.instruments = organized[.instruments] ?? []
         self.vocalType = organized[.vocalType]?.first
         self.acapella = nil
+
+        // Preserve tags not in DescriptiveTagMapping
+        let knownTags = Set(organized.values.flatMap { $0 })
+        self.customTags = descriptive.filter { !knownTags.contains($0) }
     }
 
     // Full structured init
@@ -106,7 +112,8 @@ public struct UserTagPredictions: Sendable {
         vibes: [String],
         instruments: [String],
         vocalType: String?,
-        acapella: Bool?
+        acapella: Bool?,
+        customTags: [String] = []
     ) {
         self.genre = genre
         self.timing = timing
@@ -118,6 +125,7 @@ public struct UserTagPredictions: Sendable {
         self.instruments = instruments
         self.vocalType = vocalType
         self.acapella = acapella
+        self.customTags = customTags
     }
 }
 
@@ -506,6 +514,11 @@ public actor TaggingEngine {
         guard let metadata = loadedMetadata else {
             // No metadata - fall back to organizing descriptive tags only
             let organized = DescriptiveTagMapping.organize(tags)
+
+            // Preserve tags not in DescriptiveTagMapping
+            let knownTags = Set(organized.values.flatMap { $0 })
+            let customTags = tags.filter { !knownTags.contains($0) }
+
             return UserTagPredictions(
                 genre: nil,
                 timing: nil,
@@ -516,7 +529,8 @@ public actor TaggingEngine {
                 vibes: organized[.vibes] ?? [],
                 instruments: organized[.instruments] ?? [],
                 vocalType: organized[.vocalType]?.first,
-                acapella: nil
+                acapella: nil,
+                customTags: customTags
             )
         }
 
@@ -570,6 +584,10 @@ public actor TaggingEngine {
         let vibes = organized[.vibes] ?? []
         let instruments = organized[.instruments] ?? []
 
+        // Preserve custom tags not in DescriptiveTagMapping
+        let knownTags = Set(organized.values.flatMap { $0 })
+        let customTags = descriptiveTags.filter { !knownTags.contains($0) }
+
         return UserTagPredictions(
             genre: genre,
             timing: timing,
@@ -580,7 +598,8 @@ public actor TaggingEngine {
             vibes: vibes,
             instruments: instruments,
             vocalType: vocalType,
-            acapella: nil
+            acapella: nil,
+            customTags: customTags
         )
     }
 
