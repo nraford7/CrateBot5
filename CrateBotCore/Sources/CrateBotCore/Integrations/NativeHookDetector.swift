@@ -90,7 +90,17 @@ public actor NativeHookDetector {
     /// Request authorization for speech recognition
     /// - Returns: True if authorization was granted
     public func requestAuthorization() async -> Bool {
-        await withCheckedContinuation { continuation in
+        // Check current status first to avoid unnecessary prompts
+        let currentStatus = SFSpeechRecognizer.authorizationStatus()
+        if currentStatus == .authorized {
+            return true
+        }
+        if currentStatus == .denied || currentStatus == .restricted {
+            return false
+        }
+
+        // Only request if not determined
+        return await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { status in
                 continuation.resume(returning: status == .authorized)
             }
@@ -245,7 +255,7 @@ public actor NativeHookDetector {
         let detectedPhrases = repeatedPhrases.map { phrase, count -> DetectedPhrase in
             let wordCount = phrase.components(separatedBy: " ").count
 
-            // Length bonus: longer phrases get higher scores (3 words = 0.5, 6 words = 1.0)
+            // Length bonus: longer phrases get higher scores (3 words = 0.25, 6 words = 1.0)
             let lengthBonus = Double(wordCount - 2) / 4.0
 
             // Repetition bonus: more occurrences = higher confidence (2 = 0.5, 4+ = 1.0)
