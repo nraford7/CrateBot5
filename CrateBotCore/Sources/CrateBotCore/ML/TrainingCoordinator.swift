@@ -106,6 +106,9 @@ public actor TrainingCoordinator {
         /// Registry of mutually exclusive tag groups for multi-class classification
         public let tagGroupRegistry: TagGroupRegistry
 
+        /// Training hyperparameters configuration
+        public let configuration: TrainingConfiguration
+
         public init(
             modelName: String = "CustomModel",
             selectedTags: Set<String>? = nil,
@@ -113,7 +116,8 @@ public actor TrainingCoordinator {
             validationSplit: Double = 0.2,
             minSamplesPerTag: Int = 50,
             tagFieldMapping: TrainingDataCollector.TagFieldMapping = .default,
-            tagGroupRegistry: TagGroupRegistry = .defaultGroups
+            tagGroupRegistry: TagGroupRegistry = .defaultGroups,
+            configuration: TrainingConfiguration = .default
         ) {
             self.modelName = modelName
             self.selectedTags = selectedTags
@@ -122,6 +126,7 @@ public actor TrainingCoordinator {
             self.minSamplesPerTag = minSamplesPerTag
             self.tagFieldMapping = tagFieldMapping
             self.tagGroupRegistry = tagGroupRegistry
+            self.configuration = configuration
         }
     }
 
@@ -352,26 +357,28 @@ public actor TrainingCoordinator {
             var viableTags: [String] = []
             var skippedTagDetails: [SkippedTag] = []
 
+            let minSamples = options.configuration.minSamplesPerTag
+
             for (tag, count) in discoveredTags {
                 // Check if tag is in selected set (or if no selection, include all)
                 let isSelected = options.selectedTags?.contains(tag) ?? true
 
                 if isSelected {
-                    if count >= options.minSamplesPerTag {
+                    if count >= minSamples {
                         viableTags.append(tag)
                     } else {
                         skippedTagDetails.append(SkippedTag(
                             tag: tag,
-                            reason: .insufficientSamples(required: options.minSamplesPerTag),
+                            reason: .insufficientSamples(required: minSamples),
                             sampleCount: count
                         ))
-                        logger.info("Skipping tag '\(tag)': \(count) samples < \(options.minSamplesPerTag) required")
+                        logger.info("Skipping tag '\(tag)': \(count) samples < \(minSamples) required")
                     }
                 }
             }
 
             guard !viableTags.isEmpty else {
-                let errorDetails = "No tags have sufficient samples (min: \(options.minSamplesPerTag))"
+                let errorDetails = "No tags have sufficient samples (min: \(minSamples))"
                 _state = .failed(error: errorDetails)
                 await stateCallback?(_state)
                 throw CoordinatorError.insufficientData(details: errorDetails)
@@ -487,8 +494,16 @@ public actor TrainingCoordinator {
                 .appendingPathComponent(options.modelName)
 
             let trainingConfig = TrainingConfig(
-                validationSplit: options.validationSplit,
-                minSamplesPerTag: options.minSamplesPerTag
+                validationSplit: options.configuration.validationSplit,
+                minSamplesPerTag: options.configuration.minSamplesPerTag,
+                maxNegativeRatio: options.configuration.maxNegativeRatio,
+                randomSeed: options.configuration.randomSeed,
+                mixupEnabled: options.configuration.enableMixup,
+                mixupAlpha: options.configuration.mixupAlpha,
+                mixupRatio: options.configuration.mixupRatio,
+                labelSmoothingEnabled: options.configuration.enableLabelSmoothing,
+                labelSmoothingFactor: options.configuration.labelSmoothingFactor,
+                contrastiveLearningEnabled: options.configuration.enableContrastiveLoss
             )
 
             logger.info("Training models in \(outputDirectory.path)")
@@ -500,7 +515,7 @@ public actor TrainingCoordinator {
             let multiClassGenerator = MultiClassTrainingDataGenerator(registry: options.tagGroupRegistry)
             let viableGroupNames = multiClassGenerator.viableGroups(
                 from: validTracks,
-                minSamplesPerClass: options.minSamplesPerTag,
+                minSamplesPerClass: minSamples,
                 minClasses: 2
             )
 
@@ -510,7 +525,7 @@ public actor TrainingCoordinator {
                 guard let trainingData = multiClassGenerator.generateTrainingData(
                     for: groupName,
                     from: validTracks,
-                    minSamplesPerClass: options.minSamplesPerTag
+                    minSamplesPerClass: minSamples
                 ) else {
                     continue
                 }
@@ -525,7 +540,7 @@ public actor TrainingCoordinator {
                     let result = try await modelTrainer.trainMultiClassModel(
                         data: trainingData,
                         outputDirectory: outputDirectory,
-                        validationSplit: options.validationSplit
+                        validationSplit: options.configuration.validationSplit
                     )
                     multiClassResults.append(result)
 
