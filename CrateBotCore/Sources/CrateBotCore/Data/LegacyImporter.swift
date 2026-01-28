@@ -110,9 +110,14 @@ public actor LegacyImporter {
         let data = try Data(contentsOf: configPath)
         let config = try JSONDecoder().decode(LegacyModels.LegacyConfig.self, from: data)
 
-        // Migrate to UserDefaults
+        // Migrate to Keychain (secure) instead of UserDefaults
         if let apiKey = config.anthropicApiKey {
-            UserDefaults.standard.set(apiKey, forKey: "anthropicAPIKey")
+            do {
+                try KeychainManager.shared.save(apiKey, for: .anthropicAPIKey)
+                logger.info("Migrated API key to Keychain")
+            } catch {
+                logger.error("Failed to migrate API key to Keychain: \(error.localizedDescription)")
+            }
         }
         if let whisperModel = config.whisperModel {
             UserDefaults.standard.set(whisperModel, forKey: "whisperModelSize")
