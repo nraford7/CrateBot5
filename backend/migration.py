@@ -302,6 +302,23 @@ def run_migration(create_backup_first: bool = True) -> MigrationResult:
     return result
 
 
+def validate_backup_path(backup_path: str) -> Path:
+    """Validate that backup path is within allowed backup directory."""
+    backup = Path(backup_path).resolve()
+    backup_dir = BACKUP_DIR.resolve()
+
+    # Ensure the path is within the backup directory
+    try:
+        backup.relative_to(backup_dir)
+    except ValueError:
+        raise ValueError(f"Backup path must be within {backup_dir}")
+
+    if not backup.exists():
+        raise FileNotFoundError(f"Backup not found: {backup}")
+
+    return backup
+
+
 def restore_backup(backup_path: str) -> bool:
     """
     Restore from a backup.
@@ -312,9 +329,10 @@ def restore_backup(backup_path: str) -> bool:
     Returns:
         True if successful
     """
-    backup = Path(backup_path)
-    if not backup.exists():
-        logger.error(f"Backup not found: {backup_path}")
+    try:
+        backup = validate_backup_path(backup_path)
+    except (ValueError, FileNotFoundError) as e:
+        logger.error(f"Invalid backup path: {e}")
         return False
 
     try:
