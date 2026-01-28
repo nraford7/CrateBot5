@@ -233,13 +233,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for Electron
+# Configure CORS for local Swift app
+# Note: allow_credentials=True requires specific origins, not "*"
+ALLOWED_ORIGINS = [
+    "http://localhost:8742",
+    "http://127.0.0.1:8742",
+    "app://.",  # Electron/Tauri apps
+]
+
+# Allow additional origins from environment
+if os.environ.get("CRATEBOT_CORS_ORIGINS"):
+    ALLOWED_ORIGINS.extend(os.environ["CRATEBOT_CORS_ORIGINS"].split(","))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Electron app
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Create v1 API router
