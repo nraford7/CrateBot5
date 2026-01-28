@@ -1,0 +1,37 @@
+{
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/ML/ModelTrainer.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/ModelTrainer.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/ModelTrainer.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/ModelTrainer.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/ModelTrainer.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/ModelTrainer.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/ML/MultiClassClassifier.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/MultiClassClassifier.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/MultiClassClassifier.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/MultiClassClassifier.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/MultiClassClassifier.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/MultiClassClassifier.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/ML/MultiClassTrainingDataGenerator.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/MultiClassTrainingDataGenerator.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/MultiClassTrainingDataGenerator.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/MultiClassTrainingDataGenerator.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/MultiClassTrainingDataGenerator.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/MultiClassTrainingDataGenerator.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/ML/StratifiedSampler.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/StratifiedSampler.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/StratifiedSampler.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/StratifiedSampler.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/StratifiedSampler.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/StratifiedSampler.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/ML/TagClassifier.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/TagClassifier.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/TagClassifier.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/TagClassifier.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/TagClassifier.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/TagClassifier.swiftdeps"
+  }
+}

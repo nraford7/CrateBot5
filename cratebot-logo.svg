@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#c9a227"/>
+      <stop offset="100%" style="stop-color:#e8d4a8"/>
+    </linearGradient>
+    <linearGradient id="vinylGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1612"/>
+      <stop offset="100%" style="stop-color:#0d0b09"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle (vinyl record) -->
+  <circle cx="128" cy="128" r="120" fill="url(#vinylGradient)"/>
+
+  <!-- Outer ring -->
+  <circle cx="128" cy="128" r="120" fill="none" stroke="#2a2420" stroke-width="4"/>
+
+  <!-- Vinyl grooves (concentric circles) -->
+  <circle cx="128" cy="128" r="100" fill="none" stroke="rgba(201, 162, 39, 0.08)" stroke-width="1"/>
+  <circle cx="128" cy="128" r="90" fill="none" stroke="rgba(201, 162, 39, 0.06)" stroke-width="1"/>
+  <circle cx="128" cy="128" r="80" fill="none" stroke="rgba(201, 162, 39, 0.08)" stroke-width="1"/>
+  <circle cx="128" cy="128" r="70" fill="none" stroke="rgba(201, 162, 39, 0.06)" stroke-width="1"/>
+  <circle cx="128" cy="128" r="60" fill="none" stroke="rgba(201, 162, 39, 0.08)" stroke-width="1"/>
+
+  <!-- Center label (gold) -->
+  <circle cx="128" cy="128" r="45" fill="url(#goldGradient)"/>
+
+  <!-- Center hole -->
+  <circle cx="128" cy="128" r="8" fill="#0d0b09"/>
+
+  <!-- Neural network nodes (on the vinyl part) -->
+  <circle cx="128" cy="40" r="6" fill="#c9a227" opacity="0.9"/>
+  <circle cx="200" cy="80" r="6" fill="#c9a227" opacity="0.9"/>
+  <circle cx="216" cy="150" r="6" fill="#c9a227" opacity="0.9"/>
+  <circle cx="180" cy="210" r="6" fill="#c9a227" opacity="0.9"/>
+  <circle cx="100" cy="210" r="6" fill="#c9a227" opacity="0.9"/>
+  <circle cx="56" cy="160" r="6" fill="#c9a227" opacity="0.9"/>
+  <circle cx="56" cy="96" r="6" fill="#c9a227" opacity="0.9"/>
+
+  <!-- Neural network connections -->
+  <line x1="128" y1="40" x2="200" y2="80" stroke="#c9a227" stroke-width="1.5" opacity="0.4"/>
+  <line x1="200" y1="80" x2="216" y2="150" stroke="#c9a227" stroke-width="1.5" opacity="0.4"/>
+  <line x1="216" y1="150" x2="180" y2="210" stroke="#c9a227" stroke-width="1.5" opacity="0.4"/>
+  <line x1="180" y1="210" x2="100" y2="210" stroke="#c9a227" stroke-width="1.5" opacity="0.4"/>
+  <line x1="100" y1="210" x2="56" y2="160" stroke="#c9a227" stroke-width="1.5" opacity="0.4"/>
+  <line x1="56" y1="160" x2="56" y2="96" stroke="#c9a227" stroke-width="1.5" opacity="0.4"/>
+  <line x1="56" y1="96" x2="128" y2="40" stroke="#c9a227" stroke-width="1.5" opacity="0.4"/>
+
+  <!-- Cross connections -->
+  <line x1="128" y1="40" x2="180" y2="210" stroke="#c9a227" stroke-width="1" opacity="0.25"/>
+  <line x1="56" y1="96" x2="216" y2="150" stroke="#c9a227" stroke-width="1" opacity="0.25"/>
+  <line x1="200" y1="80" x2="56" y2="160" stroke="#c9a227" stroke-width="1" opacity="0.25"/>
+</svg>

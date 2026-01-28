@@ -1,0 +1,37 @@
+{
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/ML/TrainingDataCollector.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/TrainingDataCollector.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/TrainingDataCollector.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/TrainingDataCollector.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/TrainingDataCollector.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/TrainingDataCollector.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Networking/BackendAPI.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/BackendAPI.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/BackendAPI.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/BackendAPI.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/BackendAPI.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/BackendAPI.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Networking/HTTPClient.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/HTTPClient.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/HTTPClient.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/HTTPClient.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/HTTPClient.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/HTTPClient.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Tags/EssentiaTags.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/EssentiaTags.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/EssentiaTags.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/EssentiaTags.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/EssentiaTags.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/EssentiaTags.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Tags/ID3Manager.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/ID3Manager.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/ID3Manager.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/ID3Manager.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/ID3Manager.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/x86_64/ID3Manager.swiftdeps"
+  }
+}

@@ -1,0 +1,4 @@
+module CrateBotCore {
+header "CrateBotCore-Swift.h"
+export *
+}

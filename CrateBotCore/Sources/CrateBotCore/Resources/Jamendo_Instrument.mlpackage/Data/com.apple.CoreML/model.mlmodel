@@ -1,0 +1,181 @@
+∂
+
+input_1*	
+Ä
+êÄR
+var_17
+*
+(êÄ¢Ñ
+$MTG-Jamendo 40 instrument classifier¢3
+#com.github.apple.coremltools.sourcetorch==2.9.1¢:
++com.github.apple.coremltools.source_dialectTorchScript¢+
+$com.github.apple.coremltools.version9.0¢:
+,com.github.apple.coremltools.conversion_date
+2026-01-12≤ê£
+
+mainö
+
+
+input_1
+
+
+
+Ä
+CoreML6Ó	
+CoreML6‚	var_17¨
+const0
+input_1_weight_0_to_fp16
+
+
+Ä
+Ä
+*A
+val:
+
+
+Ä
+Ä
+*"
+@model_path/weights/weight.bin@*.
+name&
+
+"
+input_1_weight_0_to_fp16ú
+const'
+input_1_bias_0_to_fp16
+
+
+Ä*<
+val5
+
+
+Ä*$
+@model_path/weights/weight.binÄÅP*,
+name$
+
+"
+input_1_bias_0_to_fp16π
+linear"
+bias
+
+input_1_bias_0_to_fp16&
+weight
+
+input_1_weight_0_to_fp16
+x
+	
+input_1(
+input_1_cast_fp16
+
+
+
+Ä*'
+name
+
+"
+input_1_cast_fp16i
+relu
+x
+
+input_1_cast_fp16"
+x_cast_fp16
+
+
+
+Ä*!
+name
+
+"
+x_cast_fp16®
+const-
+input_weight_0_to_fp16
+
+
+(
+Ä*B
+val;
+
+
+(
+Ä*$
+@model_path/weights/weight.bin¿âP*,
+name$
+
+"
+input_weight_0_to_fp16ñ
+const$
+input_bias_0_to_fp16
+
+
+
+(*;
+val4
+
+
+
+(*$
+@model_path/weights/weight.binÄ R**
+name"
+
+"
+input_bias_0_to_fp16¥
+linear 
+bias
+
+input_bias_0_to_fp16$
+weight
+
+input_weight_0_to_fp16
+x
+
+x_cast_fp16%
+input_cast_fp16
+
+
+
+(*%
+name
+
+"
+input_cast_fp16h
+sigmoid
+x
+
+input_cast_fp16
+var_17
+
+
+
+(*%
+name
+
+"
+op_17_cast_fp16"Â
+	buildInfo◊"
+
+
+ƒ"¡
+6
+!
+
+"
+coremltools-version
+	
+"
+9.0
+@
+)
+!
+"
+coremltools-component-torch
+
+	"
+2.9.1
+E
+(
+ 
+"
+coremltools-source-dialect
+
+"
+TorchScript

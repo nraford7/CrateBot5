@@ -1,0 +1,50 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# ML Models (large files)
+*.mlmodel
+*.mlmodelc
+*.mlpackage
+
+# Local config
+.env
+.env.local
+*.local.json
+
+# CrateBot specific
+~/.cratebot/
+
+# Test/temp files
+*.tmp
+*.temp
+
+# Git worktrees
+.worktrees/
+
+# Claude
+.claude/

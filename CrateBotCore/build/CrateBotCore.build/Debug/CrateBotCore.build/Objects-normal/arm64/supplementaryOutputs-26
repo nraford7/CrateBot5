@@ -1,0 +1,37 @@
+{
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Data/BookmarkManager.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/BookmarkManager.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/BookmarkManager.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/BookmarkManager.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/BookmarkManager.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/BookmarkManager.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Data/FeatureCompression.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/FeatureCompression.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/FeatureCompression.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/FeatureCompression.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/FeatureCompression.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/FeatureCompression.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Data/FeaturePipelineVersion.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/FeaturePipelineVersion.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/FeaturePipelineVersion.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/FeaturePipelineVersion.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/FeaturePipelineVersion.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/FeaturePipelineVersion.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Data/LegacyImporter.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/LegacyImporter.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/LegacyImporter.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/LegacyImporter.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/LegacyImporter.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/LegacyImporter.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Data/LegacyModels.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/LegacyModels.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/LegacyModels.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/LegacyModels.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/LegacyModels.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/LegacyModels.swiftdeps"
+  }
+}

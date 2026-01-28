@@ -1,0 +1,37 @@
+{
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Audio/AudioAnalyzer.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/AudioAnalyzer.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/AudioAnalyzer.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/AudioAnalyzer.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/AudioAnalyzer.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/AudioAnalyzer.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Audio/AudioPlayer.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/AudioPlayer.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/AudioPlayer.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/AudioPlayer.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/AudioPlayer.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/AudioPlayer.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Audio/CLAPExtractor.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/CLAPExtractor.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/CLAPExtractor.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/CLAPExtractor.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/CLAPExtractor.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/CLAPExtractor.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Audio/CombinedFeatureExtractor.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/CombinedFeatureExtractor.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/CombinedFeatureExtractor.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/CombinedFeatureExtractor.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/CombinedFeatureExtractor.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/CombinedFeatureExtractor.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/DerivedSources/resource_bundle_accessor.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/resource_bundle_accessor.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/resource_bundle_accessor.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/resource_bundle_accessor.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/resource_bundle_accessor.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/resource_bundle_accessor.swiftdeps"
+  }
+}

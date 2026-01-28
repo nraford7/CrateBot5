@@ -1,0 +1,30 @@
+{
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Tags/TagMapping.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/TagMapping.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/TagMapping.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/TagMapping.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/TagMapping.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/TagMapping.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/DerivedSources/CoreMLGenerated/Discogs_EffNet/Discogs_EffNet.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Discogs_EffNet.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Discogs_EffNet.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Discogs_EffNet.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Discogs_EffNet.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Discogs_EffNet.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/DerivedSources/CoreMLGenerated/Jamendo_Instrument/Jamendo_Instrument.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Jamendo_Instrument.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Jamendo_Instrument.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Jamendo_Instrument.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Jamendo_Instrument.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Jamendo_Instrument.swiftdeps"
+  },
+  "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/DerivedSources/CoreMLGenerated/Jamendo_MoodTheme/Jamendo_MoodTheme.swift" : {
+    "const-values" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Jamendo_MoodTheme.swiftconstvalues",
+    "dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Jamendo_MoodTheme.d",
+    "diagnostics" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Jamendo_MoodTheme.dia",
+    "object" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Jamendo_MoodTheme.o",
+    "swift-dependencies" : "/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/build/CrateBotCore.build/Debug/CrateBotCore.build/Objects-normal/arm64/Jamendo_MoodTheme.swiftdeps"
+  }
+}

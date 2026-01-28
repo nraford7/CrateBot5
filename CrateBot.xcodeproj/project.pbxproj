@@ -1,0 +1,485 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1E5EFB512F147A680042A06E /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB462F147A680042A06E /* ContentView.swift */; };
+		1E5EFB522F147A680042A06E /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB402F147A680042A06E /* AppState.swift */; };
+		1E5EFB532F147A680042A06E /* SetupWizard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB4B2F147A680042A06E /* SetupWizard.swift */; };
+		1E5EFB542F147A680042A06E /* SettingsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB4A2F147A680042A06E /* SettingsPanel.swift */; };
+		1E5EFB552F147A680042A06E /* TrainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB4F2F147A680042A06E /* TrainView.swift */; };
+		1E5EFB562F147A680042A06E /* MainHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB482F147A680042A06E /* MainHeader.swift */; };
+		1E5EFB572F147A680042A06E /* Dialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB472F147A680042A06E /* Dialogs.swift */; };
+		1E5EFB582F147A680042A06E /* UpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB432F147A680042A06E /* UpdateManager.swift */; };
+		1E5EFB592F147A680042A06E /* StatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB4C2F147A680042A06E /* StatusBar.swift */; };
+		1E5EFB5A2F147A680042A06E /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB4E2F147A680042A06E /* ToastView.swift */; };
+		1E5EFB5B2F147A680042A06E /* TaggingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB4D2F147A680042A06E /* TaggingView.swift */; };
+		1E5EFB5C2F147A680042A06E /* CrateBotApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB422F147A680042A06E /* CrateBotApp.swift */; };
+		1E5EFB5D2F147A680042A06E /* RefineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB492F147A680042A06E /* RefineView.swift */; };
+		1E5EFB622F147AB20042A06E /* CrateBotCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1E5EFB612F147AB20042A06E /* CrateBotCore */; };
+		1E5EFB842F15DA690042A06E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EFB832F15DA690042A06E /* Theme.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1E5EFB0A2F1479220042A06E /* CrateBot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CrateBot.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E5EFB402F147A680042A06E /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		1E5EFB412F147A680042A06E /* CrateBot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CrateBot.entitlements; sourceTree = "<group>"; };
+		1E5EFB422F147A680042A06E /* CrateBotApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrateBotApp.swift; sourceTree = "<group>"; };
+		1E5EFB432F147A680042A06E /* UpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateManager.swift; sourceTree = "<group>"; };
+		1E5EFB462F147A680042A06E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		1E5EFB472F147A680042A06E /* Dialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dialogs.swift; sourceTree = "<group>"; };
+		1E5EFB482F147A680042A06E /* MainHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainHeader.swift; sourceTree = "<group>"; };
+		1E5EFB492F147A680042A06E /* RefineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RefineView.swift; sourceTree = "<group>"; };
+		1E5EFB4A2F147A680042A06E /* SettingsPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPanel.swift; sourceTree = "<group>"; };
+		1E5EFB4B2F147A680042A06E /* SetupWizard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupWizard.swift; sourceTree = "<group>"; };
+		1E5EFB4C2F147A680042A06E /* StatusBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBar.swift; sourceTree = "<group>"; };
+		1E5EFB4D2F147A680042A06E /* TaggingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaggingView.swift; sourceTree = "<group>"; };
+		1E5EFB4E2F147A680042A06E /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
+		1E5EFB4F2F147A680042A06E /* TrainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainView.swift; sourceTree = "<group>"; };
+		1E5EFB832F15DA690042A06E /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1E5EFB632F147C4F0042A06E /* Exceptions for "CrateBot" folder in "CrateBot" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				App/AppState.swift,
+				App/CrateBotApp.swift,
+				App/UpdateManager.swift,
+				Views/ContentView.swift,
+				Views/Dialogs.swift,
+				Views/MainHeader.swift,
+				Views/RefineView.swift,
+				Views/SettingsPanel.swift,
+				Views/SetupWizard.swift,
+				Views/StatusBar.swift,
+				Views/TaggingView.swift,
+				Views/Theme.swift,
+				Views/ToastView.swift,
+				Views/TrainView.swift,
+			);
+			target = 1E5EFB092F1479220042A06E /* CrateBot */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		1E5EFB0C2F1479220042A06E /* CrateBot */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1E5EFB632F147C4F0042A06E /* Exceptions for "CrateBot" folder in "CrateBot" target */,
+			);
+			path = CrateBot;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1E5EFB072F1479220042A06E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1E5EFB622F147AB20042A06E /* CrateBotCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1E5EFB012F1479220042A06E = {
+			isa = PBXGroup;
+			children = (
+				1E5EFB442F147A680042A06E /* App */,
+				1E5EFB502F147A680042A06E /* Views */,
+				1E5EFB0C2F1479220042A06E /* CrateBot */,
+				1E5EFB0B2F1479220042A06E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		1E5EFB0B2F1479220042A06E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1E5EFB0A2F1479220042A06E /* CrateBot.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1E5EFB442F147A680042A06E /* App */ = {
+			isa = PBXGroup;
+			children = (
+				1E5EFB402F147A680042A06E /* AppState.swift */,
+				1E5EFB412F147A680042A06E /* CrateBot.entitlements */,
+				1E5EFB422F147A680042A06E /* CrateBotApp.swift */,
+				1E5EFB432F147A680042A06E /* UpdateManager.swift */,
+			);
+			name = App;
+			path = CrateBot/App;
+			sourceTree = "<group>";
+		};
+		1E5EFB502F147A680042A06E /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				1E5EFB832F15DA690042A06E /* Theme.swift */,
+				1E5EFB462F147A680042A06E /* ContentView.swift */,
+				1E5EFB472F147A680042A06E /* Dialogs.swift */,
+				1E5EFB482F147A680042A06E /* MainHeader.swift */,
+				1E5EFB492F147A680042A06E /* RefineView.swift */,
+				1E5EFB4A2F147A680042A06E /* SettingsPanel.swift */,
+				1E5EFB4B2F147A680042A06E /* SetupWizard.swift */,
+				1E5EFB4C2F147A680042A06E /* StatusBar.swift */,
+				1E5EFB4D2F147A680042A06E /* TaggingView.swift */,
+				1E5EFB4E2F147A680042A06E /* ToastView.swift */,
+				1E5EFB4F2F147A680042A06E /* TrainView.swift */,
+			);
+			name = Views;
+			path = CrateBot/Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1E5EFB092F1479220042A06E /* CrateBot */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1E5EFB152F1479240042A06E /* Build configuration list for PBXNativeTarget "CrateBot" */;
+			buildPhases = (
+				1E5EFB062F1479220042A06E /* Sources */,
+				1E5EFB072F1479220042A06E /* Frameworks */,
+				1E5EFB082F1479220042A06E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				1E5EFB0C2F1479220042A06E /* CrateBot */,
+			);
+			name = CrateBot;
+			packageProductDependencies = (
+				1E5EFB612F147AB20042A06E /* CrateBotCore */,
+			);
+			productName = CrateBot;
+			productReference = 1E5EFB0A2F1479220042A06E /* CrateBot.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1E5EFB022F1479220042A06E /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2620;
+				LastUpgradeCheck = 2620;
+				TargetAttributes = {
+					1E5EFB092F1479220042A06E = {
+						CreatedOnToolsVersion = 26.2;
+					};
+				};
+			};
+			buildConfigurationList = 1E5EFB052F1479220042A06E /* Build configuration list for PBXProject "CrateBot" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 1E5EFB012F1479220042A06E;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1E5EFB602F147AB20042A06E /* XCLocalSwiftPackageReference "CrateBotCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 1E5EFB0B2F1479220042A06E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1E5EFB092F1479220042A06E /* CrateBot */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1E5EFB082F1479220042A06E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1E5EFB062F1479220042A06E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1E5EFB512F147A680042A06E /* ContentView.swift in Sources */,
+				1E5EFB522F147A680042A06E /* AppState.swift in Sources */,
+				1E5EFB532F147A680042A06E /* SetupWizard.swift in Sources */,
+				1E5EFB542F147A680042A06E /* SettingsPanel.swift in Sources */,
+				1E5EFB552F147A680042A06E /* TrainView.swift in Sources */,
+				1E5EFB562F147A680042A06E /* MainHeader.swift in Sources */,
+				1E5EFB572F147A680042A06E /* Dialogs.swift in Sources */,
+				1E5EFB582F147A680042A06E /* UpdateManager.swift in Sources */,
+				1E5EFB592F147A680042A06E /* StatusBar.swift in Sources */,
+				1E5EFB5A2F147A680042A06E /* ToastView.swift in Sources */,
+				1E5EFB5B2F147A680042A06E /* TaggingView.swift in Sources */,
+				1E5EFB5C2F147A680042A06E /* CrateBotApp.swift in Sources */,
+				1E5EFB842F15DA690042A06E /* Theme.swift in Sources */,
+				1E5EFB5D2F147A680042A06E /* RefineView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1E5EFB132F1479240042A06E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		1E5EFB142F1479240042A06E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		1E5EFB162F1479240042A06E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CrateBot/App/CrateBot.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = "read-write";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CrateBot/Info.plist;
+				"INFOPLIST_KEY_NSDesktopFolderUsageDescription[sdk=macosx*]" = "CrateBot needs access to Desktop files you select for tagging.";
+				"INFOPLIST_KEY_NSDocumentsFolderUsageDescription[sdk=macosx*]" = "CrateBot needs access to Documents files you select for tagging.";
+				"INFOPLIST_KEY_NSDownloadsFolderUsageDescription[sdk=macosx*]" = "CrateBot needs access to Downloads files you select for tagging.";
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cratebot.CrateBot;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Debug;
+		};
+		1E5EFB172F1479240042A06E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CrateBot/App/CrateBot.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = "read-write";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CrateBot/Info.plist;
+				"INFOPLIST_KEY_NSDesktopFolderUsageDescription[sdk=macosx*]" = "CrateBot needs access to Desktop files you select for tagging.";
+				"INFOPLIST_KEY_NSDocumentsFolderUsageDescription[sdk=macosx*]" = "CrateBot needs access to Documents files you select for tagging.";
+				"INFOPLIST_KEY_NSDownloadsFolderUsageDescription[sdk=macosx*]" = "CrateBot needs access to Downloads files you select for tagging.";
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cratebot.CrateBot;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1E5EFB052F1479220042A06E /* Build configuration list for PBXProject "CrateBot" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1E5EFB132F1479240042A06E /* Debug */,
+				1E5EFB142F1479240042A06E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1E5EFB152F1479240042A06E /* Build configuration list for PBXNativeTarget "CrateBot" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1E5EFB162F1479240042A06E /* Debug */,
+				1E5EFB172F1479240042A06E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		1E5EFB602F147AB20042A06E /* XCLocalSwiftPackageReference "CrateBotCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = CrateBotCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1E5EFB612F147AB20042A06E /* CrateBotCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CrateBotCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 1E5EFB022F1479220042A06E /* Project object */;
+}
