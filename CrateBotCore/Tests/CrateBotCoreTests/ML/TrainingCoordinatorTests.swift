@@ -283,6 +283,44 @@ final class TrainingCoordinatorTests: XCTestCase {
         XCTAssertNil(metadata.descriptiveSubCategories)
     }
 
+    func testCreateModelMetadataIncludesFeatureDimension() async {
+        let coordinator = TrainingCoordinator()
+
+        // Test with different feature dimensions
+        let metadata1680 = await coordinator.createModelMetadata(
+            name: "Test1680",
+            tags: ["Tag1"],
+            tagGroups: [],
+            trainingFileCount: 100,
+            accuracy: 0.9,
+            categorizedTags: [:],
+            featureDimension: 1680
+        )
+        XCTAssertEqual(metadata1680.featureDimension, 1680)
+
+        let metadata2192 = await coordinator.createModelMetadata(
+            name: "Test2192",
+            tags: ["Tag1"],
+            tagGroups: [],
+            trainingFileCount: 100,
+            accuracy: 0.9,
+            categorizedTags: [:],
+            featureDimension: 2192
+        )
+        XCTAssertEqual(metadata2192.featureDimension, 2192)
+
+        let metadata1280 = await coordinator.createModelMetadata(
+            name: "Test1280",
+            tags: ["Tag1"],
+            tagGroups: [],
+            trainingFileCount: 100,
+            accuracy: 0.9,
+            categorizedTags: [:],
+            featureDimension: 1280
+        )
+        XCTAssertEqual(metadata1280.featureDimension, 1280)
+    }
+
     // MARK: - Reset Tests
 
     func testResetReturnsToIdleState() async {

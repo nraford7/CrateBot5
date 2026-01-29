@@ -629,13 +629,17 @@ public actor TrainingCoordinator {
                 )
             }
 
+            // Get the actual feature dimension used during training
+            let actualFeatureDimension = await dataCollector.getActualFeatureDimension()
+
             let metadata = createModelMetadata(
                 name: options.modelName,
                 tags: trainedTagNames,
                 tagGroups: tagGroupInfos,
                 trainingFileCount: validTracks.count,
                 accuracy: avgAccuracy,
-                categorizedTags: options.tagsByCategory
+                categorizedTags: options.tagsByCategory,
+                featureDimension: actualFeatureDimension
             )
 
             let metadataURL = outputDirectory.appendingPathComponent("\(options.modelName).json")
@@ -704,6 +708,7 @@ public actor TrainingCoordinator {
     ///   - trainingFileCount: Number of files used for training
     ///   - accuracy: Average validation accuracy
     ///   - categorizedTags: Tags organized by category from training options
+    ///   - featureDimension: The actual feature dimension used during training (1280, 1680, or 2192)
     /// - Returns: ModelMetadata instance
     public func createModelMetadata(
         name: String,
@@ -711,7 +716,8 @@ public actor TrainingCoordinator {
         tagGroups: [TagGroupInfo] = [],
         trainingFileCount: Int,
         accuracy: Double,
-        categorizedTags: [String: Set<String>] = [:]
+        categorizedTags: [String: Set<String>] = [:],
+        featureDimension: Int = 1680
     ) -> ModelMetadata {
         // Use provided categories or fall back to grouping all under "General"
         let tagsByCategory = groupTagsByCategory(tags, categorizedTags: categorizedTags)
@@ -746,6 +752,7 @@ public actor TrainingCoordinator {
             tags: tagsByCategory,
             tagGroups: tagGroupMetadata,
             accuracy: accuracy,
+            featureDimension: featureDimension,
             descriptiveSubCategories: subCategoriesDict.isEmpty ? nil : subCategoriesDict
         )
     }

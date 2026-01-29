@@ -177,6 +177,16 @@ public actor TrainingDataCollector {
         return _combinedExtractorInitError
     }
 
+    /// Get the actual feature dimension being used by the extractor
+    /// This may differ from the requested config if CLAP is unavailable
+    public func getActualFeatureDimension() async -> Int {
+        guard let extractor = getCombinedExtractor() else {
+            // Fallback to requested config dimension
+            return featureConfig.dimension
+        }
+        return await extractor.featureDimension
+    }
+
     /// Write debug log to file (in app's container for sandbox compatibility)
     private static func debugLog(_ message: String) {
         // Use app support directory for sandbox compatibility
