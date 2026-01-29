@@ -21,10 +21,10 @@ The Genre ID3 tag historically contained both genre and timing information mixed
 
 ### Actual Genre Values
 
-Defined in `python/src/core/constants.py`:
+Defined in `CrateBotCore/Sources/CrateBotCore/Tags/TagMapping.swift` (`TagMapping.knownGenres`):
 
-```python
-ACTUAL_GENRE_VALUES = {
+```swift
+public static let knownGenres: Set<String> = [
     "House",
     "Techno",
     "Jungle",
@@ -32,8 +32,8 @@ ACTUAL_GENRE_VALUES = {
     "DiscoFunk",
     "PartyBreaks",
     "Acapella",
-    "Dub/Reggae",
-}
+    "Dub/Reggae"
+]
 ```
 
 ### Split Logic
@@ -89,11 +89,11 @@ This works because timing concepts (build-up, peak intensity, release) are unive
 
 | Component | File |
 |-----------|------|
-| Constants (genre list) | `python/src/core/constants.py` |
-| Tag Scanner (split logic) | `python/src/core/tag_scanner.py` |
-| Tag Manager (ID3 read/write) | `python/src/core/tag_manager.py` |
-| Training data collection | `python/src/core/auto_tagger.py` |
-| Model training | `python/src/models/tag_predictor.py` |
+| Constants (genre list) | `CrateBotCore/Sources/CrateBotCore/Tags/TagMapping.swift` |
+| Tag Scanner (split logic) | `CrateBotCore/Sources/CrateBotCore/Tags/ID3Manager.swift` |
+| Tag Manager (ID3 read/write) | `CrateBotCore/Sources/CrateBotCore/Tags/ID3Manager.swift` |
+| Training data collection | `CrateBotCore/Sources/CrateBotCore/ML/TrainingDataCollector.swift` |
+| Model training | `CrateBotCore/Sources/CrateBotCore/ML/ModelTrainer.swift` |
 | Lexicon (ID3 frame mapping) | `~/.cratebot/lexicon.json` |
 
 ## Lexicon Configuration
@@ -125,16 +125,16 @@ The lexicon (`~/.cratebot/lexicon.json`) controls which ID3 frames are used for 
 
 To add a new genre:
 
-1. Edit `python/src/core/constants.py`
-2. Add the genre to `ACTUAL_GENRE_VALUES`:
+1. Edit `CrateBotCore/Sources/CrateBotCore/Tags/TagMapping.swift`
+2. Add the genre to `TagMapping.knownGenres`:
 
-```python
-ACTUAL_GENRE_VALUES = {
+```swift
+public static let knownGenres: Set<String> = [
     "House",
     "Techno",
-    # ... existing genres ...
-    "NewGenre",  # Add here
-}
+    // ... existing genres ...
+    "NewGenre" // Add here
+]
 ```
 
 3. Retag your training files with the new genre value in the Genre ID3 tag
@@ -153,10 +153,10 @@ This caused timing, mood, and descriptive classifiers to never train (they recei
 
 ### The Fix
 
-1. Updated `TagScanner.scan_directory()` to split Genre tag and use new taxonomy keys
-2. Updated `TagSelector.interactive_select()` to present 4 categories
-3. Updated `AutoTagger._collect_training_data()` to transform tags to new taxonomy
-4. Added `ACTUAL_GENRE_VALUES` constant to define the genre/timing split
+1. Updated tag scanning to split the Genre tag and use the new taxonomy keys
+2. Updated tag selection UI to present 4 categories
+3. Updated training data collection to transform tags to the new taxonomy
+4. Added a known-genre list to define the genre/timing split
 
 Model metadata now shows non-zero counts for all classifiers:
 

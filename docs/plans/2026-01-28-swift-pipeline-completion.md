@@ -2,55 +2,20 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Complete the Swift training pipeline by adding CLAP model, fixing documentation, adding audio validation, and verifying the entire flow works end-to-end.
+**Goal:** Complete the Swift training pipeline by verifying the CLAP model bundle, fixing documentation, adding audio validation, and verifying the entire flow works end-to-end.
 
-**Architecture:** Convert LAION CLAP to CoreML, bundle in Swift Resources, fix mel spectrogram parameter docs, add minimum duration validation in TrainingDataCollector, then test full pipeline (collection → extraction → training → inference).
+**Architecture:** Verify CLAP CoreML bundle, fix mel spectrogram parameter docs, add minimum duration validation in TrainingDataCollector, then test full pipeline (collection → extraction → training → inference).
 
-**Tech Stack:** Python (transformers, coremltools, torch), Swift (CoreML, AVFoundation, CreateML), macOS 14+
+**Tech Stack:** Swift (CoreML, AVFoundation, CreateML), macOS 14+
 
 ---
 
-## Task 1: Convert CLAP Model to CoreML
+## Task 1: Verify CLAP Model Bundle
 
 **Files:**
-- Run: `/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/.worktrees/training-40-percent/scripts/convert_clap_to_coreml.py`
-- Output: `CLAPAudioEncoder.mlpackage`
+- Verify: `/Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Resources/CLAPAudioEncoder.mlpackage`
 
-**Step 1: Verify Python dependencies**
-
-Run:
-```bash
-python3 -c "import torch; import transformers; import coremltools; print('OK')"
-```
-Expected: `OK`
-
-**Step 2: Run the CLAP conversion script**
-
-Run:
-```bash
-cd /Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/.worktrees/training-40-percent/scripts
-python3 convert_clap_to_coreml.py
-```
-Expected output:
-```
-Loading CLAP model...
-Tracing model...
-Converting to CoreML...
-Saved to CLAPAudioEncoder.mlpackage
-Verifying...
-Output shape: (1, 512)
-Done!
-```
-
-**Step 3: Move CLAP model to Swift Resources**
-
-Run:
-```bash
-mv /Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/.worktrees/training-40-percent/scripts/CLAPAudioEncoder.mlpackage \
-   /Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBotCore/Sources/CrateBotCore/Resources/
-```
-
-**Step 4: Verify model is in Resources**
+**Step 1: Verify model is in Resources**
 
 Run:
 ```bash
@@ -58,7 +23,7 @@ ls -la /Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5/CrateBot
 ```
 Expected: Should list 4 mlpackage files including `CLAPAudioEncoder.mlpackage`
 
-**Step 5: Commit**
+**Step 2: Commit (if needed)**
 
 ```bash
 cd /Users/noahraford/Projects/claude_projects/11_CrateBot/CrateBot5

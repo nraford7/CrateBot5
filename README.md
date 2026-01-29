@@ -65,7 +65,6 @@ CrateBot/
 │   ├── Networking/       # Anthropic API client
 │   ├── Integrations/     # Vibe generation, hook detection
 │   └── Resources/        # ML models (.mlpackage)
-├── CrateBotModelLab/     # Model experimentation app
 └── Models/               # Trained models directory
 ```
 

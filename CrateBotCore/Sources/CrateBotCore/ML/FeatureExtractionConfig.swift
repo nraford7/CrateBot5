@@ -43,26 +43,3 @@ public struct FeatureExtractionConfig: Codable, Equatable, Sendable {
         return hash.prefix(16).map { String(format: "%02x", $0) }.joined()
     }
 }
-
-// Make FeatureConfig Codable for hashing
-extension CombinedFeatureExtractor.FeatureConfig: Codable {
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        let rawValue = try container.decode(String.self)
-        switch rawValue {
-        case "effnetOnly": self = .effnetOnly
-        case "effnetPlusGenres": self = .effnetPlusGenres
-        case "effnetGenresCLAP": self = .effnetGenresCLAP
-        default: self = .effnetGenresCLAP
-        }
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        switch self {
-        case .effnetOnly: try container.encode("effnetOnly")
-        case .effnetPlusGenres: try container.encode("effnetPlusGenres")
-        case .effnetGenresCLAP: try container.encode("effnetGenresCLAP")
-        }
-    }
-}

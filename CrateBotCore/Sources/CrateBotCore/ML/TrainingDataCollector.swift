@@ -134,6 +134,11 @@ public actor TrainingDataCollector {
     private var _combinedExtractorInitError: Error?
     private var _combinedExtractorInitialized = false
 
+    // MARK: - Segment Sampling
+
+    private let segmentDurationSeconds: Double = 30.0
+    private let segmentStartFractions: [Double] = [0.33, 0.5, 0.66]
+
     // MARK: - Initialization
 
     /// Creates a new TrainingDataCollector.
@@ -752,35 +757,51 @@ public actor TrainingDataCollector {
             // Capture augmentation config and expected feature dimension for use in task group
             let augConfig = self.augmentationConfig
             let expectedDimension = await extractor.featureDimension
+            let segmentDuration = self.segmentDurationSeconds
+            let startFractions = self.segmentStartFractions
             let batchResults = await withTaskGroup(of: (Int, TaggedTrack, [Float]?).self) { group in
                 for (localIndex, track) in batch.enumerated() {
-                    group.addTask { [audioAnalyzer, extractor] in
+                    group.addTask { [audioAnalyzer, extractor, segmentDuration, startFractions] in
                         let globalIndex = batchStart + localIndex
                         do {
                             let fileURL = URL(fileURLWithPath: track.id)
-                            let buffer = try await audioAnalyzer.loadAudio(
+                            let buffers = try await audioAnalyzer.loadAudioSegments(
                                 from: fileURL,
-                                targetSampleRate: EffNetExtractor.targetSampleRate
+                                targetSampleRate: EffNetExtractor.targetSampleRate,
+                                segmentDuration: segmentDuration,
+                                startFractions: startFractions
                             )
-                            // Use CombinedFeatureExtractor for unified feature extraction
-                            // Dimension depends on featureConfig (1280, 1680, or 2192)
-                            let features = try await extractor.extract(from: buffer)
 
-                            // Validate feature dimensions
-                            if features.count != expectedDimension {
-                                Self.debugLog("Track \(fileURL.lastPathComponent) has \(features.count) features, expected \(expectedDimension) - skipping")
-                                return (globalIndex, track, nil)
+                            var segmentFeatures: [[Float]] = []
+                            segmentFeatures.reserveCapacity(buffers.count)
+
+                            for buffer in buffers {
+                                // Use CombinedFeatureExtractor for unified feature extraction
+                                let features = try await extractor.extract(from: buffer)
+
+                                // Validate feature dimensions
+                                if features.count != expectedDimension {
+                                    Self.debugLog("Track \(fileURL.lastPathComponent) has \(features.count) features, expected \(expectedDimension) - skipping segment")
+                                    continue
+                                }
+
+                                // Validate no NaN/Inf values
+                                if features.contains(where: { !$0.isFinite }) {
+                                    Self.debugLog("Track \(fileURL.lastPathComponent) has non-finite features - skipping segment")
+                                    continue
+                                }
+
+                                segmentFeatures.append(features)
                             }
 
-                            // Validate no NaN/Inf values
-                            if features.contains(where: { !$0.isFinite }) {
-                                Self.debugLog("Track \(fileURL.lastPathComponent) has non-finite features - skipping")
+                            guard let averaged = Self.averageFeatures(segmentFeatures, expectedDimension: expectedDimension) else {
+                                Self.debugLog("Track \(fileURL.lastPathComponent) produced no valid segments - skipping")
                                 return (globalIndex, track, nil)
                             }
 
                             // Apply feature-level augmentation for training robustness
                             let augmentedFeatures = AudioAugmenter.augmentFeatures(
-                                features,
+                                averaged,
                                 addNoise: augConfig.specAugmentEnabled,
                                 noiseScale: 0.02
                             )
@@ -953,5 +974,23 @@ public actor TrainingDataCollector {
         }
 
         return tagSet
+    }
+
+    private static func averageFeatures(_ segments: [[Float]], expectedDimension: Int) -> [Float]? {
+        guard !segments.isEmpty else { return nil }
+        var sums = [Double](repeating: 0.0, count: expectedDimension)
+        var count = 0
+
+        for features in segments {
+            guard features.count == expectedDimension else { continue }
+            for i in 0..<expectedDimension {
+                sums[i] += Double(features[i])
+            }
+            count += 1
+        }
+
+        guard count > 0 else { return nil }
+
+        return sums.map { Float($0 / Double(count)) }
     }
 }

@@ -6,10 +6,10 @@ import AVFoundation
 public actor CombinedFeatureExtractor {
 
     /// Configuration for which feature extractors to combine
-    public enum FeatureConfig: Sendable {
-        case effnetOnly           // 1280 dims
-        case effnetPlusGenres     // 1680 dims (1280 + 400)
-        case effnetGenresCLAP     // 2192 dims (1280 + 400 + 512)
+    public enum FeatureConfig: String, Sendable, Codable, Equatable {
+        case effnetOnly = "effnetOnly"           // 1280 dims
+        case effnetPlusGenres = "effnetPlusGenres"     // 1680 dims (1280 + 400)
+        case effnetGenresCLAP = "effnetGenresCLAP"     // 2192 dims (1280 + 400 + 512)
 
         public var dimension: Int {
             switch self {

@@ -5,6 +5,7 @@ public final class AudioAnalyzer: Sendable {
     public let targetSampleRate: Double = 22050
     private let chunkSize: AVAudioFrameCount = 8192
     private let logger = Logger(subsystem: "com.cratebot", category: "AudioAnalyzer")
+    private let segmentDedupEpsilon: Double = 0.5
 
     public enum AnalyzerError: Error, LocalizedError {
         case fileReadFailed(URL)
@@ -330,6 +331,54 @@ public final class AudioAnalyzer: Sendable {
         return outputBuffer
     }
 
+    /// Load multiple segments from an audio file and resample them to the target sample rate.
+    /// Segments are defined by start fractions of the total duration and a fixed duration.
+    public func loadAudioSegments(
+        from url: URL,
+        targetSampleRate: Double = 16000,
+        segmentDuration: Double,
+        startFractions: [Double]
+    ) async throws -> [AVAudioPCMBuffer] {
+        let file = try AVAudioFile(forReading: url)
+        let sourceFormat = file.processingFormat
+        let durationSeconds = Double(file.length) / sourceFormat.sampleRate
+
+        let starts = normalizedSegmentStarts(
+            durationSeconds: durationSeconds,
+            segmentDuration: segmentDuration,
+            startFractions: startFractions
+        )
+
+        var buffers: [AVAudioPCMBuffer] = []
+        buffers.reserveCapacity(starts.count)
+
+        for start in starts {
+            let startFrame = AVAudioFramePosition(start * sourceFormat.sampleRate)
+            let maxFrames = AVAudioFrameCount(min(
+                segmentDuration * sourceFormat.sampleRate,
+                Double(max(0, file.length - startFrame))
+            ))
+
+            guard maxFrames > 0 else { continue }
+
+            let segmentBuffer = try loadMonoBufferSegment(
+                from: file,
+                startFrame: startFrame,
+                frameCount: maxFrames
+            )
+
+            let resampled = try resampleIfNeeded(
+                buffer: segmentBuffer,
+                sourceSampleRate: sourceFormat.sampleRate,
+                targetSampleRate: targetSampleRate
+            )
+
+            buffers.append(resampled)
+        }
+
+        return buffers
+    }
+
     private func loadMonoBuffer(from file: AVAudioFile) throws -> AVAudioPCMBuffer {
         let format = file.processingFormat
 
@@ -393,5 +442,143 @@ public final class AudioAnalyzer: Sendable {
         }
 
         return monoBuffer
+    }
+
+    private func loadMonoBufferSegment(
+        from file: AVAudioFile,
+        startFrame: AVAudioFramePosition,
+        frameCount: AVAudioFrameCount
+    ) throws -> AVAudioPCMBuffer {
+        let format = file.processingFormat
+        let totalFrames = file.length
+
+        guard startFrame >= 0, startFrame < totalFrames else {
+            throw AnalyzerError.fileReadFailed(file.url)
+        }
+
+        let clampedFrameCount = AVAudioFrameCount(
+            min(Int64(frameCount), totalFrames - startFrame)
+        )
+
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: clampedFrameCount
+        ) else {
+            throw AnalyzerError.bufferCreationFailed
+        }
+
+        file.framePosition = startFrame
+        try file.read(into: buffer, frameCount: clampedFrameCount)
+
+        // If already mono, return as-is
+        if format.channelCount == 1 {
+            return buffer
+        }
+
+        // Convert to mono
+        guard let monoFormat = AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 1),
+              let monoBuffer = AVAudioPCMBuffer(pcmFormat: monoFormat, frameCapacity: buffer.frameCapacity) else {
+            throw AnalyzerError.bufferCreationFailed
+        }
+
+        monoBuffer.frameLength = buffer.frameLength
+
+        guard let sourceData = buffer.floatChannelData,
+              let destData = monoBuffer.floatChannelData else {
+            throw AnalyzerError.bufferCreationFailed
+        }
+
+        let channelCount = Int(format.channelCount)
+        for i in 0..<Int(buffer.frameLength) {
+            var sum: Float = 0
+            for ch in 0..<channelCount {
+                sum += sourceData[ch][i]
+            }
+            destData[0][i] = sum / Float(channelCount)
+        }
+
+        return monoBuffer
+    }
+
+    private func resampleIfNeeded(
+        buffer: AVAudioPCMBuffer,
+        sourceSampleRate: Double,
+        targetSampleRate: Double
+    ) throws -> AVAudioPCMBuffer {
+        if sourceSampleRate == targetSampleRate {
+            return buffer
+        }
+
+        guard let targetFormat = AVAudioFormat(
+            standardFormatWithSampleRate: targetSampleRate,
+            channels: 1
+        ) else {
+            throw AnalyzerError.formatCreationFailed
+        }
+
+        guard let converter = AVAudioConverter(from: buffer.format, to: targetFormat) else {
+            throw AnalyzerError.converterCreationFailed
+        }
+
+        let ratio = targetSampleRate / sourceSampleRate
+        let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: targetFormat,
+            frameCapacity: outputFrameCount
+        ) else {
+            throw AnalyzerError.bufferCreationFailed
+        }
+
+        var inputConsumed = false
+        var error: NSError?
+        let status = converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+            if inputConsumed {
+                outStatus.pointee = .endOfStream
+                return nil
+            }
+            inputConsumed = true
+            outStatus.pointee = .haveData
+            return buffer
+        }
+
+        if let error = error {
+            throw AnalyzerError.conversionFailed(error.localizedDescription)
+        }
+
+        if status == .error {
+            throw AnalyzerError.conversionFailed("Conversion returned error status")
+        }
+
+        return outputBuffer
+    }
+
+    private func normalizedSegmentStarts(
+        durationSeconds: Double,
+        segmentDuration: Double,
+        startFractions: [Double]
+    ) -> [Double] {
+        guard durationSeconds > 0 else { return [] }
+
+        if durationSeconds <= segmentDuration {
+            return [0.0]
+        }
+
+        var starts: [Double] = []
+        starts.reserveCapacity(startFractions.count)
+
+        for fraction in startFractions {
+            let rawStart = max(0.0, min(1.0, fraction)) * durationSeconds
+            let clampedStart = min(rawStart, durationSeconds - segmentDuration)
+
+            // Deduplicate near-identical starts (short tracks can clamp multiple fractions)
+            if starts.contains(where: { abs($0 - clampedStart) < segmentDedupEpsilon }) {
+                continue
+            }
+
+            starts.append(clampedStart)
+        }
+
+        return starts
     }
 }
