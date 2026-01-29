@@ -48,7 +48,7 @@ final class TrainingCheckpointTests: XCTestCase {
         XCTAssertEqual(checkpoint.modelName, "TestModel")
         XCTAssertEqual(checkpoint.processedTracks.count, 2)
         XCTAssertEqual(checkpoint.totalTracksDiscovered, 10)
-        XCTAssertEqual(checkpoint.checkpointVersion, 2)
+        XCTAssertEqual(checkpoint.checkpointVersion, 3)
         XCTAssertFalse(checkpoint.tagHash.isEmpty)
     }
 
@@ -440,5 +440,88 @@ final class TrainingCheckpointTests: XCTestCase {
             CheckpointError.loadFailed(reason: "Corrupt file").errorDescription,
             "Failed to load checkpoint: Corrupt file"
         )
+    }
+
+    // MARK: - Feature Extraction Config Tests
+
+    func testCheckpointStoresFeatureExtractionConfig() {
+        let config = FeatureExtractionConfig(
+            featureConfig: .effnetGenresCLAP,
+            segmentDuration: 30.0,
+            segmentStartFractions: [0.33, 0.5, 0.66]
+        )
+
+        let tracks = [TaggedTrack(id: "track1", tags: ["House"])]
+
+        let checkpoint = TrainingCheckpoint(
+            modelName: "ConfigTest",
+            sourceDirectories: [testDirectory],
+            processedTracks: tracks,
+            totalTracksDiscovered: 1,
+            featureExtractionConfig: config
+        )
+
+        XCTAssertEqual(checkpoint.featureExtractionConfig, config)
+        XCTAssertEqual(checkpoint.checkpointVersion, 3)
+    }
+
+    func testCheckpointIncompatibleWhenFeatureConfigChanges() throws {
+        let config1 = FeatureExtractionConfig(
+            featureConfig: .effnetGenresCLAP,
+            segmentDuration: 30.0,
+            segmentStartFractions: [0.33, 0.5, 0.66]
+        )
+
+        let tracks = [TaggedTrack(id: "track1", tags: ["House"])]
+
+        let checkpoint = TrainingCheckpoint(
+            modelName: "ConfigChangeTest",
+            sourceDirectories: [testDirectory],
+            processedTracks: tracks,
+            totalTracksDiscovered: 1,
+            featureExtractionConfig: config1
+        )
+
+        let config2 = FeatureExtractionConfig(
+            featureConfig: .effnetPlusGenres,
+            segmentDuration: 30.0,
+            segmentStartFractions: [0.33, 0.5, 0.66]
+        )
+
+        let compatibility = checkpointManager.isCheckpointCompatible(
+            checkpoint,
+            sourceDirectories: [testDirectory],
+            currentTracks: tracks,
+            currentConfig: config2
+        )
+
+        XCTAssertFalse(compatibility.isCompatible)
+        XCTAssertEqual(compatibility.reason, .featureConfigMismatch)
+    }
+
+    func testBackwardsCompatibilityWithV2Checkpoint() throws {
+        let v2JSON = """
+        {
+            "modelName": "LegacyModel",
+            "createdAt": "2024-01-01T00:00:00Z",
+            "sourceDirectories": ["/path/to/music"],
+            "processedTracks": [{"id": "track1", "tags": ["House"]}],
+            "totalTracksDiscovered": 10,
+            "checkpointVersion": 2,
+            "tagHash": "abc123"
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let checkpoint = try decoder.decode(
+            TrainingCheckpoint.self,
+            from: v2JSON.data(using: .utf8)!
+        )
+
+        XCTAssertEqual(checkpoint.modelName, "LegacyModel")
+        XCTAssertEqual(checkpoint.checkpointVersion, 2)
+        XCTAssertNil(checkpoint.featureExtractionConfig)
     }
 }

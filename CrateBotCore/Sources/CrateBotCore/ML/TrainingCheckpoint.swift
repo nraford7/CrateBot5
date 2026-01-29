@@ -27,9 +27,13 @@ public struct TrainingCheckpoint: Codable, Sendable {
     /// Used to detect if tags have been edited since the checkpoint was created
     public let tagHash: String
 
+    /// Feature extraction configuration used for this checkpoint
+    /// nil for v1/v2 checkpoints that don't have this field
+    public let featureExtractionConfig: FeatureExtractionConfig?
+
     private enum CodingKeys: String, CodingKey {
         case modelName, createdAt, sourceDirectories, processedTracks
-        case totalTracksDiscovered, checkpointVersion, tagHash
+        case totalTracksDiscovered, checkpointVersion, tagHash, featureExtractionConfig
     }
 
     public init(from decoder: Decoder) throws {
@@ -42,6 +46,8 @@ public struct TrainingCheckpoint: Codable, Sendable {
         checkpointVersion = try container.decodeIfPresent(Int.self, forKey: .checkpointVersion) ?? 1
         // For backwards compatibility, use empty string if tagHash is missing (old checkpoints)
         tagHash = try container.decodeIfPresent(String.self, forKey: .tagHash) ?? ""
+        // For backwards compatibility, nil if featureExtractionConfig is missing (v1/v2 checkpoints)
+        featureExtractionConfig = try container.decodeIfPresent(FeatureExtractionConfig.self, forKey: .featureExtractionConfig)
     }
 
     /// A serializable representation of a TaggedTrack
@@ -88,15 +94,17 @@ public struct TrainingCheckpoint: Codable, Sendable {
         createdAt: Date = Date(),
         sourceDirectories: [URL],
         processedTracks: [TaggedTrack],
-        totalTracksDiscovered: Int
+        totalTracksDiscovered: Int,
+        featureExtractionConfig: FeatureExtractionConfig? = .default
     ) {
         self.modelName = modelName
         self.createdAt = createdAt
         self.sourceDirectories = sourceDirectories.map { $0.path }
         self.processedTracks = processedTracks.map { CheckpointTrack(from: $0) }
         self.totalTracksDiscovered = totalTracksDiscovered
-        self.checkpointVersion = 2  // Version 2 includes tag hash
+        self.checkpointVersion = 3  // Version 3 includes feature extraction config
         self.tagHash = Self.computeTagHash(from: processedTracks)
+        self.featureExtractionConfig = featureExtractionConfig
     }
 
     /// Get processed tracks as TaggedTrack array
@@ -209,11 +217,13 @@ public final class CheckpointManager: Sendable {
     ///   - checkpoint: The checkpoint to validate
     ///   - sourceDirectories: Current source directories
     ///   - currentTracks: Current tracks with their tags (for tag hash validation)
+    ///   - currentConfig: Current feature extraction config (for config validation)
     /// - Returns: A result indicating compatibility and any incompatibility reason
     public func isCheckpointCompatible(
         _ checkpoint: TrainingCheckpoint,
         sourceDirectories: [URL],
-        currentTracks: [TaggedTrack]? = nil
+        currentTracks: [TaggedTrack]? = nil,
+        currentConfig: FeatureExtractionConfig? = nil
     ) -> CheckpointCompatibility {
         // Check if source directories match
         let currentPaths = Set(sourceDirectories.map { $0.path })
@@ -221,6 +231,14 @@ public final class CheckpointManager: Sendable {
 
         guard currentPaths == checkpointPaths else {
             return .incompatible(reason: .sourceDirectoriesMismatch)
+        }
+
+        // Check feature extraction config
+        if let currentConfig = currentConfig,
+           let checkpointConfig = checkpoint.featureExtractionConfig {
+            if currentConfig != checkpointConfig {
+                return .incompatible(reason: .featureConfigMismatch)
+            }
         }
 
         // If current tracks are provided, validate tag hash
@@ -296,6 +314,7 @@ public enum IncompatibilityReason: Sendable, Equatable {
     case sourceDirectoriesMismatch
     case tagsModified
     case featureDimensionMismatch(expected: Int, found: Int)
+    case featureConfigMismatch
 
     public var description: String {
         switch self {
@@ -305,6 +324,8 @@ public enum IncompatibilityReason: Sendable, Equatable {
             return "Tags have been modified since checkpoint was created"
         case .featureDimensionMismatch(let expected, let found):
             return "Feature dimension mismatch: expected \(expected), found \(found) in checkpoint"
+        case .featureConfigMismatch:
+            return "Feature extraction configuration has changed since checkpoint was created"
         }
     }
 }
