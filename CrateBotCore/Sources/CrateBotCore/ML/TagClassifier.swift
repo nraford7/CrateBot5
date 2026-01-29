@@ -36,6 +36,21 @@ public class TagClassifier: @unchecked Sendable {
     private let probabilityOutputKey: String
     private let logger = Logger(subsystem: "com.cratebot", category: "TagClassifier")
 
+    /// Extract feature count from a multiarray shape
+    /// Handles shapes like [1680], [1, 1680], [1, 1, 1680]
+    /// Returns the last non-1 dimension, or the last dimension if all are 1
+    public static func extractFeatureCount(from shape: [NSNumber]) -> Int {
+        // Find the last dimension > 1, or use the last dimension
+        for dim in shape.reversed() {
+            let value = dim.intValue
+            if value > 1 {
+                return value
+            }
+        }
+        // All dimensions are 1, return the last one
+        return shape.last?.intValue ?? 0
+    }
+
     public init(tagName: String, modelURL: URL, threshold: Float) throws {
         self.tagName = tagName
         self.threshold = threshold
@@ -62,9 +77,11 @@ public class TagClassifier: @unchecked Sendable {
            let inputDescription = inputs[inputKey],
            let constraint = inputDescription.multiArrayConstraint {
             // Single multiArray input (neural network style)
+            // Use helper to correctly parse shape like [1, N] or [N]
+            let featureCount = Self.extractFeatureCount(from: constraint.shape)
             self.inputFormat = .multiArray(
                 inputKey: inputKey,
-                featureCount: constraint.shape.first?.intValue ?? 0
+                featureCount: featureCount
             )
         } else {
             // Tabular input (BoostedTreeClassifier style with f0, f1, f2, ...)
