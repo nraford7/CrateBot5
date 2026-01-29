@@ -45,7 +45,7 @@ public final class MultiClassTrainingDataGenerator: Sendable {
 
             // Find which class this track belongs to
             var assignedClass: String?
-            for tag in track.tags {
+            for tag in track.tags.sorted() {
                 if let className = registry.normalizeTagToClass(tag, inGroup: groupName) {
                     assignedClass = className
                     break

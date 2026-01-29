@@ -216,4 +216,38 @@ final class MultiClassTrainingDataGeneratorTests: XCTestCase {
 
         XCTAssertTrue(viable.isEmpty)
     }
+
+    // MARK: - Determinism Tests
+
+    func testDeterministicLabelAssignmentWithMultipleTags() {
+        // Track with multiple tags in the same group
+        // Should always pick the same one (alphabetically first normalized class)
+        let tracks = [
+            makeTrack(id: "multi1", tags: ["Walking", "Rolling"], features: [1.0, 2.0, 3.0]),
+            makeTrack(id: "multi2", tags: ["Rolling", "Walking"], features: [4.0, 5.0, 6.0]),
+        ]
+
+        // Add enough samples to meet threshold
+        var allTracks = tracks
+        allTracks += makeTracks(forClass: "Walking", count: 25, idPrefix: "walk")
+        allTracks += makeTracks(forClass: "Rolling", count: 25, idPrefix: "roll")
+
+        // Run multiple times - should always produce same result
+        var results: [String] = []
+        for _ in 0..<10 {
+            let result = generator.generateTrainingData(for: "BassType", from: allTracks)
+            let multiTagSamples = result?.samples.filter { $0.trackId.starts(with: "multi") }
+            let classes = multiTagSamples?.map { $0.className }.sorted()
+            results.append(classes?.joined(separator: ",") ?? "")
+        }
+
+        // All runs should produce identical results
+        XCTAssertEqual(Set(results).count, 1, "Label assignment should be deterministic")
+
+        // Both multi-tag tracks should get the same class
+        let result = generator.generateTrainingData(for: "BassType", from: allTracks)
+        let multi1 = result?.samples.first { $0.trackId == "multi1" }
+        let multi2 = result?.samples.first { $0.trackId == "multi2" }
+        XCTAssertEqual(multi1?.className, multi2?.className)
+    }
 }
