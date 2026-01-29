@@ -5,7 +5,8 @@ import Accelerate
 public struct AudioAugmenter: Sendable {
 
     public struct AugmentationConfig: Sendable {
-        public let specAugmentEnabled: Bool
+        public let featureNoiseEnabled: Bool
+        public let featureNoiseScale: Float
         public let mixupEnabled: Bool
         public let mixupAlpha: Float
         public let freqMaskCount: Int
@@ -14,7 +15,8 @@ public struct AudioAugmenter: Sendable {
         public let timeMaskWidth: Int
 
         public static let `default` = AugmentationConfig(
-            specAugmentEnabled: true,
+            featureNoiseEnabled: true,
+            featureNoiseScale: 0.02,
             mixupEnabled: true,
             mixupAlpha: 0.4,
             freqMaskCount: 2,
@@ -24,7 +26,8 @@ public struct AudioAugmenter: Sendable {
         )
 
         public static let none = AugmentationConfig(
-            specAugmentEnabled: false,
+            featureNoiseEnabled: false,
+            featureNoiseScale: 0.0,
             mixupEnabled: false,
             mixupAlpha: 0,
             freqMaskCount: 0,
@@ -34,7 +37,8 @@ public struct AudioAugmenter: Sendable {
         )
 
         public init(
-            specAugmentEnabled: Bool = true,
+            featureNoiseEnabled: Bool = true,
+            featureNoiseScale: Float = 0.02,
             mixupEnabled: Bool = true,
             mixupAlpha: Float = 0.4,
             freqMaskCount: Int = 2,
@@ -42,7 +46,8 @@ public struct AudioAugmenter: Sendable {
             timeMaskCount: Int = 2,
             timeMaskWidth: Int = 25
         ) {
-            self.specAugmentEnabled = specAugmentEnabled
+            self.featureNoiseEnabled = featureNoiseEnabled
+            self.featureNoiseScale = featureNoiseScale
             self.mixupEnabled = mixupEnabled
             self.mixupAlpha = mixupAlpha
             self.freqMaskCount = freqMaskCount
@@ -52,14 +57,17 @@ public struct AudioAugmenter: Sendable {
         }
     }
 
-    // MARK: - SpecAugment
+    // MARK: - SpecAugment (time/frequency masking on spectrograms)
 
-    /// Apply SpecAugment to a mel spectrogram
+    /// Apply SpecAugment (time/frequency masking) to a mel spectrogram
+    /// Note: This is separate from featureNoise - SpecAugment operates on spectrograms,
+    /// while featureNoise adds Gaussian noise to extracted embedding features.
     public static func applySpecAugment(
         to spectrogram: [[Float]],
         config: AugmentationConfig = .default
     ) -> [[Float]] {
-        guard config.specAugmentEnabled else { return spectrogram }
+        // SpecAugment is controlled by freqMaskCount/timeMaskCount, not featureNoiseEnabled
+        guard config.freqMaskCount > 0 || config.timeMaskCount > 0 else { return spectrogram }
         guard !spectrogram.isEmpty, !spectrogram[0].isEmpty else { return spectrogram }
 
         var augmented = spectrogram

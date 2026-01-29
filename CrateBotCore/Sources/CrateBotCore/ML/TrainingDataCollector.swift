@@ -798,8 +798,8 @@ public actor TrainingDataCollector {
                             // Apply feature-level augmentation for training robustness
                             let augmentedFeatures = AudioAugmenter.augmentFeatures(
                                 averaged,
-                                addNoise: augConfig.specAugmentEnabled,
-                                noiseScale: 0.02
+                                addNoise: augConfig.featureNoiseEnabled,
+                                noiseScale: augConfig.featureNoiseScale
                             )
                             return (globalIndex, track, augmentedFeatures)
                         } catch {

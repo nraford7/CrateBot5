@@ -12,7 +12,7 @@ final class TrainingConfigurationTests: XCTestCase {
         XCTAssertEqual(config.featureNoisePercent, 0.02)
         XCTAssertEqual(config.validationSplit, 0.2)
         XCTAssertTrue(config.enableMixup)
-        XCTAssertTrue(config.enableSpecAugment)
+        XCTAssertTrue(config.enableFeatureNoise)
         XCTAssertEqual(config.treeMaxDepth, 6)
         XCTAssertEqual(config.treeIterations, 100)
         XCTAssertEqual(config.treeStepSize, 0.3)

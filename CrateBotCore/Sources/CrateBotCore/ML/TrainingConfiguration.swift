@@ -23,8 +23,8 @@ public struct TrainingConfiguration: Codable, Sendable, Equatable {
     /// Whether to apply mixup augmentation
     public var enableMixup: Bool
 
-    /// Whether to apply SpecAugment
-    public var enableSpecAugment: Bool
+    /// Whether to add Gaussian noise to extracted features for regularization
+    public var enableFeatureNoise: Bool
 
     /// MLBoostedTreeClassifier max depth
     public var treeMaxDepth: Int
@@ -55,7 +55,7 @@ public struct TrainingConfiguration: Codable, Sendable, Equatable {
         featureNoisePercent: Float = 0.02,
         validationSplit: Double = 0.2,
         enableMixup: Bool = true,
-        enableSpecAugment: Bool = true,
+        enableFeatureNoise: Bool = true,
         treeMaxDepth: Int = 6,
         treeIterations: Int = 100,
         treeStepSize: Double = 0.3,
@@ -71,7 +71,7 @@ public struct TrainingConfiguration: Codable, Sendable, Equatable {
         self.featureNoisePercent = featureNoisePercent
         self.validationSplit = validationSplit
         self.enableMixup = enableMixup
-        self.enableSpecAugment = enableSpecAugment
+        self.enableFeatureNoise = enableFeatureNoise
         self.treeMaxDepth = treeMaxDepth
         self.treeIterations = treeIterations
         self.treeStepSize = treeStepSize

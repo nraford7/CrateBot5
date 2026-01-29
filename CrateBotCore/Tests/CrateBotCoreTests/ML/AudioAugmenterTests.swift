@@ -6,7 +6,8 @@ final class AudioAugmenterTests: XCTestCase {
     func testSpecAugmentMasksFrequencies() {
         let spectrogram = [[Float]](repeating: [Float](repeating: 1.0, count: 100), count: 64)
         let config = AudioAugmenter.AugmentationConfig(
-            specAugmentEnabled: true,
+            featureNoiseEnabled: false,
+            featureNoiseScale: 0.0,
             mixupEnabled: false,
             freqMaskCount: 2,
             freqMaskWidth: 10,
