@@ -123,21 +123,16 @@ public actor TrainingDataCollector {
     /// Configuration for feature augmentation during extraction
     public var augmentationConfig: AudioAugmenter.AugmentationConfig = .default
 
-    // MARK: - Feature Extraction
+    // MARK: - Feature Extraction Configuration
 
-    /// Configuration for which features to extract (EffNet only, +Genres, or +CLAP)
-    /// Default is .effnetGenresCLAP for the full 2192-dim feature vector
-    public var featureConfig: CombinedFeatureExtractor.FeatureConfig = .effnetGenresCLAP
+    /// Configuration for feature extraction (segment sampling, feature config)
+    /// This affects cache compatibility - changing it invalidates cached embeddings
+    public let featureExtractionConfig: FeatureExtractionConfig
 
     /// Lazy-loaded CombinedFeatureExtractor - only created when extractFeatures is called
     private var _combinedExtractor: CombinedFeatureExtractor?
     private var _combinedExtractorInitError: Error?
     private var _combinedExtractorInitialized = false
-
-    // MARK: - Segment Sampling
-
-    private let segmentDurationSeconds: Double = 30.0
-    private let segmentStartFractions: [Double] = [0.33, 0.5, 0.66]
 
     // MARK: - Initialization
 
@@ -146,15 +141,16 @@ public actor TrainingDataCollector {
     /// - Parameters:
     ///   - id3Manager: The ID3 manager for reading tags. Defaults to a new instance.
     ///   - audioAnalyzer: The audio analyzer for loading audio. Defaults to a new instance.
-    ///   - embeddingCache: Cache for storing computed embeddings. Defaults to a new instance.
+    ///   - featureExtractionConfig: Configuration for feature extraction. Defaults to .default.
     public init(
         id3Manager: ID3Manager = ID3Manager(),
         audioAnalyzer: AudioAnalyzer = AudioAnalyzer(),
-        embeddingCache: EmbeddingCache = EmbeddingCache()
+        featureExtractionConfig: FeatureExtractionConfig = .default
     ) {
         self.id3Manager = id3Manager
         self.audioAnalyzer = audioAnalyzer
-        self.embeddingCache = embeddingCache
+        self.featureExtractionConfig = featureExtractionConfig
+        self.embeddingCache = EmbeddingCache(extractionConfig: featureExtractionConfig)
     }
 
     /// Get or create the CombinedFeatureExtractor (lazy initialization)
@@ -162,10 +158,10 @@ public actor TrainingDataCollector {
         if !_combinedExtractorInitialized {
             _combinedExtractorInitialized = true
             do {
-                _combinedExtractor = try CombinedFeatureExtractor(config: self.featureConfig)
+                _combinedExtractor = try CombinedFeatureExtractor(config: self.featureExtractionConfig.featureConfig)
                 _combinedExtractorInitError = nil
-                logger.info("CombinedFeatureExtractor initialized successfully with config: \(self.featureConfig.description) (lazy)")
-                Self.debugLog("CombinedFeatureExtractor initialized successfully with config: \(self.featureConfig.description) (lazy)")
+                logger.info("CombinedFeatureExtractor initialized successfully with config: \(self.featureExtractionConfig.featureConfig.description) (lazy)")
+                Self.debugLog("CombinedFeatureExtractor initialized successfully with config: \(self.featureExtractionConfig.featureConfig.description) (lazy)")
             } catch {
                 _combinedExtractor = nil
                 _combinedExtractorInitError = error
@@ -187,7 +183,7 @@ public actor TrainingDataCollector {
     public func getActualFeatureDimension() async -> Int {
         guard let extractor = getCombinedExtractor() else {
             // Fallback to requested config dimension
-            return featureConfig.dimension
+            return featureExtractionConfig.featureConfig.dimension
         }
         return await extractor.featureDimension
     }
@@ -613,7 +609,7 @@ public actor TrainingDataCollector {
 
     /// Extracts audio features for tracks that don't already have them.
     ///
-    /// Uses CombinedFeatureExtractor to generate features from audio based on featureConfig:
+    /// Uses CombinedFeatureExtractor to generate features from audio based on featureExtractionConfig:
     /// - .effnetOnly: 1280 dims (EffNet embeddings)
     /// - .effnetPlusGenres: 1680 dims (1280 embeddings + 400 genre activations)
     /// - .effnetGenresCLAP: 2192 dims (1280 + 400 + 512 CLAP embeddings)
@@ -644,7 +640,7 @@ public actor TrainingDataCollector {
 
     /// Extracts audio features with checkpoint support for resumable training.
     ///
-    /// Uses CombinedFeatureExtractor to generate features from audio based on featureConfig:
+    /// Uses CombinedFeatureExtractor to generate features from audio based on featureExtractionConfig:
     /// - .effnetOnly: 1280 dims (EffNet embeddings)
     /// - .effnetPlusGenres: 1680 dims (1280 embeddings + 400 genre activations)
     /// - .effnetGenresCLAP: 2192 dims (1280 + 400 + 512 CLAP embeddings)
@@ -757,8 +753,8 @@ public actor TrainingDataCollector {
             // Capture augmentation config and expected feature dimension for use in task group
             let augConfig = self.augmentationConfig
             let expectedDimension = await extractor.featureDimension
-            let segmentDuration = self.segmentDurationSeconds
-            let startFractions = self.segmentStartFractions
+            let segmentDuration = self.featureExtractionConfig.segmentDuration
+            let startFractions = self.featureExtractionConfig.segmentStartFractions
             let batchResults = await withTaskGroup(of: (Int, TaggedTrack, [Float]?).self) { group in
                 for (localIndex, track) in batch.enumerated() {
                     group.addTask { [audioAnalyzer, extractor, segmentDuration, startFractions] in
