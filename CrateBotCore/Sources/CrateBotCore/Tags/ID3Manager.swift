@@ -473,35 +473,30 @@ public actor ID3Manager {
                 }
             }
 
-            // Write the data directly using FileHandle to preserve security scope
+            // Write the data atomically using temp file + atomic move
+            // Create temp file in same directory (ensures same filesystem for atomic move)
+            let tempURL = url.deletingLastPathComponent()
+                .appendingPathComponent(".cratebot_temp_\(UUID().uuidString).mp3")
             do {
-                let handle = try FileHandle(forWritingTo: url)
-                try handle.truncate(atOffset: 0)
-                try handle.write(contentsOf: modifiedMp3Data)
-                try handle.close()
-                print("ID3Manager writeTags: write OK for \(url.lastPathComponent)")
+                // Write to temp file first
+                try modifiedMp3Data.write(to: tempURL, options: .atomic)
+
+                // Atomic replace: move temp over original
+                _ = try FileManager.default.replaceItemAt(url, withItemAt: tempURL)
+
+                print("ID3Manager writeTags: atomic write OK for \(url.lastPathComponent)")
             } catch {
                 let nsError = error as NSError
-                print("ID3Manager writeTags: FileHandle write failed domain=\(nsError.domain) code=\(nsError.code)")
+                print("ID3Manager writeTags: atomic write failed domain=\(nsError.domain) code=\(nsError.code)")
 
-                // If FileHandle fails, try Data.write as fallback
-                if nsError.code == 1 { // EPERM
-                    print("ID3Manager writeTags: trying Data.write fallback...")
-                    do {
-                        try modifiedMp3Data.write(to: url, options: .atomic)
-                        print("ID3Manager writeTags: Data.write fallback OK for \(url.lastPathComponent)")
-                        return
-                    } catch {
-                        let fallbackError = error as NSError
-                        print("ID3Manager writeTags: Data.write fallback also failed domain=\(fallbackError.domain) code=\(fallbackError.code)")
-                    }
-                }
+                // Clean up temp file on failure
+                try? FileManager.default.removeItem(at: tempURL)
 
                 // Provide helpful error message
-                if nsError.code == 1 {
-                    throw ID3Error.writeFailed("Permission denied. This file may have macOS access restrictions. Try granting Full Disk Access to CrateBot in System Preferences → Privacy & Security, or use 'Browse Files' to re-select the files.")
+                if nsError.code == NSFileWriteNoPermissionError || nsError.code == 1 {
+                    throw ID3Error.writeFailed("Permission denied. This file may have macOS access restrictions. Try granting Full Disk Access to CrateBot in System Preferences -> Privacy & Security, or use 'Browse Files' to re-select the files.")
                 }
-                throw error
+                throw ID3Error.writeFailed(error.localizedDescription)
             }
         } catch let error as ID3Error {
             throw error

@@ -585,4 +585,37 @@ final class ID3ManagerTests: XCTestCase {
         XCTAssertEqual(readTags.conductor, "New Mood")
         XCTAssertEqual(readTags.encodedBy, "New Instruments")
     }
+
+    // MARK: - Atomic Write Safety Tests
+
+    func testID3ManagerAtomicWritePreservesOriginalOnFailure() async throws {
+        let manager = ID3Manager()
+
+        let (tempURL, cleanup) = try createWritableTestMP3()
+        defer { cleanup() }
+
+        // Read original content
+        let originalData = try Data(contentsOf: tempURL)
+
+        // Make file read-only to simulate write failure
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: tempURL.path)
+
+        // Attempt to write (should fail)
+        let tagsToWrite = TagsToWrite(genre: "Test Genre")
+        do {
+            try await manager.writeTags(tagsToWrite, to: tempURL)
+            // If we get here, restore permissions and fail test
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: tempURL.path)
+            XCTFail("Expected write to fail on read-only file")
+        } catch {
+            // Expected - write should fail
+        }
+
+        // Restore permissions to read file
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: tempURL.path)
+
+        // Verify original file content is preserved
+        let afterData = try Data(contentsOf: tempURL)
+        XCTAssertEqual(originalData, afterData, "Original file should be preserved after failed write")
+    }
 }
