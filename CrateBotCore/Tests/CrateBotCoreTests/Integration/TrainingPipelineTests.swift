@@ -222,7 +222,7 @@ final class TrainingPipelineTests: XCTestCase {
 
         // Verify balancing ratio
         let ratio = Double(negative.count) / Double(positive.count)
-        XCTAssertLessThanOrEqual(ratio, BinaryTrainingDataGenerator.maxNegativeRatio)
+        XCTAssertLessThanOrEqual(ratio, generator.maxNegativeRatio)
     }
 
     func testDataGeneratorReturnsNilForInsufficientPositives() {
@@ -261,7 +261,8 @@ final class TrainingPipelineTests: XCTestCase {
         XCTAssertEqual(discovered["Techno"], 70)
 
         // Step 2: Filter to viable tags (>= 50 samples)
-        let viable = discovered.filter { $0.value >= BinaryTrainingDataGenerator.minPositiveExamples }
+        let generator = BinaryTrainingDataGenerator()
+        let viable = discovered.filter { $0.value >= generator.minPositiveExamples }
 
         XCTAssertEqual(viable.count, 4)
         XCTAssertNotNil(viable["House"])
@@ -272,8 +273,6 @@ final class TrainingPipelineTests: XCTestCase {
         XCTAssertNil(viable["Night"])
 
         // Step 3: Verify data generator can balance data for each viable tag
-        let generator = BinaryTrainingDataGenerator()
-
         for tag in viable.keys {
             guard let (positive, negative) = generator.generateTrainingData(for: tag, from: tracks) else {
                 XCTFail("Failed to generate training data for viable tag '\(tag)'")
@@ -284,7 +283,7 @@ final class TrainingPipelineTests: XCTestCase {
             XCTAssertEqual(positive.count, viable[tag])
 
             // Negative samples should be properly balanced
-            let maxNegatives = Int(Double(positive.count) * BinaryTrainingDataGenerator.maxNegativeRatio)
+            let maxNegatives = Int(Double(positive.count) * generator.maxNegativeRatio)
             XCTAssertLessThanOrEqual(negative.count, maxNegatives)
         }
     }
@@ -302,7 +301,7 @@ final class TrainingPipelineTests: XCTestCase {
 
         // Discover and filter tags
         let discovered = await collector.discoverTags(from: tracks)
-        let viable = discovered.filter { $0.value >= BinaryTrainingDataGenerator.minPositiveExamples }
+        let viable = discovered.filter { $0.value >= generator.minPositiveExamples }
 
         XCTAssertEqual(viable.count, 2)
 

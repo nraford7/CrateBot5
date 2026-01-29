@@ -22,12 +22,15 @@ public struct TaggedTrack: Identifiable, Sendable {
 /// Generates balanced training data for binary classifiers
 public struct BinaryTrainingDataGenerator: Sendable {
     /// Minimum positive examples required to train a tag classifier
-    public static let minPositiveExamples = 50
+    public let minPositiveExamples: Int
 
     /// Maximum negative:positive ratio to prevent class imbalance
-    public static let maxNegativeRatio = 3.0
+    public let maxNegativeRatio: Double
 
-    public init() {}
+    public init(minPositiveExamples: Int = 50, maxNegativeRatio: Double = 3.0) {
+        self.minPositiveExamples = minPositiveExamples
+        self.maxNegativeRatio = maxNegativeRatio
+    }
 
     /// Generate balanced positive/negative training sets for a specific tag
     public func generateTrainingData(
@@ -38,7 +41,7 @@ public struct BinaryTrainingDataGenerator: Sendable {
         let negative = tracks.filter { !$0.tags.contains(tagName) }
 
         // Skip tags with insufficient positive data
-        guard positive.count >= Self.minPositiveExamples else {
+        guard positive.count >= minPositiveExamples else {
             return nil
         }
 
@@ -48,7 +51,7 @@ public struct BinaryTrainingDataGenerator: Sendable {
         }
 
         // Balance negative samples to avoid overwhelming positives
-        let maxNegatives = Int(Double(positive.count) * Self.maxNegativeRatio)
+        let maxNegatives = Int(Double(positive.count) * maxNegativeRatio)
         let balancedNegative = Array(negative.shuffled().prefix(maxNegatives))
 
         return (positive, balancedNegative)
@@ -64,6 +67,6 @@ public struct BinaryTrainingDataGenerator: Sendable {
             }
         }
 
-        return tagCounts.filter { $0.value >= Self.minPositiveExamples }
+        return tagCounts.filter { $0.value >= minPositiveExamples }
     }
 }

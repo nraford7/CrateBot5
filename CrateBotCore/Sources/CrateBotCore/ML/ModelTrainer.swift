@@ -216,6 +216,12 @@ public actor ModelTrainer {
         config: TrainingConfig = TrainingConfig(),
         progress: ((TrainingProgress) async -> Void)? = nil
     ) async throws -> [TrainingResult] {
+        // Create data generator with config values
+        let dataGenerator = BinaryTrainingDataGenerator(
+            minPositiveExamples: config.minSamplesPerTag,
+            maxNegativeRatio: config.maxNegativeRatio
+        )
+
         // Filter tracks that have features (using safe unwrapping)
         let tracksWithFeatures = tracks.compactMap { track -> TaggedTrack? in
             guard let features = track.features, !features.isEmpty else { return nil }
