@@ -28,6 +28,26 @@ final class ModelTrainerTests: XCTestCase {
         XCTAssertEqual(config.randomSeed, 123)
     }
 
+    func testTrainingConfigTreeParametersAreUsed() {
+        let config = TrainingConfig(
+            treeMaxDepth: 8,
+            treeIterations: 150,
+            treeStepSize: 0.25
+        )
+
+        XCTAssertEqual(config.treeMaxDepth, 8)
+        XCTAssertEqual(config.treeIterations, 150)
+        XCTAssertEqual(config.treeStepSize, 0.25, accuracy: 0.001)
+    }
+
+    func testTrainingConfigDefaultTreeParameters() {
+        let config = TrainingConfig()
+
+        XCTAssertEqual(config.treeMaxDepth, 6)
+        XCTAssertEqual(config.treeIterations, 100)
+        XCTAssertEqual(config.treeStepSize, 0.3, accuracy: 0.001)
+    }
+
     // MARK: - TrainingResult Tests
 
     func testTrainingResultInitialization() {

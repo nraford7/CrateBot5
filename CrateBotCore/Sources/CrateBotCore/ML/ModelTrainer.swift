@@ -37,6 +37,15 @@ public struct TrainingConfig: Sendable {
     /// Lower loss = better class separation in the embedding space
     public let contrastiveLearningEnabled: Bool
 
+    /// MLBoostedTreeClassifier max depth
+    public let treeMaxDepth: Int
+
+    /// MLBoostedTreeClassifier iterations
+    public let treeIterations: Int
+
+    /// MLBoostedTreeClassifier step size (learning rate)
+    public let treeStepSize: Double
+
     public init(
         validationSplit: Double = 0.2,
         minSamplesPerTag: Int = 50,
@@ -47,7 +56,10 @@ public struct TrainingConfig: Sendable {
         mixupRatio: Float = 0.3,
         labelSmoothingEnabled: Bool = true,
         labelSmoothingFactor: Float = 0.1,
-        contrastiveLearningEnabled: Bool = true
+        contrastiveLearningEnabled: Bool = true,
+        treeMaxDepth: Int = 6,
+        treeIterations: Int = 100,
+        treeStepSize: Double = 0.3
     ) {
         self.validationSplit = validationSplit
         self.minSamplesPerTag = minSamplesPerTag
@@ -59,6 +71,9 @@ public struct TrainingConfig: Sendable {
         self.labelSmoothingEnabled = labelSmoothingEnabled
         self.labelSmoothingFactor = labelSmoothingFactor
         self.contrastiveLearningEnabled = contrastiveLearningEnabled
+        self.treeMaxDepth = treeMaxDepth
+        self.treeIterations = treeIterations
+        self.treeStepSize = treeStepSize
     }
 }
 
@@ -284,11 +299,11 @@ public actor ModelTrainer {
                     trainingData: trainingData,
                     targetColumn: "label",
                     parameters: MLBoostedTreeClassifier.ModelParameters(
-                        maxDepth: 6,
-                        maxIterations: 100,
+                        maxDepth: config.treeMaxDepth,
+                        maxIterations: config.treeIterations,
                         minLossReduction: 0.0,
                         minChildWeight: 1.0,
-                        stepSize: 0.3
+                        stepSize: config.treeStepSize
                     )
                 )
 
@@ -548,13 +563,15 @@ public actor ModelTrainer {
     ///   - validationSplit: Fraction of data to use for validation (0.0 - 1.0)
     ///   - useLabelSmoothing: Whether to apply label smoothing (helps prevent overconfidence)
     ///   - smoothingFactor: Label smoothing factor (0.0 - 1.0, typically 0.1)
+    ///   - config: Training configuration (uses defaults if not provided)
     /// - Returns: Training result with accuracy metrics and model URL
     public func trainMultiClassModel(
         data: MultiClassTrainingDataGenerator.MultiClassTrainingData,
         outputDirectory: URL,
         validationSplit: Double = 0.2,
         useLabelSmoothing: Bool = true,
-        smoothingFactor: Float = 0.1
+        smoothingFactor: Float = 0.1,
+        config: TrainingConfig = TrainingConfig()
     ) async throws -> MultiClassTrainingResult {
         let groupName = data.groupName
         let classes = data.classes
@@ -590,11 +607,11 @@ public actor ModelTrainer {
             trainingData: trainingData,
             targetColumn: "label",
             parameters: MLBoostedTreeClassifier.ModelParameters(
-                maxDepth: 6,
-                maxIterations: 100,
+                maxDepth: config.treeMaxDepth,
+                maxIterations: config.treeIterations,
                 minLossReduction: 0.0,
                 minChildWeight: 1.0,
-                stepSize: 0.3
+                stepSize: config.treeStepSize
             )
         )
 
