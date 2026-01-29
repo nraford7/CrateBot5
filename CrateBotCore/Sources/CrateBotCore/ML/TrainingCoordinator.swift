@@ -506,7 +506,10 @@ public actor TrainingCoordinator {
                 mixupRatio: options.configuration.mixupRatio,
                 labelSmoothingEnabled: options.configuration.enableLabelSmoothing,
                 labelSmoothingFactor: options.configuration.labelSmoothingFactor,
-                contrastiveLearningEnabled: options.configuration.enableContrastiveLoss
+                contrastiveLearningEnabled: options.configuration.enableContrastiveLoss,
+                treeMaxDepth: options.configuration.treeMaxDepth,
+                treeIterations: options.configuration.treeIterations,
+                treeStepSize: options.configuration.treeStepSize
             )
 
             logger.info("Training models in \(outputDirectory.path)")
