@@ -2,7 +2,8 @@ import Foundation
 import os.log
 
 /// Persistent cache for audio embeddings to avoid re-extracting features for unchanged files.
-/// Embeddings are keyed by file path and modification date, so changed files get re-extracted.
+/// Embeddings are keyed by file path, modification date, AND extraction config hash,
+/// so changed files or changed extraction parameters get re-extracted.
 public actor EmbeddingCache {
     private let logger = Logger(subsystem: "com.cratebot.core", category: "EmbeddingCache")
 
@@ -11,6 +12,7 @@ public actor EmbeddingCache {
         let embeddings: [Float]
         let modificationDate: Date
         let extractorVersion: String
+        let configHash: String  // Extraction config hash for cache invalidation
     }
 
     /// In-memory cache (loaded from disk on init)
@@ -25,14 +27,21 @@ public actor EmbeddingCache {
     /// Current extractor version (cache invalidates if version changes)
     private let extractorVersion: String
 
+    /// Current extraction config hash (cache invalidates if config changes)
+    private let configHash: String
+
     /// Statistics
     private var hits = 0
     private var misses = 0
 
     // MARK: - Initialization
 
-    public init(extractorVersion: String = "effnet-v2-extended-2192") {
+    public init(
+        extractionConfig: FeatureExtractionConfig = .default,
+        extractorVersion: String = "effnet-v2-extended-2192"
+    ) {
         self.extractorVersion = extractorVersion
+        self.configHash = extractionConfig.configHash
 
         // Store cache in Application Support/CrateBot/
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -85,6 +94,13 @@ public actor EmbeddingCache {
             return nil
         }
 
+        // Check extraction config hash matches
+        guard entry.configHash == configHash else {
+            misses += 1
+            logger.debug("Cache miss (config): \(url.lastPathComponent)")
+            return nil
+        }
+
         hits += 1
         return entry.embeddings
     }
@@ -101,7 +117,8 @@ public actor EmbeddingCache {
         let entry = CacheEntry(
             embeddings: embeddings,
             modificationDate: modDate,
-            extractorVersion: extractorVersion
+            extractorVersion: extractorVersion,
+            configHash: configHash
         )
 
         cache[url.path] = entry
