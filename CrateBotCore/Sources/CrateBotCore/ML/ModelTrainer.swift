@@ -400,27 +400,30 @@ public actor ModelTrainer {
             logger.warning("Skipped \(skippedNaN) tracks with NaN/Inf features")
         }
 
-        // Z-score normalize each feature column to help CreateML optimizer
+        // NOTE: Z-score normalization removed for train/inference parity
+        // Training and inference must use the same feature distribution.
+        // EffNet/CLAP embeddings are already well-scaled, and CreateML's
+        // BoostedTreeClassifier handles feature scaling internally.
+        //
+        // Previously this code normalized training data but inference used
+        // raw embeddings, causing a distribution mismatch that degraded accuracy.
+
+        // Keep the logging for zero-variance features (useful diagnostic)
         var zeroVarianceCount = 0
-        var totalVariance: Double = 0
         for i in 0..<featureCount {
             let columnName = "f\(i)"
-            guard var values = columns[columnName], !values.isEmpty else { continue }
+            guard let values = columns[columnName], !values.isEmpty else { continue }
 
             let mean = values.reduce(0, +) / Double(values.count)
             let variance = values.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(values.count)
-            let stdDev = sqrt(variance)
-            totalVariance += variance
 
-            // Only normalize if there's variance (avoid division by zero)
-            if stdDev > 1e-10 {
-                values = values.map { ($0 - mean) / stdDev }
-                columns[columnName] = values
-            } else {
+            if variance < 1e-10 {
                 zeroVarianceCount += 1
             }
         }
-        logger.info("Feature stats: \(zeroVarianceCount)/\(featureCount) zero-variance, avg variance: \(totalVariance / Double(featureCount))")
+        if zeroVarianceCount > 0 {
+            logger.info("Feature stats: \(zeroVarianceCount)/\(featureCount) zero-variance features")
+        }
 
         // Build DataFrame
         var dataFrame = DataFrame()
@@ -492,27 +495,30 @@ public actor ModelTrainer {
             logger.warning("Skipped \(skippedNaN) samples with NaN/Inf features")
         }
 
-        // Z-score normalize each feature column to help CreateML optimizer
+        // NOTE: Z-score normalization removed for train/inference parity
+        // Training and inference must use the same feature distribution.
+        // EffNet/CLAP embeddings are already well-scaled, and CreateML's
+        // BoostedTreeClassifier handles feature scaling internally.
+        //
+        // Previously this code normalized training data but inference used
+        // raw embeddings, causing a distribution mismatch that degraded accuracy.
+
+        // Keep the logging for zero-variance features (useful diagnostic)
         var zeroVarianceCount = 0
-        var totalVariance: Double = 0
         for i in 0..<featureCount {
             let columnName = "f\(i)"
-            guard var values = columns[columnName], !values.isEmpty else { continue }
+            guard let values = columns[columnName], !values.isEmpty else { continue }
 
             let mean = values.reduce(0, +) / Double(values.count)
             let variance = values.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(values.count)
-            let stdDev = sqrt(variance)
-            totalVariance += variance
 
-            // Only normalize if there's variance (avoid division by zero)
-            if stdDev > 1e-10 {
-                values = values.map { ($0 - mean) / stdDev }
-                columns[columnName] = values
-            } else {
+            if variance < 1e-10 {
                 zeroVarianceCount += 1
             }
         }
-        logger.info("Feature stats: \(zeroVarianceCount)/\(featureCount) zero-variance, avg variance: \(totalVariance / Double(featureCount))")
+        if zeroVarianceCount > 0 {
+            logger.info("Feature stats: \(zeroVarianceCount)/\(featureCount) zero-variance features")
+        }
 
         // Build DataFrame
         var dataFrame = DataFrame()
@@ -682,26 +688,29 @@ public actor ModelTrainer {
             logger.warning("Skipped \(skippedNaN) samples with NaN/Inf features")
         }
 
-        // Z-score normalize each feature column
+        // NOTE: Z-score normalization removed for train/inference parity
+        // Training and inference must use the same feature distribution.
+        // EffNet/CLAP embeddings are already well-scaled, and CreateML's
+        // BoostedTreeClassifier handles feature scaling internally.
+        //
+        // Previously this code normalized training data but inference used
+        // raw embeddings, causing a distribution mismatch that degraded accuracy.
+
+        // Keep the logging for zero-variance features (useful diagnostic)
         var zeroVarianceCount = 0
         for i in 0..<featureCount {
             let columnName = "f\(i)"
-            guard var values = columns[columnName], !values.isEmpty else { continue }
+            guard let values = columns[columnName], !values.isEmpty else { continue }
 
             let mean = values.reduce(0, +) / Double(values.count)
             let variance = values.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(values.count)
-            let stdDev = sqrt(variance)
 
-            if stdDev > 1e-10 {
-                values = values.map { ($0 - mean) / stdDev }
-                columns[columnName] = values
-            } else {
+            if variance < 1e-10 {
                 zeroVarianceCount += 1
             }
         }
-
         if zeroVarianceCount > 0 {
-            logger.info("Found \(zeroVarianceCount)/\(featureCount) zero-variance features")
+            logger.info("Feature stats: \(zeroVarianceCount)/\(featureCount) zero-variance features")
         }
 
         // Build DataFrame
