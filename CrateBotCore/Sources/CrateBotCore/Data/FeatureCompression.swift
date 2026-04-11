@@ -30,9 +30,10 @@ extension Array where Element == Float {
         }
 
         if compressedSize > 0 && compressedSize < byteCount {
-            // Prepend original byte count as 4-byte little-endian UInt32
+            // New format: marker 0xFE + 4-byte original size + compressed payload
             var size = UInt32(byteCount).littleEndian
-            var result = Data(bytes: &size, count: 4)
+            var result = Data([0xFE])
+            result.append(Data(bytes: &size, count: 4))
             result.append(Data(bytes: destinationBuffer, count: compressedSize))
             return result
         } else {
@@ -56,14 +57,16 @@ extension Array where Element == Float {
             }
         }
 
-        // Read original byte count from first 4 bytes
+        // Check for new format marker (0xFE + 4-byte size + payload)
         let originalSize: Int
         let compressedData: Data
-        if data.count >= 4 {
-            let sizeBytes = data.prefix(4)
-            let storedSize = sizeBytes.withUnsafeBytes { $0.load(as: UInt32.self) }.littleEndian
-            originalSize = Int(storedSize)
-            compressedData = data.dropFirst(4)
+        if data.first == 0xFE && data.count >= 5 {
+            var storedSize: UInt32 = 0
+            _ = Swift.withUnsafeMutableBytes(of: &storedSize) { dest in
+                data.copyBytes(to: dest, from: data.startIndex+1..<data.startIndex+5)
+            }
+            originalSize = Int(storedSize.littleEndian)
+            compressedData = data.dropFirst(5)
         } else {
             // Legacy format without size header — fall back to estimate
             originalSize = data.count * 10
