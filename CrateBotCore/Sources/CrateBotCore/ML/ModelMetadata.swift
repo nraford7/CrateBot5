@@ -42,6 +42,7 @@ public struct ModelMetadata: Codable, Sendable {
     public let featureDimension: Int         // 1280, 1680, or 2192
     public let calibratorTemperature: Float? // Temperature for confidence calibration
     public let descriptiveSubCategories: [String: [String]]? // Sub-category organization for Descriptive tags
+    public let tagThresholds: [String: Float]? // Per-tag classification thresholds
 
     public init(
         name: String,
@@ -55,7 +56,8 @@ public struct ModelMetadata: Codable, Sendable {
         accuracy: Double? = nil,
         featureDimension: Int = 1680,
         calibratorTemperature: Float? = nil,
-        descriptiveSubCategories: [String: [String]]? = nil
+        descriptiveSubCategories: [String: [String]]? = nil,
+        tagThresholds: [String: Float]? = nil
     ) {
         self.name = name
         self.version = version
@@ -69,6 +71,7 @@ public struct ModelMetadata: Codable, Sendable {
         self.featureDimension = featureDimension
         self.calibratorTemperature = calibratorTemperature
         self.descriptiveSubCategories = descriptiveSubCategories
+        self.tagThresholds = tagThresholds
     }
 
     // Custom decoder to handle old JSON files without featureDimension or tagGroups
@@ -90,12 +93,13 @@ public struct ModelMetadata: Codable, Sendable {
         calibratorTemperature = try container.decodeIfPresent(Float.self, forKey: .calibratorTemperature)
         // Descriptive sub-categories are optional (may not exist in old models)
         descriptiveSubCategories = try container.decodeIfPresent([String: [String]].self, forKey: .descriptiveSubCategories)
+        tagThresholds = try container.decodeIfPresent([String: Float].self, forKey: .tagThresholds)
     }
 
     private enum CodingKeys: String, CodingKey {
         case name, version, pipelineVersion, trainedAt, trainingFileCount
         case categories, tags, tagGroups, accuracy, featureDimension
-        case calibratorTemperature, descriptiveSubCategories
+        case calibratorTemperature, descriptiveSubCategories, tagThresholds
     }
 
     /// Load metadata from JSON sidecar file

@@ -12,7 +12,8 @@ SAMPLE_SIZE = 200
 SEED = 42
 THRESHOLDS = [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.92, 0.94, 0.96, 0.98, 0.99, 0.995]
 
-def main():
+def load_data_and_run_inference():
+    """Load models, checkpoint, cache. Run inference. Return everything needed for evaluation."""
     app_support = Path.home() / "Library/Application Support/CrateBot"
 
     # Find latest model
@@ -22,7 +23,7 @@ def main():
         key=lambda d: d.stat().st_mtime, reverse=True
     )
     if not model_dirs:
-        print("No trained models found"); return
+        print("No trained models found"); return None
 
     model_dir = model_dirs[0]
     model_name = model_dir.name
@@ -49,7 +50,7 @@ def main():
     cp_dir = app_support / "Checkpoints"
     cp_files = sorted(cp_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
     if not cp_files:
-        print("No checkpoint found"); return
+        print("No checkpoint found"); return None
 
     print(f"Loading checkpoint + cache...")
     with open(cp_files[0]) as f:
@@ -101,7 +102,22 @@ def main():
         if (i + 1) % 50 == 0:
             print(f"  {i+1}/{len(sampled)}...")
 
-    # Sweep thresholds
+    return {
+        'raw_probs': raw_probs,
+        'sampled': sampled,
+        'classifiers': classifiers,
+        'metadata': metadata,
+        'model_dir': model_dir,
+    }
+
+
+def threshold_sweep(data):
+    """Run the standard threshold sweep across all tags uniformly."""
+    raw_probs = data['raw_probs']
+    sampled = data['sampled']
+    classifiers = data['classifiers']
+    metadata = data['metadata']
+
     print(f"\n{'='*70}")
     print(f"  CRATEBOT CB5_v3 — THRESHOLD SWEEP")
     print(f"  {len(sampled)} tracks, {len(classifiers)} tags, {metadata['featureDimension']}-dim")
@@ -182,6 +198,116 @@ def main():
 
     print(f"  {'-'*60}")
     print(f"{'='*70}\n")
+
+
+def optimize_thresholds(data):
+    """Per-tag threshold optimization. Sweeps 0.50-0.99 independently per tag, maximizes F1."""
+    raw_probs = data['raw_probs']
+    sampled = data['sampled']
+    classifiers = data['classifiers']
+    model_dir = data['model_dir']
+
+    sweep_thresholds = [round(0.50 + i * 0.01, 2) for i in range(50)]  # 0.50 to 0.99
+
+    print(f"\n{'='*70}")
+    print(f"  PER-TAG THRESHOLD OPTIMIZATION")
+    print(f"  {len(sampled)} tracks, {len(classifiers)} tags")
+    print(f"  Sweeping {len(sweep_thresholds)} thresholds per tag (0.50 - 0.99)")
+    print(f"{'='*70}\n")
+
+    results = {}
+
+    for tag_name in sorted(classifiers.keys()):
+        best_f1 = 0.0
+        best_thresh = 0.50
+        best_prec = 0.0
+        best_rec = 0.0
+        support = 0
+
+        for threshold in sweep_thresholds:
+            tp = fp = fn = tn = 0
+
+            for i, track in enumerate(sampled):
+                if tag_name not in raw_probs[i]:
+                    continue
+                predicted = raw_probs[i][tag_name] > threshold
+                actual = tag_name in set(track['tags'])
+
+                if predicted and actual:      tp += 1
+                elif predicted and not actual: fp += 1
+                elif not predicted and actual: fn += 1
+                else:                          tn += 1
+
+            prec = tp / (tp + fp) if (tp + fp) > 0 else 0
+            rec = tp / (tp + fn) if (tp + fn) > 0 else 0
+            f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0
+            tag_support = tp + fn
+
+            if f1 > best_f1:
+                best_f1 = f1
+                best_thresh = threshold
+                best_prec = prec
+                best_rec = rec
+                support = tag_support
+
+        results[tag_name] = {
+            'threshold': best_thresh,
+            'f1': round(best_f1, 4),
+            'precision': round(best_prec, 4),
+            'recall': round(best_rec, 4),
+            'support': support,
+        }
+
+    # Print results table
+    print(f"  {'Tag':<25s} {'Thresh':>6s} {'Prec':>6s} {'Recall':>6s} {'F1':>6s} {'Pos':>5s}")
+    print(f"  {'-'*60}")
+
+    sorted_results = sorted(results.items(), key=lambda r: r[1]['support'], reverse=True)
+    for tag, r in sorted_results:
+        marker = ""
+        if r['support'] > 0:
+            if r['f1'] >= 0.7: marker = " +++"
+            elif r['f1'] >= 0.5: marker = " +"
+            elif r['f1'] < 0.3 and r['support'] >= 5: marker = " !!!"
+        print(f"  {tag[:25]:<25s} {r['threshold']:6.2f} {r['precision']*100:5.1f}% {r['recall']*100:5.1f}% {r['f1']*100:5.1f}% {r['support']:4d}{marker}")
+
+    print(f"  {'-'*60}")
+
+    # Summary stats
+    with_support = [r for _, r in sorted_results if r['support'] > 0]
+    if with_support:
+        macro_f1 = sum(r['f1'] for r in with_support) / len(with_support)
+        f1_above_70 = sum(1 for r in with_support if r['f1'] >= 0.7)
+        f1_above_50 = sum(1 for r in with_support if r['f1'] >= 0.5)
+        avg_thresh = sum(r['threshold'] for r in with_support) / len(with_support)
+        print(f"\n  Optimized macro F1: {macro_f1*100:.1f}%")
+        print(f"  Tags with F1 >= 70%: {f1_above_70}/{len(with_support)}")
+        print(f"  Tags with F1 >= 50%: {f1_above_50}/{len(with_support)}")
+        print(f"  Average optimal threshold: {avg_thresh:.2f}")
+
+    # Save JSON — only thresholds map for direct consumption by the app
+    out_path = model_dir / "tag_thresholds.json"
+    output = {
+        'description': 'Per-tag optimized thresholds (maximized F1 on eval set)',
+        'sample_size': len(sampled),
+        'tags': results,
+    }
+    with open(out_path, 'w') as f:
+        json.dump(output, f, indent=2)
+    print(f"\n  Saved: {out_path}")
+    print(f"{'='*70}\n")
+
+
+def main():
+    data = load_data_and_run_inference()
+    if data is None:
+        return
+
+    threshold_sweep(data)
+
+    if '--optimize' in sys.argv:
+        optimize_thresholds(data)
+
 
 if __name__ == "__main__":
     main()

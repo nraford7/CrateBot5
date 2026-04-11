@@ -10,12 +10,14 @@ public actor CombinedFeatureExtractor {
         case effnetOnly = "effnetOnly"           // 1280 dims
         case effnetPlusGenres = "effnetPlusGenres"     // 1680 dims (1280 + 400)
         case effnetGenresCLAP = "effnetGenresCLAP"     // 2192 dims (1280 + 400 + 512)
+        case effnetGenresCLAPMAEST = "effnetGenresCLAPMAEST" // 2960 dims (1280 + 400 + 512 + 768)
 
         public var dimension: Int {
             switch self {
             case .effnetOnly: return 1280
             case .effnetPlusGenres: return 1680
             case .effnetGenresCLAP: return 2192
+            case .effnetGenresCLAPMAEST: return 2960
             }
         }
 
@@ -24,23 +26,52 @@ public actor CombinedFeatureExtractor {
             case .effnetOnly: return "EffNet (1280)"
             case .effnetPlusGenres: return "EffNet+Genres (1680)"
             case .effnetGenresCLAP: return "EffNet+Genres+CLAP (2192)"
+            case .effnetGenresCLAPMAEST: return "EffNet+Genres+CLAP+MAEST (2960)"
             }
         }
     }
 
     private let effnetExtractor: EffNetExtractor
     private let clapExtractor: CLAPExtractor?
+    private let maestExtractor: MAESTExtractor?
     private let config: FeatureConfig
     private let actualConfig: FeatureConfig
 
     /// Initialize the combined feature extractor
     /// - Parameter config: Which extractors to combine
-    /// - Throws: If EffNet extractor cannot be initialized (CLAP failure is non-fatal)
+    /// - Throws: If EffNet extractor cannot be initialized (CLAP/MAEST failure is non-fatal)
     public init(config: FeatureConfig = .effnetGenresCLAP) throws {
         self.config = config
         self.effnetExtractor = try EffNetExtractor()
 
-        if config == .effnetGenresCLAP {
+        if config == .effnetGenresCLAPMAEST {
+            // Try CLAP
+            var clap: CLAPExtractor?
+            do {
+                clap = try CLAPExtractor()
+            } catch {
+                print("Warning: CLAP extractor unavailable (\(error.localizedDescription))")
+            }
+            self.clapExtractor = clap
+
+            // Try MAEST
+            var maest: MAESTExtractor?
+            do {
+                maest = try MAESTExtractor()
+            } catch {
+                print("Warning: MAEST extractor unavailable (\(error.localizedDescription))")
+            }
+            self.maestExtractor = maest
+
+            // Determine effective config based on what loaded
+            if clap != nil && maest != nil {
+                self.actualConfig = .effnetGenresCLAPMAEST
+            } else if clap != nil {
+                self.actualConfig = .effnetGenresCLAP
+            } else {
+                self.actualConfig = .effnetPlusGenres
+            }
+        } else if config == .effnetGenresCLAP {
             do {
                 self.clapExtractor = try CLAPExtractor()
                 self.actualConfig = .effnetGenresCLAP
@@ -49,8 +80,10 @@ public actor CombinedFeatureExtractor {
                 self.clapExtractor = nil
                 self.actualConfig = .effnetPlusGenres
             }
+            self.maestExtractor = nil
         } else {
             self.clapExtractor = nil
+            self.maestExtractor = nil
             self.actualConfig = config
         }
     }
@@ -74,28 +107,57 @@ public actor CombinedFeatureExtractor {
     /// - Parameter buffer: Audio buffer (should be at 16kHz mono for EffNet compatibility)
     /// - Returns: Combined feature vector with dimension based on config
     public func extract(from buffer: AVAudioPCMBuffer) async throws -> [Float] {
+        try await extract(from: buffer, augmentationConfig: nil)
+    }
+
+    /// Extract combined features with optional augmentation (used for training only)
+    public func extract(
+        from buffer: AVAudioPCMBuffer,
+        augmentationConfig: AudioAugmenter.AugmentationConfig?
+    ) async throws -> [Float] {
         switch actualConfig {
         case .effnetOnly:
-            return try await effnetExtractor.extract(from: buffer)
+            return try await effnetExtractor.extract(from: buffer, augmentationConfig: augmentationConfig)
 
         case .effnetPlusGenres:
-            let (embeddings, genres) = try await effnetExtractor.extractWithGenres(from: buffer)
+            let (embeddings, genres) = try await effnetExtractor.extractWithGenres(from: buffer, augmentationConfig: augmentationConfig)
             return embeddings + genres
 
         case .effnetGenresCLAP:
             // Extract EffNet features
-            let (embeddings, genres) = try await effnetExtractor.extractWithGenres(from: buffer)
+            let (embeddings, genres) = try await effnetExtractor.extractWithGenres(from: buffer, augmentationConfig: augmentationConfig)
 
             // Extract CLAP features (convert buffer to Float array)
             if let clap = clapExtractor {
                 let audioSamples = extractFloatSamples(from: buffer)
                 let sampleRate = Double(buffer.format.sampleRate)
-                let clapEmbeddings = try await clap.extract(from: audioSamples, sampleRate: sampleRate)
+                let clapEmbeddings = try await clap.extract(from: audioSamples, sampleRate: sampleRate, augmentationConfig: augmentationConfig)
                 return embeddings + genres + clapEmbeddings  // 1280 + 400 + 512 = 2192
             } else {
                 // Fallback to 1680 (shouldn't happen if actualConfig is correct)
                 return embeddings + genres
             }
+
+        case .effnetGenresCLAPMAEST:
+            // Extract EffNet features
+            let (embeddings, genres) = try await effnetExtractor.extractWithGenres(from: buffer, augmentationConfig: augmentationConfig)
+
+            // Extract CLAP features
+            var combined = embeddings + genres
+            if let clap = clapExtractor {
+                let audioSamples = extractFloatSamples(from: buffer)
+                let sampleRate = Double(buffer.format.sampleRate)
+                let clapEmbeddings = try await clap.extract(from: audioSamples, sampleRate: sampleRate, augmentationConfig: augmentationConfig)
+                combined += clapEmbeddings
+            }
+
+            // Extract MAEST features
+            if let maest = maestExtractor {
+                let maestEmbeddings = try await maest.extract(from: buffer, augmentationConfig: augmentationConfig)
+                combined += maestEmbeddings  // 1280 + 400 + 512 + 768 = 2960
+            }
+
+            return combined
         }
     }
 

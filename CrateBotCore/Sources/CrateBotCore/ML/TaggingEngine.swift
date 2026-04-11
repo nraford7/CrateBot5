@@ -162,15 +162,22 @@ public actor TaggingEngine {
     /// Classification threshold for user-trained classifiers (configurable via strictness setting)
     public var classificationThreshold: Float = 0.85
 
+    /// Per-tag threshold overrides (loaded from metadata or tag_thresholds.json)
+    private var tagThresholds: [String: Float]?
+
     /// Fallback mappings for tags without trained classifiers
     public var fallbackConfig: FallbackMappingConfig = FallbackMappingConfig()
 
     /// Confidence calibrator for adjusting raw classifier outputs
     private var confidenceCalibrator: ConfidenceCalibrator = ConfidenceCalibrator()
 
+    /// Zero-shot matcher for CLAP-based tag predictions (no training needed)
+    private let zeroShotMatcher: ZeroShotMatcher?
+
     public init() throws {
         self.essentiaClassifier = try EssentiaClassifier()
         self.audioAnalyzer = AudioAnalyzer()
+        self.zeroShotMatcher = ZeroShotMatcher.loadFromBundle()
         // Feature extractor is lazy-loaded when model is loaded
         // This allows matching the feature dimension to the trained model
     }
@@ -217,6 +224,19 @@ public actor TaggingEngine {
             metadata = try? ModelMetadata.load(from: legacyMetadataURL)
         }
         loadedMetadata = metadata
+
+        // Load per-tag thresholds from metadata first, then override with file
+        tagThresholds = metadata?.tagThresholds
+        let thresholdsFileURL = modelDirectory.appendingPathComponent("tag_thresholds.json")
+        if let thresholdsData = try? Data(contentsOf: thresholdsFileURL),
+           let fileThresholds = try? JSONDecoder().decode([String: Float].self, from: thresholdsData) {
+            if tagThresholds != nil {
+                tagThresholds!.merge(fileThresholds) { _, new in new }
+            } else {
+                tagThresholds = fileThresholds
+            }
+            logger.info("Loaded per-tag thresholds from tag_thresholds.json (\(fileThresholds.count) entries)")
+        }
 
         // Detect feature config from metadata if not provided
         let effectiveConfig: CombinedFeatureExtractor.FeatureConfig
@@ -413,8 +433,9 @@ public actor TaggingEngine {
             do {
                 let (_, rawConfidence) = try classifier.predictWithConfidence(features: extendedFeatures)
                 let confidence = confidenceCalibrator.calibrate(rawConfidence)
+                let effectiveThreshold = tagThresholds?[classifier.tagName] ?? classificationThreshold
 
-                if confidence >= classificationThreshold {
+                if confidence >= effectiveThreshold {
                     // Calibrated confidence meets threshold - apply tag
                     predictedTags.append(classifier.tagName)
                 } else if rawConfidence > 0 {
@@ -442,7 +463,8 @@ public actor TaggingEngine {
         for (_, classifier) in multiClassClassifiers {
             do {
                 let prediction = try await classifier.predict(features: extendedFeatures)
-                if prediction.confidence >= classificationThreshold {
+                let effectiveThreshold = tagThresholds?[prediction.predictedClass] ?? classificationThreshold
+                if prediction.confidence >= effectiveThreshold {
                     groupPredictions.append(prediction)
                     predictedTags.append(prediction.predictedClass)
                 }
@@ -452,6 +474,20 @@ public actor TaggingEngine {
                 }
             } catch {
                 logger.error("Multi-class prediction failed: \(error.localizedDescription)")
+            }
+        }
+
+        // Zero-shot CLAP predictions for tags without trained classifiers
+        if let matcher = zeroShotMatcher, extendedFeatures.count >= 2192 {
+            let clapEmbedding = Array(extendedFeatures[1680..<2192])
+            let zeroShotMatches = matcher.match(
+                audioEmbedding: clapEmbedding,
+                threshold: 0.3,
+                maxResults: 3,
+                excludingTags: trainedTagNames
+            )
+            for match in zeroShotMatches {
+                predictedTags.append(match.tag)
             }
         }
 
