@@ -10,9 +10,8 @@ public actor MAESTExtractor {
     /// Target sample rate for MAEST (16kHz, same as EffNet)
     public static let targetSampleRate: Double = 16000
 
-    // TODO: Update these after running convert_maest.py — the names come from the ONNX model
-    private static let inputName = "input"          // TODO: verify from CoreML model spec
-    private static let outputName = "embedding"     // TODO: verify from CoreML model spec
+    private static let inputName = "mel_spectrogram"
+    private static let outputName = "embedding"
 
     private let model: MLModel
     private let melGenerator: MelSpectrogramGenerator
@@ -72,12 +71,24 @@ public actor MAESTExtractor {
         }
         let flatMelSpec = melGenerator.flatten(melSpec)
 
-        // TODO: Verify input shape after model conversion
-        // MAEST typically expects [1, 1, 96, time_frames] or [1, 96, time_frames]
-        // Using [1, 128, 96] to match EffNet mel generator output for now
-        let inputArray = try MLMultiArray(shape: [1, 128, 96], dataType: .float32)
-        for (i, value) in flatMelSpec.enumerated() {
-            inputArray[i] = NSNumber(value: value)
+        // MAEST expects [1, 1, 96, 625] = [batch, channels, mel_bands, time_frames]
+        // MelSpectrogramGenerator produces [96 mel bands, 128 time frames] for EffNet
+        // We need to reshape/pad to 625 time frames for MAEST
+        let melBands = 96
+        let maestTimeFrames = 625
+        let inputArray = try MLMultiArray(shape: [1, 1, NSNumber(value: melBands), NSNumber(value: maestTimeFrames)], dataType: .float32)
+
+        // Fill from mel spectrogram, zero-pad if fewer than 625 frames
+        for band in 0..<melBands {
+            for frame in 0..<maestTimeFrames {
+                let srcIndex = band * melSpec[0].count + frame
+                let dstIndex = band * maestTimeFrames + frame
+                if frame < melSpec[0].count && band < melSpec.count {
+                    inputArray[dstIndex] = NSNumber(value: melSpec[band][frame])
+                } else {
+                    inputArray[dstIndex] = 0
+                }
+            }
         }
 
         // Create feature provider

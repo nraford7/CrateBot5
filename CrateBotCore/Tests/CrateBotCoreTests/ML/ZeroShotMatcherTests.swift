@@ -65,9 +65,9 @@ final class ZeroShotMatcherTests: XCTestCase {
         XCTAssertEqual(results[0].tag, "ambient")
     }
 
-    func testLoadFromBundleReturnsNilWhenNoFile() {
-        // clap_tag_embeddings.json doesn't exist in the test bundle
+    func testLoadFromBundleLoadsEmbeddings() {
+        // clap_tag_embeddings.json is bundled as a resource
         let matcher = ZeroShotMatcher.loadFromBundle()
-        XCTAssertNil(matcher)
+        XCTAssertNotNil(matcher)
     }
 }

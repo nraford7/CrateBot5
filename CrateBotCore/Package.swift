@@ -29,6 +29,7 @@ let package = Package(
                 .copy("Resources/mtg_jamendo_moodtheme-discogs-effnet-1.json"),
                 .copy("Resources/mtg_jamendo_instrument-discogs-effnet-1.json"),
                 .copy("Resources/clap_tag_embeddings.json"),
+                .copy("Resources/MAEST.mlpackage"),
             ]
         ),
         .testTarget(
