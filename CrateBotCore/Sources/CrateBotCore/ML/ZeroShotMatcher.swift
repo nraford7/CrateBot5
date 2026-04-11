@@ -53,7 +53,7 @@ public struct ZeroShotMatcher: Sendable {
         var results: [Match] = []
 
         for (tag, textEmbedding) in tagEmbeddings {
-            if excludingTags.contains(tag) { continue }
+            if excludingTags.contains(tag.lowercased()) { continue }
             let similarity = Self.cosineSimilarity(audioEmbedding, textEmbedding)
             if similarity >= threshold {
                 results.append(Match(tag: tag, similarity: similarity))

@@ -229,13 +229,35 @@ public actor TaggingEngine {
         tagThresholds = metadata?.tagThresholds
         let thresholdsFileURL = modelDirectory.appendingPathComponent("tag_thresholds.json")
         if let thresholdsData = try? Data(contentsOf: thresholdsFileURL),
-           let fileThresholds = try? JSONDecoder().decode([String: Float].self, from: thresholdsData) {
-            if tagThresholds != nil {
-                tagThresholds!.merge(fileThresholds) { _, new in new }
+           let json = try? JSONSerialization.jsonObject(with: thresholdsData) as? [String: Any] {
+            // Extract thresholds from nested format: {"tags": {"TagName": {"threshold": 0.82}}}
+            // or flat format: {"TagName": 0.82}
+            var fileThresholds: [String: Float] = [:]
+            if let tagsDict = json["tags"] as? [String: Any] {
+                for (tag, value) in tagsDict {
+                    if let info = value as? [String: Any], let thresh = info["threshold"] as? Double {
+                        fileThresholds[tag] = Float(thresh)
+                    } else if let thresh = value as? Double {
+                        fileThresholds[tag] = Float(thresh)
+                    }
+                }
             } else {
-                tagThresholds = fileThresholds
+                // Try flat format
+                for (tag, value) in json {
+                    if let thresh = value as? Double {
+                        fileThresholds[tag] = Float(thresh)
+                    }
+                }
             }
-            logger.info("Loaded per-tag thresholds from tag_thresholds.json (\(fileThresholds.count) entries)")
+
+            if !fileThresholds.isEmpty {
+                if tagThresholds != nil {
+                    tagThresholds!.merge(fileThresholds) { _, new in new }
+                } else {
+                    tagThresholds = fileThresholds
+                }
+                logger.info("Loaded per-tag thresholds from tag_thresholds.json (\(fileThresholds.count) entries)")
+            }
         }
 
         // Detect feature config from metadata if not provided
@@ -246,6 +268,7 @@ public actor TaggingEngine {
             switch metadata.featureDimension {
             case 1280: effectiveConfig = .effnetOnly
             case 1680: effectiveConfig = .effnetPlusGenres
+            case 2960: effectiveConfig = .effnetGenresCLAPMAEST
             default: effectiveConfig = .effnetGenresCLAP
             }
             logger.info("Detected feature dimension \(metadata.featureDimension), using \(effectiveConfig.description)")
