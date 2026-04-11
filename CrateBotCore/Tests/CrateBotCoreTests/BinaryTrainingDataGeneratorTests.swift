@@ -5,7 +5,7 @@ final class BinaryTrainingDataGeneratorTests: XCTestCase {
     func testDefaultMinimumPositiveExamples() {
         let generator = BinaryTrainingDataGenerator()
         XCTAssertEqual(generator.minPositiveExamples, 50)
-        XCTAssertEqual(generator.maxNegativeRatio, 3.0)
+        XCTAssertEqual(generator.maxNegativeRatio, 1.5)
     }
 
     func testReturnsNilForInsufficientData() {

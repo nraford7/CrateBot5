@@ -8,7 +8,6 @@ struct AddFallbackMappingSheet: View {
     @State private var userTag: String = ""
     @State private var selectedSource: TagFallbackMapping.EssentiaSource = .mood
     @State private var selectedLabel: String = ""
-    @State private var threshold: Float = 0.3
     @State private var searchText: String = ""
 
     private var availableLabels: [String] {
@@ -99,29 +98,7 @@ struct AddFallbackMappingSheet: View {
                         Text("\(selectedSource.availableLabels.count) labels available")
                     }
 
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Slider(value: $threshold, in: 0.1...0.9, step: 0.05)
 
-                            HStack {
-                                Text("Low")
-                                    .font(Theme.Fonts.body(11))
-                                    .foregroundColor(Theme.Colors.textTertiary)
-                                Spacer()
-                                Text("\(Int(threshold * 100))%")
-                                    .font(Theme.Fonts.mono(14))
-                                    .foregroundColor(Theme.Colors.textPrimary)
-                                Spacer()
-                                Text("High")
-                                    .font(Theme.Fonts.body(11))
-                                    .foregroundColor(Theme.Colors.textTertiary)
-                            }
-                        }
-                    } header: {
-                        Text("Confidence Threshold")
-                    } footer: {
-                        Text("Minimum confidence required to apply this tag. Lower = more tags, Higher = more accurate.")
-                    }
                 }
                 .formStyle(.grouped)
             }
@@ -149,8 +126,7 @@ struct AddFallbackMappingSheet: View {
         let mapping = TagFallbackMapping(
             userTag: userTag.trimmingCharacters(in: .whitespaces),
             essentiaSource: selectedSource,
-            essentiaLabel: selectedLabel,
-            threshold: threshold
+            essentiaLabel: selectedLabel
         )
         appState.fallbackMappingConfig.setMapping(mapping)
         dismiss()

@@ -49,7 +49,7 @@ public struct TrainingConfiguration: Codable, Sendable, Equatable {
 
     public init(
         minSamplesPerTag: Int = 50,
-        maxNegativeRatio: Double = 3.0,
+        maxNegativeRatio: Double = 1.5,
         mixupAlpha: Float = 0.4,
         mixupRatio: Float = 0.3,
         featureNoisePercent: Float = 0.02,

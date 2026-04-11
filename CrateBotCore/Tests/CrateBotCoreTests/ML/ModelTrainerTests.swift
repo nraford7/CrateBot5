@@ -10,7 +10,7 @@ final class ModelTrainerTests: XCTestCase {
 
         XCTAssertEqual(config.validationSplit, 0.2, accuracy: 0.001)
         XCTAssertEqual(config.minSamplesPerTag, 50)
-        XCTAssertEqual(config.maxNegativeRatio, 3.0, accuracy: 0.001)
+        XCTAssertEqual(config.maxNegativeRatio, 1.5, accuracy: 0.001)
         XCTAssertEqual(config.randomSeed, 42)
     }
 

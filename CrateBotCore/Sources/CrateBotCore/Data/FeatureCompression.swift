@@ -30,8 +30,11 @@ extension Array where Element == Float {
         }
 
         if compressedSize > 0 && compressedSize < byteCount {
-            // Compression succeeded and is smaller
-            return Data(bytes: destinationBuffer, count: compressedSize)
+            // Prepend original byte count as 4-byte little-endian UInt32
+            var size = UInt32(byteCount).littleEndian
+            var result = Data(bytes: &size, count: 4)
+            result.append(Data(bytes: destinationBuffer, count: compressedSize))
+            return result
         } else {
             // Return uncompressed data with marker
             var result = Data([0xFF])  // Marker for uncompressed
@@ -53,17 +56,29 @@ extension Array where Element == Float {
             }
         }
 
-        // Estimate decompressed size (LZ4 typically 2-4x compression)
-        let estimatedSize = data.count * 10
-        let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: estimatedSize)
+        // Read original byte count from first 4 bytes
+        let originalSize: Int
+        let compressedData: Data
+        if data.count >= 4 {
+            let sizeBytes = data.prefix(4)
+            let storedSize = sizeBytes.withUnsafeBytes { $0.load(as: UInt32.self) }.littleEndian
+            originalSize = Int(storedSize)
+            compressedData = data.dropFirst(4)
+        } else {
+            // Legacy format without size header — fall back to estimate
+            originalSize = data.count * 10
+            compressedData = data
+        }
+
+        let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: originalSize)
         defer { destinationBuffer.deallocate() }
 
-        let decompressedSize = data.withUnsafeBytes { sourceBuffer in
+        let decompressedSize = compressedData.withUnsafeBytes { sourceBuffer in
             compression_decode_buffer(
                 destinationBuffer,
-                estimatedSize,
+                originalSize,
                 sourceBuffer.bindMemory(to: UInt8.self).baseAddress!,
-                data.count,
+                compressedData.count,
                 nil,
                 COMPRESSION_LZ4
             )

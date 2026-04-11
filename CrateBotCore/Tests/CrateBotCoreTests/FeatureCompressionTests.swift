@@ -30,6 +30,13 @@ final class FeatureCompressionTests: XCTestCase {
         XCTAssertEqual(original, decompressed)
     }
 
+    func testHighCompressionRatioRoundTrips() throws {
+        let original = [Float](repeating: 42.0, count: 10000)
+        let compressed = original.toCompressedData()
+        let decompressed = try [Float].fromCompressedData(compressed)
+        XCTAssertEqual(original, decompressed)
+    }
+
     func testLargeArray() throws {
         // 512-dimensional feature vector typical for audio
         let original = (0..<512).map { Float($0) * 0.001 }

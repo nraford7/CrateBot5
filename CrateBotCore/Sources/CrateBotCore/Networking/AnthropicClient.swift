@@ -234,8 +234,8 @@ public actor AnthropicClient {
                     statusCode: httpResponse.statusCode,
                     message: errorResponse.error.message
                 )
-            } catch is AnthropicError {
-                throw AnthropicError.requestFailed(statusCode: httpResponse.statusCode, message: "")
+            } catch let error as AnthropicError {
+                throw error
             } catch {
                 logger.debug("Could not decode error response: \(error.localizedDescription)")
                 let message = String(data: data, encoding: .utf8) ?? "Unknown error"

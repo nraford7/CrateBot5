@@ -49,7 +49,7 @@ public struct TrainingConfig: Sendable {
     public init(
         validationSplit: Double = 0.2,
         minSamplesPerTag: Int = 50,
-        maxNegativeRatio: Double = 3.0,
+        maxNegativeRatio: Double = 1.5,
         randomSeed: Int = 42,
         mixupEnabled: Bool = true,
         mixupAlpha: Float = 0.4,
@@ -250,8 +250,12 @@ public actor ModelTrainer {
                 totalTags: tags.count
             ))
 
-            // Generate balanced training data
-            guard let (positive, negative) = dataGenerator.generateTrainingData(for: tag, from: tracksWithFeatures) else {
+            // Generate balanced training data using current config
+            let generator = BinaryTrainingDataGenerator(
+                minPositiveExamples: config.minSamplesPerTag,
+                maxNegativeRatio: config.maxNegativeRatio
+            )
+            guard let (positive, negative) = generator.generateTrainingData(for: tag, from: tracksWithFeatures) else {
                 logger.info("Skipping tag '\(tag)': insufficient data")
                 continue
             }

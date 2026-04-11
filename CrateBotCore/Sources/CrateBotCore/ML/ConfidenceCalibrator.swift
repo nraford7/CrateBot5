@@ -3,7 +3,7 @@ import Foundation
 /// Calibrates classifier confidence scores using temperature scaling
 public struct ConfidenceCalibrator: Codable, Sendable {
 
-    /// Temperature for Platt scaling (learned from validation set)
+    /// Temperature for linear scaling (learned from validation set)
     public var temperature: Float = 1.0
 
     /// Label smoothing factor used during training
@@ -14,13 +14,16 @@ public struct ConfidenceCalibrator: Codable, Sendable {
         self.smoothingFactor = smoothingFactor
     }
 
-    /// Calibrate a raw confidence score
+    /// Calibrate a raw confidence score using linear temperature scaling.
+    /// BoostedTree outputs are already probabilities in [0,1], so we scale
+    /// around the midpoint (0.5) rather than applying sigmoid which would
+    /// double-transform the output and compress predictions toward 0.5.
     public func calibrate(_ rawConfidence: Float) -> Float {
-        // Apply temperature scaling
-        let scaled = rawConfidence / temperature
-
-        // Apply sigmoid to get calibrated probability
-        let calibrated = 1.0 / (1.0 + exp(-scaled))
+        // Linear scaling around 0.5: higher temperature compresses toward 0.5,
+        // lower temperature sharpens away from 0.5
+        let centered = rawConfidence - 0.5
+        let scaled = centered / temperature
+        let calibrated = min(max(scaled + 0.5, 0.0), 1.0)
 
         // Adjust for label smoothing (reduce overconfidence)
         let adjusted = calibrated * (1.0 - smoothingFactor) + smoothingFactor / 2.0
@@ -39,13 +42,14 @@ public struct ConfidenceCalibrator: Codable, Sendable {
         var bestTemp: Float = 1.0
         var bestLoss: Float = .infinity
 
-        for t in stride(from: 0.5, through: 3.0, by: 0.1) {
+        for t in stride(from: 0.3, through: 5.0, by: 0.1) {
             let temp = Float(t)
             var loss: Float = 0
 
             for (pred, label) in zip(predictions, labels) {
-                let scaled = pred / temp
-                let calibrated = 1.0 / (1.0 + exp(-scaled))
+                let centered = pred - 0.5
+                let scaledVal = centered / temp
+                let calibrated = min(max(scaledVal + 0.5, 0.0), 1.0)
                 let target: Float = label ? 1.0 : 0.0
 
                 // Cross-entropy loss

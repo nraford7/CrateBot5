@@ -705,10 +705,6 @@ public actor TaggingEngine {
         genrePredictions: [String: Float],
         instrumentPredictions: [String: Float]
     ) -> Float {
-        let normalizedTag = tagName.lowercased()
-            .replacingOccurrences(of: "_", with: " ")
-            .replacingOccurrences(of: "-", with: " ")
-
         // First, check if there's an explicit fallback mapping for this tag
         if let mapping = fallbackConfig.mapping(for: tagName), !mapping.essentiaLabels.isEmpty {
             let predictions: [String: Float]
@@ -724,77 +720,11 @@ public actor TaggingEngine {
             }
         }
 
-        // Otherwise, try fuzzy matching against Essentia labels
-        var bestMatch: Float = 0
-
-        // Check moods
-        for (label, confidence) in moodPredictions {
-            if fuzzyMatch(normalizedTag, label.lowercased()) {
-                bestMatch = max(bestMatch, confidence)
-            }
-        }
-
-        // Check genres
-        for (label, confidence) in genrePredictions {
-            if fuzzyMatch(normalizedTag, label.lowercased()) {
-                bestMatch = max(bestMatch, confidence)
-            }
-        }
-
-        // Check instruments
-        for (label, confidence) in instrumentPredictions {
-            if fuzzyMatch(normalizedTag, label.lowercased()) {
-                bestMatch = max(bestMatch, confidence)
-            }
-        }
-
-        return bestMatch
+        // No explicit mapping found — return 0 (no fuzzy matching)
+        // Fuzzy string matching was removed because String.contains() produced
+        // false positives (e.g., "house" matching "Ambient relaxing House music").
+        // Use the Fallback Mappings editor to create explicit tag-to-Essentia mappings.
+        return 0
     }
 
-    /// Simple fuzzy matching between a user tag and an Essentia label
-    private func fuzzyMatch(_ userTag: String, _ essentiaLabel: String) -> Bool {
-        // Exact match
-        if userTag == essentiaLabel { return true }
-
-        // Contains match (e.g., "funky" matches "funky/groove")
-        if essentiaLabel.contains(userTag) || userTag.contains(essentiaLabel) { return true }
-
-        // Common synonyms
-        let synonyms: [String: [String]] = [
-            "happy": ["fun", "joyful", "cheerful", "uplifting"],
-            "sad": ["melancholic", "emotional", "dramatic"],
-            "dark": ["dark", "heavy", "aggressive"],
-            "chill": ["relaxing", "calm", "ambient"],
-            "funky": ["groovy", "funk", "groove"],
-            "dreamy": ["dream", "soundscape", "atmospheric"],
-            "epic": ["epic", "dramatic", "film"],
-            "energetic": ["energetic", "powerful", "action"],
-            "jazzy": ["jazz"],
-            "disco": ["disco", "dance"],
-            "house": ["house", "electronic"],
-            "techno": ["techno", "electronic"],
-            "latin": ["latin", "tropical"],
-            "soulful": ["soul", "rnb"],
-            "aggressive": ["aggressive", "heavy", "hard"],
-            "melodic": ["melodic", "soft", "mellow"],
-            "bouncy": ["fun", "groovy", "upbeat"],
-            "driving": ["energetic", "action", "powerful"]
-        ]
-
-        // Check if user tag has synonyms that match
-        if let userSynonyms = synonyms[userTag] {
-            for synonym in userSynonyms {
-                if essentiaLabel.contains(synonym) { return true }
-            }
-        }
-
-        // Check if Essentia label is a key with user tag as synonym
-        for (key, values) in synonyms {
-            if essentiaLabel.contains(key) && values.contains(userTag) {
-                return true
-            }
-        }
-
-        return false
-    }
 }

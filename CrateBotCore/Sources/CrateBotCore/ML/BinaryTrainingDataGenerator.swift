@@ -27,7 +27,7 @@ public struct BinaryTrainingDataGenerator: Sendable {
     /// Maximum negative:positive ratio to prevent class imbalance
     public let maxNegativeRatio: Double
 
-    public init(minPositiveExamples: Int = 50, maxNegativeRatio: Double = 3.0) {
+    public init(minPositiveExamples: Int = 50, maxNegativeRatio: Double = 1.5) {
         self.minPositiveExamples = minPositiveExamples
         self.maxNegativeRatio = maxNegativeRatio
     }

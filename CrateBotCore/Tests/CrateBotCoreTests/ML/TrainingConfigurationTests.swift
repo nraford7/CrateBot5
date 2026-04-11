@@ -6,7 +6,7 @@ final class TrainingConfigurationTests: XCTestCase {
         let config = TrainingConfiguration()
 
         XCTAssertEqual(config.minSamplesPerTag, 50)
-        XCTAssertEqual(config.maxNegativeRatio, 3.0)
+        XCTAssertEqual(config.maxNegativeRatio, 1.5)
         XCTAssertEqual(config.mixupAlpha, 0.4)
         XCTAssertEqual(config.mixupRatio, 0.3)
         XCTAssertEqual(config.featureNoisePercent, 0.02)

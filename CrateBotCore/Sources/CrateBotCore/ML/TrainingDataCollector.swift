@@ -1,6 +1,25 @@
 import Foundation
 import os.log
 
+/// Normalizes tag strings to canonical title case for consistent training.
+/// "house", "HOUSE", "House" all become "House".
+public enum TagNormalizer {
+    public static func normalize(_ tag: String) -> String {
+        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        // Split on spaces and slashes, capitalize each word
+        return trimmed
+            .components(separatedBy: CharacterSet(charactersIn: " /"))
+            .enumerated()
+            .map { index, word in
+                guard !word.isEmpty else { return word }
+                return word.prefix(1).uppercased() + word.dropFirst().lowercased()
+            }
+            .joined(separator: trimmed.contains("/") && !trimmed.contains(" ") ? "/" : " ")
+    }
+}
+
 /// Actor that scans directories for MP3 files, reads their ID3 tags,
 /// and creates TaggedTrack instances for ML training.
 public actor TrainingDataCollector {
@@ -122,6 +141,11 @@ public actor TrainingDataCollector {
 
     /// Configuration for feature augmentation during extraction
     public var augmentationConfig: AudioAugmenter.AugmentationConfig = .default
+
+    /// Update augmentation configuration (actor-isolated)
+    public func setAugmentationConfig(_ config: AudioAugmenter.AugmentationConfig) {
+        self.augmentationConfig = config
+    }
 
     // MARK: - Feature Extraction Configuration
 
@@ -709,7 +733,13 @@ public actor TrainingDataCollector {
         for track in tracksNeedingFeatures {
             let fileURL = URL(fileURLWithPath: track.id)
             if let cachedFeatures = await embeddingCache.get(for: fileURL) {
-                let updatedTrack = TaggedTrack(id: track.id, tags: track.tags, features: cachedFeatures)
+                // Apply augmentation to cached features (fresh noise each run)
+                let augmentedCached = AudioAugmenter.augmentFeatures(
+                    cachedFeatures,
+                    addNoise: self.augmentationConfig.featureNoiseEnabled,
+                    noiseScale: self.augmentationConfig.featureNoiseScale
+                )
+                let updatedTrack = TaggedTrack(id: track.id, tags: track.tags, features: augmentedCached)
                 cachedTracks.append(updatedTrack)
             } else {
                 uncachedTracks.append(track)
@@ -773,7 +803,7 @@ public actor TrainingDataCollector {
 
                             for buffer in buffers {
                                 // Use CombinedFeatureExtractor for unified feature extraction
-                                let features = try await extractor.extract(from: buffer)
+                                let features = try await extractor.extract(from: buffer, augmentationConfig: augConfig)
 
                                 // Validate feature dimensions
                                 if features.count != expectedDimension {
@@ -795,13 +825,9 @@ public actor TrainingDataCollector {
                                 return (globalIndex, track, nil)
                             }
 
-                            // Apply feature-level augmentation for training robustness
-                            let augmentedFeatures = AudioAugmenter.augmentFeatures(
-                                averaged,
-                                addNoise: augConfig.featureNoiseEnabled,
-                                noiseScale: augConfig.featureNoiseScale
-                            )
-                            return (globalIndex, track, augmentedFeatures)
+                            // Return raw features — augmentation is applied after caching
+                            // so cached embeddings remain clean and reusable across configs
+                            return (globalIndex, track, averaged)
                         } catch {
                             Self.debugLog("Track \(URL(fileURLWithPath: track.id).lastPathComponent) extraction failed: \(error.localizedDescription)")
                             return (globalIndex, track, nil)
@@ -819,12 +845,18 @@ public actor TrainingDataCollector {
             // Combine results and cache
             for (_, track, features) in batchResults {
                 if let features = features, !features.isEmpty {
-                    let updatedTrack = TaggedTrack(id: track.id, tags: track.tags, features: features)
-                    extractedTracks.append(updatedTrack)
-
-                    // Cache the embeddings
+                    // Cache raw (unaugmented) embeddings
                     let fileURL = URL(fileURLWithPath: track.id)
                     await embeddingCache.set(features, for: fileURL)
+
+                    // Apply augmentation AFTER caching for training robustness
+                    let augmentedFeatures = AudioAugmenter.augmentFeatures(
+                        features,
+                        addNoise: augConfig.featureNoiseEnabled,
+                        noiseScale: augConfig.featureNoiseScale
+                    )
+                    let updatedTrack = TaggedTrack(id: track.id, tags: track.tags, features: augmentedFeatures)
+                    extractedTracks.append(updatedTrack)
                 } else {
                     // Failed to extract features - keep track without features
                     extractedTracks.append(track)
@@ -852,7 +884,8 @@ public actor TrainingDataCollector {
                     modelName: modelName,
                     sourceDirectories: sourceDirectories,
                     processedTracks: tracksForCheckpoint,
-                    totalTracksDiscovered: total
+                    totalTracksDiscovered: total,
+                    featureExtractionConfig: featureExtractionConfig
                 )
                 do {
                     try checkpointManager.save(checkpoint)
@@ -897,7 +930,8 @@ public actor TrainingDataCollector {
                 modelName: modelName,
                 sourceDirectories: sourceDirectories,
                 processedTracks: allTracks.filter { $0.features != nil },
-                totalTracksDiscovered: total
+                totalTracksDiscovered: total,
+                featureExtractionConfig: featureExtractionConfig
             )
             do {
                 try checkpointManager.save(checkpoint)
@@ -945,24 +979,27 @@ public actor TrainingDataCollector {
 
         // Add genre from mapped field (single value)
         if let value = getFieldValue(tags, field: mapping.genreField), !value.isEmpty {
-            tagSet.insert(value.trimmingCharacters(in: .whitespaces))
+            let normalized = TagNormalizer.normalize(value)
+            if !normalized.isEmpty { tagSet.insert(normalized) }
         }
 
         // Add timing from mapped field (single value)
         if let value = getFieldValue(tags, field: mapping.timingField), !value.isEmpty {
-            tagSet.insert(value.trimmingCharacters(in: .whitespaces))
+            let normalizedTiming = TagNormalizer.normalize(value)
+            if !normalizedTiming.isEmpty { tagSet.insert(normalizedTiming) }
         }
 
         // Add mood from mapped field (single value)
         if let value = getFieldValue(tags, field: mapping.moodField), !value.isEmpty {
-            tagSet.insert(value.trimmingCharacters(in: .whitespaces))
+            let normalizedMood = TagNormalizer.normalize(value)
+            if !normalizedMood.isEmpty { tagSet.insert(normalizedMood) }
         }
 
         // Add descriptive tags from mapped field (comma-separated values)
         if let value = getFieldValue(tags, field: mapping.descriptiveField), !value.isEmpty {
             // Parse comma-separated tags
             let individualTags = value.split(separator: ",").map {
-                $0.trimmingCharacters(in: .whitespaces)
+                TagNormalizer.normalize(String($0))
             }
             for tag in individualTags where !tag.isEmpty {
                 tagSet.insert(tag)
