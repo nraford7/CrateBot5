@@ -953,6 +953,7 @@ public actor TrainingDataCollector {
 
     /// Recursively discovers all MP3 files in the given directories.
     private func discoverMP3Files(in directories: [URL]) -> [URL] {
+        var seen = Set<String>()
         var mp3Files: [URL] = []
         let fileManager = FileManager.default
 
@@ -965,7 +966,10 @@ public actor TrainingDataCollector {
 
             while let fileURL = enumerator.nextObject() as? URL {
                 if fileURL.pathExtension.lowercased() == "mp3" {
-                    mp3Files.append(fileURL)
+                    let path = fileURL.standardizedFileURL.path
+                    if seen.insert(path).inserted {
+                        mp3Files.append(fileURL)
+                    }
                 }
             }
         }
