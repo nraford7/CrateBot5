@@ -160,7 +160,7 @@ public actor TaggingEngine {
     public var predictionThreshold: Float = 0.2
 
     /// Classification threshold for user-trained classifiers (configurable via strictness setting)
-    public var classificationThreshold: Float = 0.5
+    public var classificationThreshold: Float = 0.85
 
     /// Fallback mappings for tags without trained classifiers
     public var fallbackConfig: FallbackMappingConfig = FallbackMappingConfig()

@@ -425,33 +425,42 @@ final class AppState {
     }
 }
 
-/// How strict the tagging threshold should be
+/// How strict the tagging threshold should be.
+/// Calibrated against accuracy evaluation on 200 tracks:
+///   0.70 = high recall, low precision (tags everything, many false positives)
+///   0.85 = balanced precision/recall (macro F1 peaks here)
+///   0.90 = best macro F1, precision > recall (tags are trustworthy)
+///   0.95 = high precision, low recall (only very confident tags applied)
 enum TaggingStrictness: String, Codable, CaseIterable {
-    case strict = "strict"      // 0.7 threshold
-    case average = "average"    // 0.5 threshold
-    case loose = "loose"        // 0.3 threshold
+    case loose = "loose"        // 0.70 threshold
+    case average = "average"    // 0.85 threshold
+    case strict = "strict"      // 0.90 threshold
+    case veryStrict = "veryStrict" // 0.95 threshold
 
     var threshold: Float {
         switch self {
-        case .strict: return 0.7
-        case .average: return 0.5
-        case .loose: return 0.3
+        case .loose: return 0.70
+        case .average: return 0.85
+        case .strict: return 0.90
+        case .veryStrict: return 0.95
         }
     }
 
     var displayName: String {
         switch self {
-        case .strict: return "Strict (70%)"
-        case .average: return "Average (50%)"
-        case .loose: return "Loose (30%)"
+        case .loose: return "Loose (70%)"
+        case .average: return "Balanced (85%)"
+        case .strict: return "Strict (90%)"
+        case .veryStrict: return "Very Strict (95%)"
         }
     }
 
     var description: String {
         switch self {
-        case .strict: return "Fewer tags, higher confidence"
-        case .average: return "Balanced tagging"
         case .loose: return "More tags, may include uncertain matches"
+        case .average: return "Balanced precision and recall"
+        case .strict: return "Fewer tags, higher confidence"
+        case .veryStrict: return "Only very confident predictions"
         }
     }
 }
