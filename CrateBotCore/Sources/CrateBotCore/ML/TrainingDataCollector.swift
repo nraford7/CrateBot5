@@ -8,15 +8,20 @@ public enum TagNormalizer {
         let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
 
-        // Split on spaces and slashes, capitalize each word
+        // Split on slashes first (preserve slash structure), then title-case each segment
         return trimmed
-            .components(separatedBy: CharacterSet(charactersIn: " /"))
-            .enumerated()
-            .map { index, word in
-                guard !word.isEmpty else { return word }
-                return word.prefix(1).uppercased() + word.dropFirst().lowercased()
+            .components(separatedBy: "/")
+            .map { segment in
+                segment
+                    .trimmingCharacters(in: .whitespaces)
+                    .components(separatedBy: " ")
+                    .map { word in
+                        guard !word.isEmpty else { return word }
+                        return word.prefix(1).uppercased() + word.dropFirst().lowercased()
+                    }
+                    .joined(separator: " ")
             }
-            .joined(separator: trimmed.contains("/") && !trimmed.contains(" ") ? "/" : " ")
+            .joined(separator: "/")
     }
 }
 

@@ -97,8 +97,6 @@ struct AddFallbackMappingSheet: View {
                     } footer: {
                         Text("\(selectedSource.availableLabels.count) labels available")
                     }
-
-
                 }
                 .formStyle(.grouped)
             }

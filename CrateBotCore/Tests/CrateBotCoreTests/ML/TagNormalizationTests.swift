@@ -27,4 +27,9 @@ final class TagNormalizationTests: XCTestCase {
     func testNormalizeTagHandlesSlashes() {
         XCTAssertEqual(TagNormalizer.normalize("dub/reggae"), "Dub/Reggae")
     }
+
+    func testNormalizeTagPreservesSlashWithSpaces() {
+        XCTAssertEqual(TagNormalizer.normalize("deep house/techno"), "Deep House/Techno")
+        XCTAssertEqual(TagNormalizer.normalize("DRUM AND BASS/JUNGLE"), "Drum And Bass/Jungle")
+    }
 }
