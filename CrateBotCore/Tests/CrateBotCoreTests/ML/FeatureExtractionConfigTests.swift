@@ -72,7 +72,7 @@ final class FeatureExtractionConfigTests: XCTestCase {
     func testDefaultConfig() {
         let config = FeatureExtractionConfig.default
 
-        XCTAssertEqual(config.featureConfig, .effnetGenresCLAP)
+        XCTAssertEqual(config.featureConfig, .effnetGenresCLAPMAEST)
         XCTAssertEqual(config.segmentDuration, 30.0)
         XCTAssertEqual(config.segmentStartFractions, [0.33, 0.5, 0.66])
     }

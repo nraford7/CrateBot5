@@ -30,6 +30,7 @@ let package = Package(
                 .copy("Resources/mtg_jamendo_instrument-discogs-effnet-1.json"),
                 .copy("Resources/clap_tag_embeddings.json"),
                 .copy("Resources/MAEST.mlpackage"),
+                .copy("Resources/tag_cooccurrence.json"),
             ]
         ),
         .testTarget(

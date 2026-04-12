@@ -4,7 +4,7 @@ CrateBot Accuracy Evaluation
 Loads trained models + checkpoint data, runs inference at multiple thresholds.
 """
 
-import json, os, sys, random
+import json, math, os, sys, random
 import coremltools as ct
 from pathlib import Path
 
@@ -145,6 +145,43 @@ def load_data_and_run_inference():
         'metadata': metadata,
         'model_dir': model_dir,
     }
+
+
+def apply_cooccurrence_boost(raw_probs, stats, boost_weight=0.5, confident_threshold=0.8):
+    """Apply post-hoc co-occurrence boosting to a list of raw probability dicts.
+
+    Mirrors the Swift TagCooccurrenceBooster logic:
+      adjusted_logit(A) = logit(A) + boost_weight * sum_B log(P(A|B) / P(A))
+    where B ranges over confident tags (p >= confident_threshold), B != A.
+    """
+    base_rates = stats['base_rates']
+    conditional = stats['conditional']
+    boosted = []
+
+    for probs in raw_probs:
+        confident = [t for t, p in probs.items() if p >= confident_threshold]
+        adjusted = {}
+        for tag, p in probs.items():
+            log_lift = 0.0
+            for c in confident:
+                if c == tag:
+                    continue
+                p_b_given_a = conditional.get(c, {}).get(tag)
+                p_b = base_rates.get(tag)
+                if p_b_given_a and p_b and p_b > 0:
+                    lift = p_b_given_a / p_b
+                    if lift > 0:
+                        log_lift += math.log(lift)
+            if log_lift == 0:
+                adjusted[tag] = p
+            else:
+                eps = 1e-6
+                p_clamped = max(eps, min(1 - eps, p))
+                logit_p = math.log(p_clamped / (1 - p_clamped))
+                adjusted_logit = logit_p + boost_weight * log_lift
+                adjusted[tag] = 1 / (1 + math.exp(-adjusted_logit))
+        boosted.append(adjusted)
+    return boosted
 
 
 def threshold_sweep(data):
@@ -338,6 +375,17 @@ def main():
     data = load_data_and_run_inference()
     if data is None:
         return
+
+    if '--boost' in sys.argv:
+        stats_path = Path("CrateBotCore/Sources/CrateBotCore/Resources/tag_cooccurrence.json")
+        if stats_path.exists():
+            with open(stats_path) as f:
+                stats = json.load(f)
+            print(f"\nApplying co-occurrence boost...")
+            data['raw_probs'] = apply_cooccurrence_boost(data['raw_probs'], stats)
+            print(f"Boosted {len(data['raw_probs'])} probability dicts\n")
+        else:
+            print(f"Warning: {stats_path} not found, running without boost")
 
     threshold_sweep(data)
 

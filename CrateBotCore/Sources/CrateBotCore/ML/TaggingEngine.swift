@@ -174,10 +174,20 @@ public actor TaggingEngine {
     /// Zero-shot matcher for CLAP-based tag predictions (no training needed)
     private let zeroShotMatcher: ZeroShotMatcher?
 
+    /// Tag co-occurrence booster for post-hoc score adjustment
+    private let cooccurrenceBooster: TagCooccurrenceBooster?
+
+    /// Whether to apply co-occurrence boosting (set externally for A/B testing)
+    public var useCooccurrenceBoosting: Bool = true
+
     public init() throws {
         self.essentiaClassifier = try EssentiaClassifier()
         self.audioAnalyzer = AudioAnalyzer()
         self.zeroShotMatcher = ZeroShotMatcher.loadFromBundle()
+        self.cooccurrenceBooster = TagCooccurrenceBooster.loadFromBundle()
+        if cooccurrenceBooster != nil {
+            logger.info("Loaded tag co-occurrence booster")
+        }
         // Feature extractor is lazy-loaded when model is loaded
         // This allows matching the feature dimension to the trained model
     }
@@ -451,32 +461,49 @@ public actor TaggingEngine {
         var predictedTags: [String] = []
         var trainedTagNames = Set<String>()
 
+        // Pass 1: collect calibrated raw probabilities for all classifiers
+        var rawProbabilities: [String: Float] = [:]
         for classifier in userClassifiers {
             trainedTagNames.insert(classifier.tagName.lowercased())
             do {
                 let (_, rawConfidence) = try classifier.predictWithConfidence(features: extendedFeatures)
-                let confidence = confidenceCalibrator.calibrate(rawConfidence)
-                let effectiveThreshold = tagThresholds?[classifier.tagName] ?? classificationThreshold
+                let calibrated = confidenceCalibrator.calibrate(rawConfidence)
+                rawProbabilities[classifier.tagName] = calibrated
+            } catch {
+                logger.error("Classifier '\(classifier.tagName)' failed: \(error.localizedDescription)")
+            }
+        }
 
-                if confidence >= effectiveThreshold {
-                    // Calibrated confidence meets threshold - apply tag
-                    predictedTags.append(classifier.tagName)
-                } else if rawConfidence > 0 {
+        // Pass 2: apply co-occurrence boosting if enabled
+        let adjustedProbabilities: [String: Float]
+        if useCooccurrenceBoosting, let booster = cooccurrenceBooster {
+            adjustedProbabilities = booster.adjust(probabilities: rawProbabilities)
+        } else {
+            adjustedProbabilities = rawProbabilities
+        }
+
+        // Pass 3: threshold and apply tags (hybrid Essentia fallback uses raw, pre-boost confidence)
+        for (tagName, confidence) in adjustedProbabilities {
+            let effectiveThreshold = tagThresholds?[tagName] ?? classificationThreshold
+            if confidence >= effectiveThreshold {
+                // (Possibly boosted) confidence meets threshold - apply tag
+                predictedTags.append(tagName)
+            } else {
+                let raw = rawProbabilities[tagName, default: 0]
+                if raw > 0 {
                     // Below threshold but non-zero - try hybrid Essentia check
-                    // Use rawConfidence for hybrid check to maintain original logic
+                    // Use raw (pre-boost) confidence to maintain original fallback semantics
                     let shouldApply = checkHybridEssentiaFallback(
-                        tagName: classifier.tagName,
-                        userConfidence: rawConfidence,
+                        tagName: tagName,
+                        userConfidence: raw,
                         moodPredictions: moodPredictions,
                         genrePredictions: genrePredictions,
                         instrumentPredictions: instrumentPredictions
                     )
                     if shouldApply {
-                        predictedTags.append(classifier.tagName)
+                        predictedTags.append(tagName)
                     }
                 }
-            } catch {
-                logger.error("Classifier '\(classifier.tagName)' failed: \(error.localizedDescription)")
             }
         }
 
