@@ -46,26 +46,62 @@ def load_data_and_run_inference():
         if space in known_tags: return space
         return space  # fallback
 
-    # Load checkpoint (ground truth tags) + embedding cache (2192-dim features)
-    cp_dir = app_support / "Checkpoints"
-    cp_files = sorted(cp_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
-    if not cp_files:
-        print("No checkpoint found"); return None
-
-    print(f"Loading checkpoint + cache...")
-    with open(cp_files[0]) as f:
-        checkpoint = json.load(f)
-
-    tag_lookup = {t['id']: t['tags'] for t in checkpoint['processedTracks']}
-
+    # Load embedding cache for features
+    print(f"Loading embedding cache...")
     with open(app_support / "embedding_cache.json") as f:
         cache = json.load(f)
 
-    # Join tracks with both tags and features
+    # Read ground-truth tags directly from ID3 via mutagen
+    # ID3 field mapping (matches TrainingDataCollector's default TagFieldMapping)
+    # Genre -> TCON, Timing -> TALB (album), Mood -> TIT1 (contentGroup), Descriptive -> COMM
+    from mutagen.id3 import ID3, ID3NoHeaderError
+    from mutagen.mp3 import MP3
+
+    def read_tags(path):
+        try:
+            audio = MP3(path, ID3=ID3)
+            tags = set()
+            # Genre (TCON)
+            if 'TCON' in audio.tags:
+                for v in audio.tags['TCON'].text:
+                    tags.update(t.strip() for t in str(v).split(',') if t.strip())
+            # Timing (TALB - album field)
+            if 'TALB' in audio.tags:
+                for v in audio.tags['TALB'].text:
+                    if str(v).strip(): tags.add(str(v).strip())
+            # Mood (TIT1 - content group)
+            if 'TIT1' in audio.tags:
+                for v in audio.tags['TIT1'].text:
+                    if str(v).strip(): tags.add(str(v).strip())
+            # Descriptive (COMM - comments)
+            for k in audio.tags.keys():
+                if k.startswith('COMM'):
+                    for v in audio.tags[k].text:
+                        tags.update(t.strip() for t in str(v).split(',') if t.strip())
+            # Normalize to title case (match TagNormalizer)
+            normalized = set()
+            for t in tags:
+                parts = [p.strip() for p in t.split('/')]
+                norm_parts = []
+                for p in parts:
+                    words = p.split()
+                    norm = ' '.join(w[0].upper() + w[1:].lower() if w else w for w in words)
+                    norm_parts.append(norm)
+                normalized.add('/'.join(norm_parts))
+            return normalized
+        except Exception as e:
+            return set()
+
+    print("Reading ID3 tags from tracks...")
     tracks = []
     for path, entry in cache.items():
-        if path in tag_lookup and entry.get('embeddings'):
-            tracks.append({'id': path, 'tags': tag_lookup[path], 'features': entry['embeddings']})
+        if not entry.get('embeddings'):
+            continue
+        if not os.path.exists(path):
+            continue
+        track_tags = read_tags(path)
+        if track_tags:
+            tracks.append({'id': path, 'tags': list(track_tags), 'features': entry['embeddings']})
 
     # Sample
     random.seed(SEED)

@@ -25,7 +25,7 @@ public struct FeatureExtractionConfig: Codable, Equatable, Sendable {
 
     /// Default configuration matching current TrainingDataCollector defaults
     public static let `default` = FeatureExtractionConfig(
-        featureConfig: .effnetGenresCLAP,
+        featureConfig: .effnetGenresCLAPMAEST,
         segmentDuration: 30.0,
         segmentStartFractions: [0.33, 0.5, 0.66]
     )
