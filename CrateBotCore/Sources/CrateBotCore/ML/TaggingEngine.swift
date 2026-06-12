@@ -315,6 +315,18 @@ public actor TaggingEngine {
         // Initialize the combined feature extractor with the appropriate config
         featureExtractor = try CombinedFeatureExtractor(config: effectiveConfig)
 
+        // A degraded extractor (e.g. CLAP/MAEST model missing) produces fewer dimensions
+        // than the model was trained on; predictions would silently fail per-tag. Refuse.
+        if let metadata = metadata {
+            let actualDimension = await featureExtractor!.featureDimension
+            if actualDimension != metadata.featureDimension {
+                throw ModelManager.ModelError.incompatiblePipelineVersion(
+                    expected: "\(metadata.featureDimension)-dim features",
+                    found: "\(actualDimension)-dim extractor (a feature model may have failed to load)"
+                )
+            }
+        }
+
         // Load confidence calibrator if temperature is stored in metadata
         if let metadata = metadata, let temp = metadata.calibratorTemperature {
             confidenceCalibrator = ConfidenceCalibrator(temperature: temp, smoothingFactor: 0.1)

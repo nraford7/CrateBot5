@@ -235,4 +235,39 @@ final class TaggingEngineTests: XCTestCase {
         XCTAssertEqual(name, "NewModel")
         XCTAssertEqual(count, 0) // dummy model file loads no classifiers, but no version rejection
     }
+
+    func testLoadModelRejectsFeatureDimensionMismatch() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // 9999 maps to the default extractor config, whose real dimension can never be 9999,
+        // so the engine's extractor cannot satisfy the model regardless of which models load.
+        let metadata = ModelMetadata(
+            name: "MismatchModel",
+            version: "1.0",
+            pipelineVersion: FeaturePipelineVersion.current().versionHash,
+            trainedAt: Date(),
+            trainingFileCount: 100,
+            categories: ["Genre"],
+            tags: ["Genre": ["House"]],
+            featureDimension: 9999
+        )
+        try metadata.save(to: tempDir.appendingPathComponent("MismatchModel.json"))
+
+        let dummyModelDir = tempDir.appendingPathComponent("House.mlmodel")
+        try FileManager.default.createDirectory(at: dummyModelDir, withIntermediateDirectories: true)
+
+        let engine = try TaggingEngine()
+        do {
+            _ = try await engine.loadModel(from: tempDir, modelName: "MismatchModel")
+            XCTFail("Expected loadModel to reject a feature-dimension mismatch")
+        } catch let error as ModelManager.ModelError {
+            guard case .incompatiblePipelineVersion(let expected, _) = error else {
+                XCTFail("Expected incompatiblePipelineVersion, got \(error)")
+                return
+            }
+            XCTAssertTrue(expected.contains("9999"))
+        }
+    }
 }
