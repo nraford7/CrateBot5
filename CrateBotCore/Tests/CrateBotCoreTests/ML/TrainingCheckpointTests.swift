@@ -48,7 +48,7 @@ final class TrainingCheckpointTests: XCTestCase {
         XCTAssertEqual(checkpoint.modelName, "TestModel")
         XCTAssertEqual(checkpoint.processedTracks.count, 2)
         XCTAssertEqual(checkpoint.totalTracksDiscovered, 10)
-        XCTAssertEqual(checkpoint.checkpointVersion, 3)
+        XCTAssertEqual(checkpoint.checkpointVersion, 4)
         XCTAssertFalse(checkpoint.tagHash.isEmpty)
     }
 
@@ -386,6 +386,65 @@ final class TrainingCheckpointTests: XCTestCase {
         XCTAssertEqual(decoded.checkpointVersion, original.checkpointVersion)
     }
 
+    // MARK: - Phase Marker Tests (two-phase training)
+
+    func testCheckpointPhaseDefaultsToFeatureExtraction() {
+        let checkpoint = TrainingCheckpoint(
+            modelName: "PhaseDefault",
+            sourceDirectories: [testDirectory],
+            processedTracks: [],
+            totalTracksDiscovered: 0
+        )
+        XCTAssertEqual(checkpoint.phase, .featureExtraction)
+    }
+
+    func testCheckpointPhaseACompletedRoundTrip() throws {
+        let original = TrainingCheckpoint(
+            modelName: "PhaseRoundTrip",
+            sourceDirectories: [testDirectory],
+            processedTracks: [
+                TaggedTrack(id: "track1", tags: ["Peak"], features: [1.0, 2.0])
+            ],
+            totalTracksDiscovered: 1,
+            phase: .phaseACompleted(stage1ModelVersion: "v-123")
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(original)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(TrainingCheckpoint.self, from: data)
+
+        XCTAssertEqual(decoded.phase, .phaseACompleted(stage1ModelVersion: "v-123"))
+    }
+
+    func testCheckpointPhaseBackwardsCompatibility() throws {
+        // Pre-phase-marker checkpoint (v3 and earlier): no "phase" field.
+        // Must decode as .featureExtraction so resume keeps existing behavior.
+        let v3JSON = """
+        {
+            "modelName": "PrePhaseModel",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "sourceDirectories": ["/path/to/music"],
+            "processedTracks": [{"id": "track1", "tags": ["House"]}],
+            "totalTracksDiscovered": 10,
+            "checkpointVersion": 3,
+            "tagHash": "abc"
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let checkpoint = try decoder.decode(
+            TrainingCheckpoint.self,
+            from: v3JSON.data(using: .utf8)!
+        )
+
+        XCTAssertEqual(checkpoint.phase, .featureExtraction)
+    }
+
     func testBackwardsCompatibilityWithV1Checkpoint() throws {
         // Simulate a v1 checkpoint (no tagHash field)
         let v1JSON = """
@@ -460,7 +519,7 @@ final class TrainingCheckpointTests: XCTestCase {
         )
 
         XCTAssertEqual(checkpoint.featureExtractionConfig, config)
-        XCTAssertEqual(checkpoint.checkpointVersion, 3)
+        XCTAssertEqual(checkpoint.checkpointVersion, 4)
     }
 
     func testCheckpointIncompatibleWhenFeatureConfigChanges() throws {

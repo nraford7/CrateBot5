@@ -426,6 +426,151 @@ final class ModelTrainerTests: XCTestCase {
             "A thin tag must surface as insufficientPositives")
     }
 
+    // MARK: - Judgment (Stage 2) Training Tests
+
+    /// Builds one Stage 2 row with a deterministic schema. `seed` drives the
+    /// feature values so positives/negatives are separable.
+    private func makeJudgmentRow(seed: Float, labels: Set<String>, trackID: String) -> JudgmentRow {
+        let vector = JudgmentFeatureVector(
+            binaryConfidences: ["Dark": seed, "Driving": 1 - seed],
+            groupProbabilities: ["BassType": ["Punchy": seed / 2, "Walking": 1 - seed / 2]],
+            bpm: 120 + seed * 20,
+            durationSeconds: 300
+        )
+        return (features: vector, labels: labels, trackID: trackID)
+    }
+
+    private func makeSeparableRows(positiveTag: String = "Peak", negativeTag: String = "Build", count: Int = 15) -> [JudgmentRow] {
+        var rows: [JudgmentRow] = []
+        for i in 0..<count {
+            rows.append(makeJudgmentRow(seed: Float.random(in: 0.7...1.0), labels: [positiveTag], trackID: "pos_\(i)"))
+        }
+        for i in 0..<count {
+            rows.append(makeJudgmentRow(seed: Float.random(in: 0.0...0.3), labels: [negativeTag], trackID: "neg_\(i)"))
+        }
+        return rows
+    }
+
+    /// Stage 2 training: per Timing tag, a BoostedTree trained on the exact
+    /// JudgmentFeatureVector schema, saved as `<tag>_judgment.mlmodel`, with
+    /// NO augmentation — sample counts must equal the input rows exactly.
+    func testTrainJudgmentModelsSavesPerTagJudgmentModels() async throws {
+        let rows = makeSeparableRows()
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let trainer = ModelTrainer()
+        let config = TrainingConfig(minSamplesPerTag: 10)
+        let (results, skipped, columnNames) = try await trainer.trainJudgmentModels(
+            rows: rows,
+            outputDirectory: tempDir,
+            config: config
+        )
+
+        XCTAssertTrue(skipped.isEmpty)
+        XCTAssertEqual(Set(results.map(\.tag)), ["Peak", "Build"])
+        XCTAssertEqual(columnNames, rows[0].features.columnNames,
+            "Returned schema must be the exact JudgmentFeatureVector column order")
+
+        let peak = try XCTUnwrap(results.first { $0.tag == "Peak" })
+        XCTAssertEqual(peak.modelURL.lastPathComponent, "Peak_judgment.mlmodel")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: peak.modelURL.path))
+        // No mixup/noise on judgment features: counts equal the raw rows
+        XCTAssertEqual(peak.positiveCount, 15)
+        XCTAssertEqual(peak.negativeCount, 15)
+        XCTAssertGreaterThan(peak.validationAccuracy, 0.5,
+            "Separable rows should train a better-than-chance judgment model")
+    }
+
+    func testTrainJudgmentModelsReportsThinAndNegativelessTags() async throws {
+        // "Everywhere" is on every row → zero trusted negatives.
+        // "Rare" is on 3 rows → below minSamplesPerTag.
+        var rows: [JudgmentRow] = []
+        for i in 0..<15 {
+            rows.append(makeJudgmentRow(seed: 0.9, labels: ["Peak", "Everywhere"], trackID: "p_\(i)"))
+        }
+        for i in 0..<15 {
+            let labels: Set<String> = i < 3 ? ["Build", "Everywhere", "Rare"] : ["Build", "Everywhere"]
+            rows.append(makeJudgmentRow(seed: 0.1, labels: labels, trackID: "b_\(i)"))
+        }
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let trainer = ModelTrainer()
+        let (results, skipped, _) = try await trainer.trainJudgmentModels(
+            rows: rows,
+            outputDirectory: tempDir,
+            config: TrainingConfig(minSamplesPerTag: 10)
+        )
+
+        XCTAssertEqual(Set(results.map(\.tag)), ["Peak", "Build"])
+        let reasons = Dictionary(uniqueKeysWithValues: skipped.map { ($0.tag, $0.reason) })
+        XCTAssertEqual(reasons["Rare"], .insufficientPositives(found: 3, required: 10))
+        XCTAssertEqual(reasons["Everywhere"], .noTrustedNegatives(positives: 30))
+    }
+
+    func testTrainJudgmentModelsEmptyRowsReturnsEmpty() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let trainer = ModelTrainer()
+        let (results, skipped, columnNames) = try await trainer.trainJudgmentModels(
+            rows: [],
+            outputDirectory: tempDir
+        )
+        XCTAssertTrue(results.isEmpty)
+        XCTAssertTrue(skipped.isEmpty)
+        XCTAssertNil(columnNames)
+    }
+
+    func testTrainJudgmentModelsDropsSchemaMismatchedRows() async throws {
+        var rows = makeSeparableRows()
+        // One row with a different Stage 1 schema (extra binary tag) — must be
+        // dropped, never silently mixed into a model with different columns.
+        let alien = JudgmentFeatureVector(
+            binaryConfidences: ["Dark": 0.9, "Driving": 0.1, "Extra": 0.5],
+            groupProbabilities: [:],
+            bpm: 120,
+            durationSeconds: 300
+        )
+        rows.append((features: alien, labels: Set(["Peak"]), trackID: "alien"))
+
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let trainer = ModelTrainer()
+        let (results, _, _) = try await trainer.trainJudgmentModels(
+            rows: rows,
+            outputDirectory: tempDir,
+            config: TrainingConfig(minSamplesPerTag: 10)
+        )
+
+        let peak = try XCTUnwrap(results.first { $0.tag == "Peak" })
+        XCTAssertEqual(peak.positiveCount, 15, "Schema-mismatched row must not be trained on")
+    }
+
+    func testTrainJudgmentModelsRespectsExplicitTagListAndSanitizesNames() async throws {
+        let rows = makeSeparableRows(positiveTag: "Set Starter", negativeTag: "Build")
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let trainer = ModelTrainer()
+        let (results, skipped, _) = try await trainer.trainJudgmentModels(
+            rows: rows,
+            tags: ["Set Starter", "Ghost"],
+            outputDirectory: tempDir,
+            config: TrainingConfig(minSamplesPerTag: 10)
+        )
+
+        XCTAssertEqual(results.map(\.tag), ["Set Starter"])
+        XCTAssertEqual(results[0].modelURL.lastPathComponent, "Set_Starter_judgment.mlmodel")
+        // "Build" was not requested — absent from results AND skips
+        XCTAssertFalse(skipped.contains { $0.tag == "Build" })
+        // "Ghost" was requested but has no rows — surfaced, not silent
+        XCTAssertEqual(
+            skipped.first { $0.tag == "Ghost" }?.reason,
+            .insufficientPositives(found: 0, required: 10)
+        )
+    }
+
     func testTrainModelsCallsProgressCallback() async throws {
         let trainer = ModelTrainer()
 

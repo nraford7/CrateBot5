@@ -117,4 +117,53 @@ final class ModelMetadataTests: XCTestCase {
         XCTAssertNil(metadata.tagThresholds)
         XCTAssertEqual(metadata.name, "LegacyModel")
     }
+
+    // MARK: - Stage 1/Stage 2 pairing fields
+
+    func testStagePairingFieldsEncodeDecode() throws {
+        let metadata = ModelMetadata(
+            name: "TwoStageModel",
+            version: "1.0",
+            pipelineVersion: "1.0",
+            trainedAt: Date(),
+            trainingFileCount: 100,
+            categories: ["Genre", "Timing"],
+            tags: ["Genre": ["House"], "Timing": ["Peak"]],
+            tagGroups: [],
+            accuracy: 0.85,
+            featureDimension: 2960,
+            stage1ModelVersion: "stage1-abc123",
+            judgmentColumnNames: ["bin_Dark", "grp_BassType_Punchy", "bpm", "duration"]
+        )
+
+        let data = try JSONEncoder().encode(metadata)
+        let decoded = try JSONDecoder().decode(ModelMetadata.self, from: data)
+
+        XCTAssertEqual(decoded.stage1ModelVersion, "stage1-abc123")
+        XCTAssertEqual(decoded.judgmentColumnNames,
+                       ["bin_Dark", "grp_BassType_Punchy", "bpm", "duration"])
+    }
+
+    func testStagePairingFieldsBackwardCompatibility() throws {
+        // JSON from a pre-two-stage model: no stage1ModelVersion / judgmentColumnNames
+        let oldJson = """
+        {
+            "name": "Stage1OnlyModel",
+            "version": "1.0",
+            "pipelineVersion": "1.0",
+            "trainedAt": 0,
+            "trainingFileCount": 50,
+            "categories": ["Genre"],
+            "tags": {"Genre": ["House"]},
+            "tagGroups": [],
+            "featureDimension": 1680
+        }
+        """
+
+        let metadata = try JSONDecoder().decode(ModelMetadata.self, from: oldJson.data(using: .utf8)!)
+
+        XCTAssertNil(metadata.stage1ModelVersion)
+        XCTAssertNil(metadata.judgmentColumnNames)
+        XCTAssertEqual(metadata.name, "Stage1OnlyModel")
+    }
 }

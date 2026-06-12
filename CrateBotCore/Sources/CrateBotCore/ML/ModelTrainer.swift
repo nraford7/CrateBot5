@@ -647,6 +647,210 @@ public actor ModelTrainer {
         return dataFrame
     }
 
+    // MARK: - Judgment (Stage 2) Training
+
+    /// Train Stage 2 judgment models: one MLBoostedTreeClassifier per
+    /// judgment-stage (Timing) tag, on `JudgmentRow`s produced by
+    /// `JudgmentDataGenerator`. Saved as `<tag>_judgment.mlmodel`.
+    ///
+    /// Design constraints (from the two-stage spec):
+    /// - Columns are EXACTLY `JudgmentFeatureVector.columnNames` — the sorted
+    ///   schema shared with inference. Rows whose schema differs from the
+    ///   first row are dropped (logged), never mixed in.
+    /// - NO augmentation: no mixup, no feature noise. Judgment features are
+    ///   Stage 1 confidences + BPM + duration; synthetic interpolation would
+    ///   fabricate judgment evidence.
+    /// - Negatives are already category-complete-filtered upstream: every row
+    ///   exists only because its track carries at least one Timing tag, so a
+    ///   row without tag T is a trusted negative for T.
+    ///
+    /// - Parameters:
+    ///   - rows: Stage 2 training rows (features + Timing labels + track ID).
+    ///   - tags: Explicit tags to train. nil trains every tag appearing in
+    ///     row labels. Requested tags with no rows are reported as skipped.
+    ///   - outputDirectory: Where `<tag>_judgment.mlmodel` files are written.
+    ///   - config: Training configuration (tree hyperparameters, splits,
+    ///     minSamplesPerTag, maxNegativeRatio). Augmentation flags ignored.
+    ///   - progress: Optional progress callback.
+    /// - Returns: Per-tag results, skipped tags with reasons, and the column
+    ///   schema the models were trained on (nil when no rows).
+    public func trainJudgmentModels(
+        rows: [JudgmentRow],
+        tags: [String]? = nil,
+        outputDirectory: URL,
+        config: TrainingConfig = TrainingConfig(),
+        progress: ((TrainingProgress) async -> Void)? = nil
+    ) async throws -> (results: [TrainingResult], skippedTags: [SkippedTrainingTag], columnNames: [String]?) {
+        guard let schema = rows.first?.features.columnNames else {
+            return ([], [], nil)
+        }
+
+        // Schema enforcement: every row must match the first row's columns
+        let usableRows = rows.filter { $0.features.columnNames == schema }
+        let droppedCount = rows.count - usableRows.count
+        if droppedCount > 0 {
+            logger.warning("Dropped \(droppedCount) judgment rows with mismatched column schema")
+        }
+
+        let candidateTags: [String]
+        if let tags = tags {
+            candidateTags = tags
+        } else {
+            candidateTags = usableRows.reduce(into: Set<String>()) { $0.formUnion($1.labels) }.sorted()
+        }
+
+        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+
+        var results: [TrainingResult] = []
+        var skippedTags: [SkippedTrainingTag] = []
+
+        for (index, tag) in candidateTags.enumerated() {
+            await progress?(TrainingProgress(
+                phase: .preparing,
+                currentTag: tag,
+                tagsCompleted: index,
+                totalTags: candidateTags.count
+            ))
+
+            let positives = usableRows.filter { $0.labels.contains(tag) }
+            var negatives = usableRows.filter { !$0.labels.contains(tag) }
+
+            guard positives.count >= config.minSamplesPerTag else {
+                skippedTags.append(SkippedTrainingTag(
+                    tag: tag,
+                    reason: .insufficientPositives(found: positives.count, required: config.minSamplesPerTag)
+                ))
+                logger.info("Skipping judgment tag '\(tag)': \(positives.count) positive rows, \(config.minSamplesPerTag) required")
+                continue
+            }
+            guard !negatives.isEmpty else {
+                skippedTags.append(SkippedTrainingTag(
+                    tag: tag,
+                    reason: .noTrustedNegatives(positives: positives.count)
+                ))
+                logger.info("Skipping judgment tag '\(tag)': no trusted negative rows (\(positives.count) positives)")
+                continue
+            }
+
+            // Balance negatives deterministically (no augmentation — subsample only)
+            let maxNegatives = Int(Double(positives.count) * config.maxNegativeRatio)
+            if negatives.count > maxNegatives {
+                var rng = SeededRandomNumberGenerator(seed: UInt64(config.randomSeed))
+                negatives = Array(negatives.shuffled(using: &rng).prefix(maxNegatives))
+            }
+
+            await progress?(TrainingProgress(
+                phase: .training,
+                currentTag: tag,
+                tagsCompleted: index,
+                totalTags: candidateTags.count
+            ))
+
+            do {
+                let dataFrame = try prepareJudgmentDataFrame(
+                    positives: positives,
+                    negatives: negatives,
+                    schema: schema
+                )
+
+                let (trainingData, validationData) = splitData(
+                    dataFrame,
+                    validationSplit: config.validationSplit,
+                    seed: config.randomSeed
+                )
+
+                let classifier = try MLBoostedTreeClassifier(
+                    trainingData: trainingData,
+                    targetColumn: "label",
+                    parameters: MLBoostedTreeClassifier.ModelParameters(
+                        maxDepth: config.treeMaxDepth,
+                        maxIterations: config.treeIterations,
+                        minLossReduction: 0.0,
+                        minChildWeight: 1.0,
+                        stepSize: config.treeStepSize
+                    )
+                )
+
+                let trainingAccuracy = calculateAccuracy(classifier: classifier, data: trainingData)
+                let validationAccuracy = calculateAccuracy(classifier: classifier, data: validationData)
+                logger.info("Judgment '\(tag)' - Training accuracy: \(trainingAccuracy), Validation accuracy: \(validationAccuracy)")
+
+                await progress?(TrainingProgress(
+                    phase: .saving,
+                    currentTag: tag,
+                    tagsCompleted: index,
+                    totalTags: candidateTags.count
+                ))
+
+                let modelURL = outputDirectory
+                    .appendingPathComponent("\(sanitizeFileName(tag))_judgment.mlmodel")
+                try classifier.write(to: modelURL, metadata: nil)
+
+                results.append(TrainingResult(
+                    tag: tag,
+                    modelURL: modelURL,
+                    trainingAccuracy: trainingAccuracy,
+                    validationAccuracy: validationAccuracy,
+                    positiveCount: positives.count,
+                    negativeCount: negatives.count
+                ))
+            } catch {
+                logger.error("Failed to train judgment model for '\(tag)': \(error.localizedDescription)")
+                continue
+            }
+        }
+
+        await progress?(TrainingProgress(
+            phase: .complete,
+            currentTag: nil,
+            tagsCompleted: candidateTags.count,
+            totalTags: candidateTags.count
+        ))
+
+        return (results, skippedTags, schema)
+    }
+
+    /// Build a DataFrame for one judgment tag: schema columns + a
+    /// "positive"/"negative" label column (the same label convention as the
+    /// binary Stage 1 classifiers, so the saved model exposes a "positive"
+    /// class probability at inference).
+    private func prepareJudgmentDataFrame(
+        positives: [JudgmentRow],
+        negatives: [JudgmentRow],
+        schema: [String]
+    ) throws -> DataFrame {
+        var columns: [[Double]] = Array(repeating: [], count: schema.count)
+        var labels: [String] = []
+        var skippedNaN = 0
+
+        for (rows, label) in [(positives, "positive"), (negatives, "negative")] {
+            for row in rows {
+                let values = row.features.values
+                guard values.count == schema.count, values.allSatisfy({ $0.isFinite }) else {
+                    skippedNaN += 1
+                    continue
+                }
+                for (i, value) in values.enumerated() {
+                    columns[i].append(Double(value))
+                }
+                labels.append(label)
+            }
+        }
+
+        if skippedNaN > 0 {
+            logger.warning("Skipped \(skippedNaN) judgment rows with NaN/Inf or misaligned values")
+        }
+
+        var dataFrame = DataFrame()
+        for (i, name) in schema.enumerated() {
+            dataFrame.append(column: Column(name: name, contents: columns[i]))
+        }
+        dataFrame.append(column: Column(name: "label", contents: labels))
+
+        logger.info("Judgment DataFrame prepared: \(dataFrame.rows.count) rows, \(schema.count) columns")
+        return dataFrame
+    }
+
     // MARK: - Multi-Class Training
 
     /// Train a multi-class classifier for a tag group

@@ -39,10 +39,20 @@ public struct ModelMetadata: Codable, Sendable {
     public let tags: [String: [String]]      // Tags per category (binary classifiers)
     public let tagGroups: [TagGroupMetadata] // Multi-class classifier groups
     public let accuracy: Double?             // Validation accuracy if available
-    public let featureDimension: Int         // 1280, 1680, or 2192
+    public let featureDimension: Int         // 1280, 1680, 2192, or 2960 (EffNet+Genres+CLAP+MAEST)
     public let calibratorTemperature: Float? // Temperature for confidence calibration
     public let descriptiveSubCategories: [String: [String]]? // Sub-category organization for Descriptive tags
     public let tagThresholds: [String: Float]? // Per-tag classification thresholds
+
+    /// Version of the Stage 1 (perception) model set the Stage 2 judgment
+    /// models were trained against. Stage 2 is only valid paired with this
+    /// exact Stage 1; nil for models without a judgment layer.
+    public let stage1ModelVersion: String?
+
+    /// Stage 2 input schema: the exact sorted column names the judgment
+    /// models were trained on (JudgmentFeatureVector.columnNames). Inference
+    /// must reproduce these columns or skip judgment. nil when no Stage 2.
+    public let judgmentColumnNames: [String]?
 
     public init(
         name: String,
@@ -57,7 +67,9 @@ public struct ModelMetadata: Codable, Sendable {
         featureDimension: Int = 1680,
         calibratorTemperature: Float? = nil,
         descriptiveSubCategories: [String: [String]]? = nil,
-        tagThresholds: [String: Float]? = nil
+        tagThresholds: [String: Float]? = nil,
+        stage1ModelVersion: String? = nil,
+        judgmentColumnNames: [String]? = nil
     ) {
         self.name = name
         self.version = version
@@ -72,6 +84,8 @@ public struct ModelMetadata: Codable, Sendable {
         self.calibratorTemperature = calibratorTemperature
         self.descriptiveSubCategories = descriptiveSubCategories
         self.tagThresholds = tagThresholds
+        self.stage1ModelVersion = stage1ModelVersion
+        self.judgmentColumnNames = judgmentColumnNames
     }
 
     // Custom decoder to handle old JSON files without featureDimension or tagGroups
@@ -94,12 +108,16 @@ public struct ModelMetadata: Codable, Sendable {
         // Descriptive sub-categories are optional (may not exist in old models)
         descriptiveSubCategories = try container.decodeIfPresent([String: [String]].self, forKey: .descriptiveSubCategories)
         tagThresholds = try container.decodeIfPresent([String: Float].self, forKey: .tagThresholds)
+        // Two-stage pairing fields are optional (absent in Stage-1-only models)
+        stage1ModelVersion = try container.decodeIfPresent(String.self, forKey: .stage1ModelVersion)
+        judgmentColumnNames = try container.decodeIfPresent([String].self, forKey: .judgmentColumnNames)
     }
 
     private enum CodingKeys: String, CodingKey {
         case name, version, pipelineVersion, trainedAt, trainingFileCount
         case categories, tags, tagGroups, accuracy, featureDimension
         case calibratorTemperature, descriptiveSubCategories, tagThresholds
+        case stage1ModelVersion, judgmentColumnNames
     }
 
     /// Load metadata from JSON sidecar file

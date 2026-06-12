@@ -1,6 +1,21 @@
 import Foundation
 import os.log
 
+/// The training phase a checkpoint was written in. Determines where a
+/// resumed run picks up.
+public enum TrainingPhase: Codable, Sendable, Equatable {
+    /// Feature extraction in progress (pre-Stage-1 training). The original
+    /// checkpoint semantics: resume re-uses extracted features, then trains.
+    case featureExtraction
+
+    /// Stage 1 (perception) training finished and its models + metadata are
+    /// on disk. A resumed run goes directly to Phase B (Stage 2 judgment
+    /// training) — but only against the exact Stage 1 model version recorded
+    /// here. Any other version means Stage 1 changed after the checkpoint,
+    /// and Stage 2 must not pair with it.
+    case phaseACompleted(stage1ModelVersion: String)
+}
+
 /// A checkpoint for resuming training from a previous session.
 /// Saves processed tracks with their extracted features so feature extraction
 /// can be resumed if interrupted.
@@ -31,9 +46,14 @@ public struct TrainingCheckpoint: Codable, Sendable {
     /// nil for v1/v2 checkpoints that don't have this field
     public let featureExtractionConfig: FeatureExtractionConfig?
 
+    /// Phase the training run had reached when this checkpoint was written.
+    /// Pre-v4 checkpoints decode as `.featureExtraction` (original behavior).
+    public let phase: TrainingPhase
+
     private enum CodingKeys: String, CodingKey {
         case modelName, createdAt, sourceDirectories, processedTracks
         case totalTracksDiscovered, checkpointVersion, tagHash, featureExtractionConfig
+        case phase
     }
 
     public init(from decoder: Decoder) throws {
@@ -48,6 +68,9 @@ public struct TrainingCheckpoint: Codable, Sendable {
         tagHash = try container.decodeIfPresent(String.self, forKey: .tagHash) ?? ""
         // For backwards compatibility, nil if featureExtractionConfig is missing (v1/v2 checkpoints)
         featureExtractionConfig = try container.decodeIfPresent(FeatureExtractionConfig.self, forKey: .featureExtractionConfig)
+        // For backwards compatibility, pre-v4 checkpoints have no phase marker:
+        // they were only ever written during feature extraction
+        phase = try container.decodeIfPresent(TrainingPhase.self, forKey: .phase) ?? .featureExtraction
     }
 
     /// A serializable representation of a TaggedTrack
@@ -95,16 +118,18 @@ public struct TrainingCheckpoint: Codable, Sendable {
         sourceDirectories: [URL],
         processedTracks: [TaggedTrack],
         totalTracksDiscovered: Int,
-        featureExtractionConfig: FeatureExtractionConfig? = .default
+        featureExtractionConfig: FeatureExtractionConfig? = .default,
+        phase: TrainingPhase = .featureExtraction
     ) {
         self.modelName = modelName
         self.createdAt = createdAt
         self.sourceDirectories = sourceDirectories.map { $0.path }
         self.processedTracks = processedTracks.map { CheckpointTrack(from: $0) }
         self.totalTracksDiscovered = totalTracksDiscovered
-        self.checkpointVersion = 3  // Version 3 includes feature extraction config
+        self.checkpointVersion = 4  // Version 4 includes the training phase marker
         self.tagHash = Self.computeTagHash(from: processedTracks)
         self.featureExtractionConfig = featureExtractionConfig
+        self.phase = phase
     }
 
     /// Get processed tracks as TaggedTrack array

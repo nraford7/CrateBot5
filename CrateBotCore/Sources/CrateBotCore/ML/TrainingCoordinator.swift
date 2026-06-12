@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import os.log
 
@@ -358,41 +359,23 @@ public actor TrainingCoordinator {
             // Extract file names for progress display
             let allFileNames = collectionResult.tracks.map { URL(fileURLWithPath: $0.id).lastPathComponent }
 
-            // Phase 2: Discover and filter tags
+            // Phase 2: Fail-fast viability check before paying for feature
+            // extraction. The authoritative per-tag filtering (and per-tag
+            // skip reporting) happens inside trainTwoPhase.
             let discoveredTags = await dataCollector.discoverTags(from: collectionResult.tracks)
-
-            // Filter tags based on selection and minimum samples
-            var viableTags: [String] = []
-            var skippedTagDetails: [SkippedTag] = []
-
             let minSamples = options.configuration.minSamplesPerTag
+            let viableTagCount = discoveredTags.filter { tag, count in
+                (options.selectedTags?.contains(tag) ?? true) && count >= minSamples
+            }.count
 
-            for (tag, count) in discoveredTags {
-                // Check if tag is in selected set (or if no selection, include all)
-                let isSelected = options.selectedTags?.contains(tag) ?? true
-
-                if isSelected {
-                    if count >= minSamples {
-                        viableTags.append(tag)
-                    } else {
-                        skippedTagDetails.append(SkippedTag(
-                            tag: tag,
-                            reason: .insufficientSamples(required: minSamples),
-                            sampleCount: count
-                        ))
-                        logger.info("Skipping tag '\(tag)': \(count) samples < \(minSamples) required")
-                    }
-                }
-            }
-
-            guard !viableTags.isEmpty else {
+            guard viableTagCount > 0 else {
                 let errorDetails = "No tags have sufficient samples (min: \(minSamples))"
                 _state = .failed(error: errorDetails)
                 await stateCallback?(_state)
                 throw CoordinatorError.insufficientData(details: errorDetails)
             }
 
-            logger.info("Training \(viableTags.count) tags, skipping \(skippedTagDetails.count)")
+            logger.info("\(viableTagCount) viable tags discovered")
 
             // Phase 3: Extract features (with checkpoint support)
 
@@ -503,22 +486,85 @@ public actor TrainingCoordinator {
 
             logger.info("Extracted features for \(validTracks.count) tracks (\(tracksWithInvalidFeatures) had invalid features)")
 
-            // Phase 4: Train models
-            _state = .training(progress: 0.0, currentTag: nil)
+            // Phases 4+5: two-phase training — Phase A (Stage 1 perception
+            // models) then Phase B (Stage 2 judgment models), with checkpoint
+            // phase marker, pairing enforcement, and paired metadata.
+            return try await trainTwoPhase(
+                tracks: validTracks,
+                options: options,
+                sourceDirectories: directories,
+                totalTracksScanned: collectionResult.scannedCount,
+                tracksWithInvalidFeatures: tracksWithInvalidFeatures,
+                stateCallback: stateCallback
+            )
+
+        } catch let error as CoordinatorError {
+            throw error
+        } catch {
+            let errorMessage = error.localizedDescription
+            _state = .failed(error: errorMessage)
             await stateCallback?(_state)
+            throw CoordinatorError.trainingFailed(reason: errorMessage)
+        }
+    }
 
-            let outputDirectory = try await modelManager.modelsDirectory()
-                .appendingPathComponent(options.modelName)
+    // MARK: - Two-Phase Training (Stage 1 perception → Stage 2 judgment)
 
-            // Clean stale models from previous training runs
-            // This prevents old .mlmodel files from persisting when retraining
-            // with a different set of tags (Fresh Eyes issue #3)
-            let fileManager = FileManager.default
-            if fileManager.fileExists(atPath: outputDirectory.path) {
-                logger.info("Cleaning existing model directory: \(outputDirectory.path)")
-                try fileManager.removeItem(at: outputDirectory)
+    /// Two-phase training over tracks that already carry extracted features.
+    ///
+    /// **Phase A** trains the Stage 1 (perception) models — multi-class
+    /// groups plus binary classifiers for perception-stage tags — writes
+    /// metadata with a fresh `stage1ModelVersion`, then saves a checkpoint
+    /// marked `.phaseACompleted`. **Phase B** runs the just-trained Stage 1
+    /// over the library via `JudgmentDataGenerator` (cached features only —
+    /// no audio re-extraction), trains one judgment model per Timing tag,
+    /// writes the paired metadata (`stage1ModelVersion` +
+    /// `judgmentColumnNames`), and deletes the checkpoint.
+    ///
+    /// **Crash recovery:** a crash after the Phase A marker resumes directly
+    /// into Phase B without retraining Stage 1. **Pairing enforcement:**
+    /// Phase B refuses to run against a Stage 1 model version different from
+    /// the checkpointed one — drift means Stage 1 changed after the
+    /// checkpoint, so both stages retrain together.
+    ///
+    /// - Parameters:
+    ///   - tracks: Tracks with extracted features and per-track
+    ///     `tagsByCategory` (drives both category-complete filtering and the
+    ///     judgment labels).
+    ///   - options: Training options; `tagsByCategory` + the stage registry
+    ///     decide which tags are Stage 2's exclusive domain.
+    ///   - explicitOutputDirectory: Where models land. nil uses the standard
+    ///     models directory for `options.modelName`.
+    ///   - sourceDirectories: Recorded in the Phase A checkpoint.
+    ///   - totalTracksScanned: For the summary; defaults to `tracks.count`.
+    ///   - tracksWithInvalidFeatures: For the summary.
+    ///   - stageRegistry: Category → stage mapping (Timing → judgment).
+    ///   - predictorOverride: Test seam; nil loads the production
+    ///     `Stage1Predictor` from the trained models on disk.
+    ///   - bpmLookup: nil uses the production ID3 TBPM read.
+    ///   - durationLookup: nil uses the production AVAudioFile header read.
+    public func trainTwoPhase(
+        tracks: [TaggedTrack],
+        options: TrainingOptions = TrainingOptions(),
+        outputDirectory explicitOutputDirectory: URL? = nil,
+        sourceDirectories: [URL] = [],
+        totalTracksScanned: Int? = nil,
+        tracksWithInvalidFeatures: Int = 0,
+        stageRegistry: TagStageRegistry = TagStageRegistry(),
+        predictorOverride: (any Stage1Predictor)? = nil,
+        bpmLookup: (@Sendable (String) async -> Float?)? = nil,
+        durationLookup: (@Sendable (String) async -> Float?)? = nil,
+        stateCallback: (@Sendable (State) async -> Void)? = nil
+    ) async throws -> TrainingSummary {
+        do {
+            let outputDirectory: URL
+            if let explicitOutputDirectory {
+                outputDirectory = explicitOutputDirectory
+            } else {
+                outputDirectory = try await modelManager.modelsDirectory()
+                    .appendingPathComponent(options.modelName)
             }
-            try fileManager.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+            let metadataURL = outputDirectory.appendingPathComponent("\(options.modelName).json")
 
             let trainingConfig = TrainingConfig(
                 validationSplit: options.configuration.validationSplit,
@@ -536,15 +582,129 @@ public actor TrainingCoordinator {
                 treeStepSize: options.configuration.treeStepSize
             )
 
+            // Tag → category lookup and stage partition. Timing (judgment)
+            // tags are Stage 2's exclusive domain: never binary-trained.
+            var tagToCategory: [String: String] = [:]
+            for (category, categoryTags) in options.tagsByCategory {
+                for tag in categoryTags {
+                    tagToCategory[tag.lowercased()] = category
+                }
+            }
+            let judgmentCategories = Set(stageRegistry.categories(in: .judgment).map { $0.lowercased() })
+            func isJudgmentTag(_ tag: String) -> Bool {
+                guard let category = tagToCategory[tag.lowercased()] else { return false }
+                return judgmentCategories.contains(category.lowercased())
+            }
+
+            // Discover and filter viable tags
+            let discoveredTags = await dataCollector.discoverTags(from: tracks)
+            var viableTags: [String] = []
+            var skippedTagDetails: [SkippedTag] = []
+            let minSamples = options.configuration.minSamplesPerTag
+
+            for (tag, count) in discoveredTags {
+                guard options.selectedTags?.contains(tag) ?? true else { continue }
+                if count >= minSamples {
+                    viableTags.append(tag)
+                } else {
+                    skippedTagDetails.append(SkippedTag(
+                        tag: tag,
+                        reason: .insufficientSamples(required: minSamples),
+                        sampleCount: count
+                    ))
+                    logger.info("Skipping tag '\(tag)': \(count) samples < \(minSamples) required")
+                }
+            }
+
+            guard !viableTags.isEmpty else {
+                throw CoordinatorError.insufficientData(
+                    details: "No tags have sufficient samples (min: \(minSamples))"
+                )
+            }
+
+            let judgmentViable = viableTags.filter { isJudgmentTag($0) }.sorted()
+            let perceptionViable = viableTags.filter { !isJudgmentTag($0) }
+
+            logger.info("Stage partition: \(perceptionViable.count) perception tags, \(judgmentViable.count) judgment tags")
+
+            // ---- Resume: a phaseACompleted checkpoint jumps straight to
+            // Phase B, but ONLY against the exact Stage 1 it recorded. ----
+            if let checkpoint = checkpointManager.load(modelName: options.modelName),
+               case .phaseACompleted(let checkpointedVersion) = checkpoint.phase {
+                let onDiskVersion = (try? ModelMetadata.load(from: metadataURL))?.stage1ModelVersion
+                if onDiskVersion == checkpointedVersion {
+                    logger.info("Resuming into Phase B: checkpointed Stage 1 version '\(checkpointedVersion)' verified on disk — Stage 1 will NOT be retrained")
+                    _state = .training(progress: 0.8, currentTag: "[judgment]")
+                    await stateCallback?(_state)
+
+                    let outcome = try await runPhaseB(
+                        tracks: tracks,
+                        judgmentTags: judgmentViable,
+                        stage1ModelVersion: checkpointedVersion,
+                        modelName: options.modelName,
+                        outputDirectory: outputDirectory,
+                        metadataURL: metadataURL,
+                        tagToCategory: tagToCategory,
+                        trainingConfig: trainingConfig,
+                        stageRegistry: stageRegistry,
+                        predictorOverride: predictorOverride,
+                        bpmLookup: bpmLookup,
+                        durationLookup: durationLookup
+                    )
+
+                    _state = .complete(modelName: options.modelName)
+                    await stateCallback?(_state)
+
+                    // Stage 1 was trained by the interrupted run; this
+                    // summary reports the resumed work (Phase B) plus the
+                    // Stage 1 groups recorded in metadata.
+                    let metadata = try? ModelMetadata.load(from: metadataURL)
+                    return TrainingSummary(
+                        modelName: options.modelName,
+                        tagResults: outcome.results.map(Self.toTagTrainingResult),
+                        tagGroupResults: (metadata?.tagGroups ?? []).map { group in
+                            TagGroupInfo(
+                                groupName: group.groupName,
+                                classes: group.classes,
+                                accuracy: group.accuracy,
+                                perClassAccuracy: group.perClassAccuracy
+                            )
+                        },
+                        skippedTagDetails: skippedTagDetails + outcome.skippedTags.map(Self.toSkippedTag),
+                        totalTracksScanned: totalTracksScanned ?? tracks.count,
+                        tracksUsedForTraining: tracks.count,
+                        tracksWithInvalidFeatures: tracksWithInvalidFeatures,
+                        averageAccuracy: metadata?.accuracy ?? 0.0,
+                        modelURL: outputDirectory
+                    )
+                } else {
+                    logger.warning("Phase B refused: checkpointed Stage 1 version '\(checkpointedVersion)' does not match on-disk '\(onDiskVersion ?? "none")'. Stage 2 must pair with the Stage 1 it was generated from — retraining BOTH stages.")
+                    try? checkpointManager.delete(modelName: options.modelName)
+                }
+            }
+
+            // ================ PHASE A: Stage 1 (perception) ================
+            _state = .training(progress: 0.0, currentTag: nil)
+            await stateCallback?(_state)
+
+            // Clean stale models from previous training runs. Only on a
+            // fresh Phase A — a Phase B resume must keep Stage 1 on disk.
+            let fileManager = FileManager.default
+            if fileManager.fileExists(atPath: outputDirectory.path) {
+                logger.info("Cleaning existing model directory: \(outputDirectory.path)")
+                try fileManager.removeItem(at: outputDirectory)
+            }
+            try fileManager.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+
             logger.info("Training models in \(outputDirectory.path)")
 
-            // Phase 4a: Train multi-class classifiers for tag groups
+            // Phase A-1: Train multi-class classifiers for tag groups
             var multiClassResults: [MultiClassTrainingResult] = []
             var tagsHandledByGroups: Set<String> = []
 
             let multiClassGenerator = MultiClassTrainingDataGenerator(registry: options.tagGroupRegistry)
             let viableGroupNames = multiClassGenerator.viableGroups(
-                from: validTracks,
+                from: tracks,
                 minSamplesPerClass: minSamples,
                 minClasses: 2
             )
@@ -554,7 +714,7 @@ public actor TrainingCoordinator {
             for groupName in viableGroupNames {
                 guard let trainingData = multiClassGenerator.generateTrainingData(
                     for: groupName,
-                    from: validTracks,
+                    from: tracks,
                     minSamplesPerClass: minSamples
                 ) else {
                     continue
@@ -562,7 +722,6 @@ public actor TrainingCoordinator {
 
                 logger.info("Training multi-class group '\(groupName)' with classes: \(trainingData.classes.joined(separator: ", "))")
 
-                // Update state to show current group
                 await self.updateState(.training(progress: 0.0, currentTag: "[\(groupName)]"))
                 await stateCallback?(_state)
 
@@ -577,10 +736,8 @@ public actor TrainingCoordinator {
                     )
                     multiClassResults.append(result)
 
-                    // Track which tags are now handled by this group
                     for className in result.classes {
                         tagsHandledByGroups.insert(className)
-                        // Also insert lowercase version for matching
                         tagsHandledByGroups.insert(className.lowercased())
                     }
 
@@ -591,14 +748,13 @@ public actor TrainingCoordinator {
                 }
             }
 
-            // Phase 4b: Filter out tags that are covered by multi-class groups
-            let binaryTags = viableTags.filter { tag in
-                // Exclude if the tag is directly in a group
+            // Phase A-2: Binary classifiers for ungrouped PERCEPTION tags.
+            // Judgment tags were already partitioned out above.
+            let binaryTags = perceptionViable.filter { tag in
                 if tagsHandledByGroups.contains(tag) || tagsHandledByGroups.contains(tag.lowercased()) {
                     logger.info("Tag '\(tag)' covered by multi-class group, skipping binary training")
                     return false
                 }
-                // Also check if the tag belongs to any group via the registry
                 if options.tagGroupRegistry.isGrouped(tag) {
                     logger.info("Tag '\(tag)' belongs to a tag group, skipping binary training")
                     return false
@@ -606,20 +762,18 @@ public actor TrainingCoordinator {
                 return true
             }
 
-            logger.info("Training \(binaryTags.count) binary classifiers (after filtering \(viableTags.count - binaryTags.count) grouped tags)")
+            logger.info("Training \(binaryTags.count) binary classifiers (after filtering \(perceptionViable.count - binaryTags.count) grouped tags)")
 
-            // Phase 4c: Train binary classifiers for remaining tags.
-            // Pass the category breakdown so negatives are restricted to tracks
-            // assessed for the tag's category (absence elsewhere = unknown).
+            // Category-complete negative filtering: negatives are restricted
+            // to tracks assessed for the tag's category (absence = unknown).
             let (trainingResults, skippedDuringTraining) = try await modelTrainer.trainModelsWithReport(
-                from: validTracks,
+                from: tracks,
                 tags: binaryTags,
                 outputDirectory: outputDirectory,
                 config: trainingConfig,
                 categorizedTags: options.tagsByCategory
             ) { [weak self] progress in
                 guard let self = self else { return }
-                // Adjust progress to account for multi-class training phase
                 let multiClassWeight = 0.2  // Multi-class gets 20% of progress
                 let binaryProgress = multiClassWeight + (progress.fraction * (1.0 - multiClassWeight))
                 await self.updateState(.training(
@@ -629,50 +783,24 @@ public actor TrainingCoordinator {
                 await stateCallback?(await self.state)
             }
 
-            // Surface tags the trainer could not build a training set for
-            // (insufficient positives or no trusted negatives) — never silent
             for skipped in skippedDuringTraining {
-                switch skipped.reason {
-                case .insufficientPositives(let found, let required):
-                    skippedTagDetails.append(SkippedTag(
-                        tag: skipped.tag,
-                        reason: .insufficientSamples(required: required),
-                        sampleCount: found
-                    ))
-                case .noTrustedNegatives(let positives):
-                    skippedTagDetails.append(SkippedTag(
-                        tag: skipped.tag,
-                        reason: .noTrustedNegatives,
-                        sampleCount: positives
-                    ))
-                }
+                skippedTagDetails.append(Self.toSkippedTag(skipped))
                 logger.warning("Tag '\(skipped.tag)' produced no training set: \(skipped.reason.description)")
             }
 
-            // Check that we have at least some trained models (either multi-class or binary)
             guard !trainingResults.isEmpty || !multiClassResults.isEmpty else {
-                let errorDetails = "No models were successfully trained"
-                _state = .failed(error: errorDetails)
-                await stateCallback?(_state)
-                throw CoordinatorError.trainingFailed(reason: errorDetails)
+                throw CoordinatorError.trainingFailed(reason: "No models were successfully trained")
             }
 
-            // Calculate average accuracy (combining binary and multi-class)
-            var allAccuracies = trainingResults.map { $0.validationAccuracy }
-            allAccuracies.append(contentsOf: multiClassResults.map { $0.accuracy })
-            let avgAccuracy = allAccuracies.isEmpty ? 0.0 :
-                allAccuracies.reduce(0, +) / Double(allAccuracies.count)
-
-            // Phase 5: Save metadata
+            // Phase A-3: Save metadata with the new Stage 1 version. Written
+            // BEFORE the checkpoint marker: a crash between the two writes
+            // leaves no marker, so the next run safely retrains Phase A.
             _state = .packaging
             await stateCallback?(_state)
 
             logger.info("Packaging model with metadata")
 
-            // Collect all trained tags (binary classifiers)
             let trainedTagNames = trainingResults.map { $0.tag }
-
-            // Convert multi-class results to TagGroupInfo for metadata
             let tagGroupInfos = multiClassResults.map { result in
                 TagGroupInfo(
                     groupName: result.groupName,
@@ -682,74 +810,275 @@ public actor TrainingCoordinator {
                 )
             }
 
-            // Get the actual feature dimension used during training
-            let actualFeatureDimension = await dataCollector.getActualFeatureDimension()
+            var stage1Accuracies = trainingResults.map { $0.validationAccuracy }
+            stage1Accuracies.append(contentsOf: multiClassResults.map { $0.accuracy })
+            let stage1AvgAccuracy = stage1Accuracies.isEmpty ? 0.0 :
+                stage1Accuracies.reduce(0, +) / Double(stage1Accuracies.count)
+
+            let stage1ModelVersion = UUID().uuidString
+            let featureDimension: Int
+            if let dimension = tracks.first(where: { !($0.features ?? []).isEmpty })?.features?.count {
+                featureDimension = dimension
+            } else {
+                featureDimension = await dataCollector.getActualFeatureDimension()
+            }
 
             let metadata = createModelMetadata(
                 name: options.modelName,
                 tags: trainedTagNames,
                 tagGroups: tagGroupInfos,
-                trainingFileCount: validTracks.count,
-                accuracy: avgAccuracy,
+                trainingFileCount: tracks.count,
+                accuracy: stage1AvgAccuracy,
                 categorizedTags: options.tagsByCategory,
-                featureDimension: actualFeatureDimension
+                featureDimension: featureDimension,
+                stage1ModelVersion: stage1ModelVersion
             )
-
-            let metadataURL = outputDirectory.appendingPathComponent("\(options.modelName).json")
 
             do {
                 try metadata.save(to: metadataURL)
             } catch {
-                let errorDetails = "Failed to save metadata: \(error.localizedDescription)"
-                _state = .failed(error: errorDetails)
-                await stateCallback?(_state)
                 throw CoordinatorError.saveFailed(reason: error.localizedDescription)
             }
 
-            // Clean up checkpoint after successful training
+            // Phase A checkpoint marker: a crash anywhere after this line
+            // resumes directly into Phase B against this exact Stage 1.
+            let phaseACheckpoint = TrainingCheckpoint(
+                modelName: options.modelName,
+                sourceDirectories: sourceDirectories,
+                processedTracks: tracks,
+                totalTracksDiscovered: totalTracksScanned ?? tracks.count,
+                featureExtractionConfig: dataCollector.featureExtractionConfig,
+                phase: .phaseACompleted(stage1ModelVersion: stage1ModelVersion)
+            )
             do {
-                try checkpointManager.delete(modelName: options.modelName)
-                logger.info("Deleted checkpoint for completed training")
+                try checkpointManager.save(phaseACheckpoint)
             } catch {
-                logger.warning("Failed to delete checkpoint: \(error.localizedDescription)")
+                logger.warning("Failed to save Phase A checkpoint: \(error.localizedDescription) — a crash during Phase B will retrain Stage 1")
             }
 
-            // Complete
+            // ================ PHASE B: Stage 2 (judgment) ================
+            _state = .training(progress: 0.8, currentTag: "[judgment]")
+            await stateCallback?(_state)
+
+            let outcome = try await runPhaseB(
+                tracks: tracks,
+                judgmentTags: judgmentViable,
+                stage1ModelVersion: stage1ModelVersion,
+                modelName: options.modelName,
+                outputDirectory: outputDirectory,
+                metadataURL: metadataURL,
+                tagToCategory: tagToCategory,
+                trainingConfig: trainingConfig,
+                stageRegistry: stageRegistry,
+                predictorOverride: predictorOverride,
+                bpmLookup: bpmLookup,
+                durationLookup: durationLookup
+            )
+
             _state = .complete(modelName: options.modelName)
             await stateCallback?(_state)
 
-            logger.info("Training complete: \(trainedTagNames.count) binary models, \(multiClassResults.count) multi-class groups, avg accuracy: \(avgAccuracy)")
+            logger.info("Two-phase training complete: \(trainedTagNames.count) binary, \(multiClassResults.count) multi-class, \(outcome.results.count) judgment models")
 
-            // Convert training results to detailed tag results
-            let tagResults = trainingResults.map { result in
-                TagTrainingResult(
-                    tag: result.tag,
-                    trainingAccuracy: result.trainingAccuracy,
-                    validationAccuracy: result.validationAccuracy,
-                    positiveCount: result.positiveCount,
-                    negativeCount: result.negativeCount
-                )
-            }
+            let tagResults = trainingResults.map(Self.toTagTrainingResult)
+                + outcome.results.map(Self.toTagTrainingResult)
+            var allAccuracies = stage1Accuracies
+            allAccuracies.append(contentsOf: outcome.results.map { $0.validationAccuracy })
+            let avgAccuracy = allAccuracies.isEmpty ? 0.0 :
+                allAccuracies.reduce(0, +) / Double(allAccuracies.count)
 
             return TrainingSummary(
                 modelName: options.modelName,
                 tagResults: tagResults,
                 tagGroupResults: tagGroupInfos,
-                skippedTagDetails: skippedTagDetails,
-                totalTracksScanned: collectionResult.scannedCount,
-                tracksUsedForTraining: validTracks.count,
+                skippedTagDetails: skippedTagDetails + outcome.skippedTags.map(Self.toSkippedTag),
+                totalTracksScanned: totalTracksScanned ?? tracks.count,
+                tracksUsedForTraining: tracks.count,
                 tracksWithInvalidFeatures: tracksWithInvalidFeatures,
                 averageAccuracy: avgAccuracy,
                 modelURL: outputDirectory
             )
-
-        } catch let error as CoordinatorError {
-            throw error
         } catch {
-            let errorMessage = error.localizedDescription
-            _state = .failed(error: errorMessage)
+            _state = .failed(error: error.localizedDescription)
             await stateCallback?(_state)
-            throw CoordinatorError.trainingFailed(reason: errorMessage)
+            throw error
+        }
+    }
+
+    /// Result of Phase B (Stage 2 judgment training).
+    private struct PhaseBOutcome {
+        let results: [TrainingResult]
+        let skippedTags: [SkippedTrainingTag]
+        let columnNames: [String]?
+    }
+
+    /// Phase B: generate judgment rows from the (already-extracted) library
+    /// via Stage 1, train one judgment model per Timing tag, write the
+    /// paired metadata, and delete the checkpoint. Shared by the fresh path
+    /// and the crash-resume path — both arrive here with a verified
+    /// `stage1ModelVersion`.
+    private func runPhaseB(
+        tracks: [TaggedTrack],
+        judgmentTags: [String],
+        stage1ModelVersion: String,
+        modelName: String,
+        outputDirectory: URL,
+        metadataURL: URL,
+        tagToCategory: [String: String],
+        trainingConfig: TrainingConfig,
+        stageRegistry: TagStageRegistry,
+        predictorOverride: (any Stage1Predictor)?,
+        bpmLookup: (@Sendable (String) async -> Float?)?,
+        durationLookup: (@Sendable (String) async -> Float?)?
+    ) async throws -> PhaseBOutcome {
+        let phaseAMetadata = try? ModelMetadata.load(from: metadataURL)
+
+        var results: [TrainingResult] = []
+        var skippedTags: [SkippedTrainingTag] = []
+        var columnNames: [String]?
+
+        if judgmentTags.isEmpty {
+            logger.info("Phase B: no viable judgment-stage tags — Stage 2 skipped")
+        } else {
+            let predictor: any Stage1Predictor
+            if let predictorOverride {
+                predictor = predictorOverride
+            } else {
+                predictor = try ProductionStage1Predictor.load(
+                    from: outputDirectory,
+                    metadata: phaseAMetadata
+                )
+            }
+
+            let generator = JudgmentDataGenerator(
+                predictor: predictor,
+                bpmLookup: bpmLookup ?? Self.makeProductionBPMLookup(),
+                durationLookup: durationLookup ?? Self.productionDurationLookup,
+                registry: stageRegistry
+            )
+
+            logger.info("Phase B: generating judgment rows from \(tracks.count) tracks (cached features only — no audio re-extraction)")
+            let (rows, skippedTracks) = try await generator.generate(from: tracks)
+            if skippedTracks > 0 {
+                logger.warning("Phase B: \(skippedTracks) tracks skipped — no cached features")
+            }
+
+            (results, skippedTags, columnNames) = try await modelTrainer.trainJudgmentModels(
+                rows: rows,
+                tags: judgmentTags,
+                outputDirectory: outputDirectory,
+                config: trainingConfig
+            )
+        }
+
+        // Paired metadata: identical Stage 1 fields plus the judgment schema,
+        // with the trained judgment tags merged into the per-category map.
+        if let phaseAMetadata {
+            var mergedTags = phaseAMetadata.tags
+            for result in results {
+                let category = tagToCategory[result.tag.lowercased()] ?? "Timing"
+                var categoryTags = mergedTags[category] ?? []
+                if !categoryTags.contains(result.tag) {
+                    categoryTags.append(result.tag)
+                    categoryTags.sort()
+                }
+                mergedTags[category] = categoryTags
+            }
+
+            let paired = ModelMetadata(
+                name: phaseAMetadata.name,
+                version: phaseAMetadata.version,
+                pipelineVersion: phaseAMetadata.pipelineVersion,
+                trainedAt: phaseAMetadata.trainedAt,
+                trainingFileCount: phaseAMetadata.trainingFileCount,
+                categories: Array(mergedTags.keys).sorted(),
+                tags: mergedTags,
+                tagGroups: phaseAMetadata.tagGroups,
+                accuracy: phaseAMetadata.accuracy,
+                featureDimension: phaseAMetadata.featureDimension,
+                calibratorTemperature: phaseAMetadata.calibratorTemperature,
+                descriptiveSubCategories: phaseAMetadata.descriptiveSubCategories,
+                tagThresholds: phaseAMetadata.tagThresholds,
+                stage1ModelVersion: stage1ModelVersion,
+                judgmentColumnNames: columnNames
+            )
+            do {
+                try paired.save(to: metadataURL)
+            } catch {
+                throw CoordinatorError.saveFailed(reason: error.localizedDescription)
+            }
+        } else {
+            logger.warning("Phase B: no Phase A metadata found at \(metadataURL.path) — paired metadata not written")
+        }
+
+        // Both phases complete — the checkpoint has served its purpose
+        do {
+            try checkpointManager.delete(modelName: modelName)
+            logger.info("Deleted checkpoint for completed two-phase training")
+        } catch {
+            logger.warning("Failed to delete checkpoint: \(error.localizedDescription)")
+        }
+
+        return PhaseBOutcome(results: results, skippedTags: skippedTags, columnNames: columnNames)
+    }
+
+    // MARK: - Production BPM/duration lookups (Phase B)
+
+    /// BPM from the ID3 TBPM frame (`ID3Manager.readTags` →
+    /// `ExtractedTags.bpm`), read at generation time. A per-file metadata
+    /// read — no audio decode. nil when absent or unparseable (the
+    /// generator substitutes the -1.0 sentinel).
+    private static func makeProductionBPMLookup() -> @Sendable (String) async -> Float? {
+        let id3Manager = ID3Manager()
+        return { trackID in
+            let url = URL(fileURLWithPath: trackID)
+            guard let tags = try? await id3Manager.readTags(from: url),
+                  let bpmString = tags.bpm,
+                  let bpm = Float(bpmString.trimmingCharacters(in: .whitespaces)),
+                  bpm > 0 else {
+                return nil
+            }
+            return bpm
+        }
+    }
+
+    /// Track duration in seconds from the audio file header
+    /// (`AVAudioFile.length / processingFormat.sampleRate`) — a header read,
+    /// no decode, no feature extraction.
+    private static let productionDurationLookup: @Sendable (String) async -> Float? = { trackID in
+        let url = URL(fileURLWithPath: trackID)
+        guard let file = try? AVAudioFile(forReading: url) else { return nil }
+        let sampleRate = file.processingFormat.sampleRate
+        guard sampleRate > 0 else { return nil }
+        return Float(Double(file.length) / sampleRate)
+    }
+
+    // MARK: - Result mapping helpers
+
+    private static func toTagTrainingResult(_ result: TrainingResult) -> TagTrainingResult {
+        TagTrainingResult(
+            tag: result.tag,
+            trainingAccuracy: result.trainingAccuracy,
+            validationAccuracy: result.validationAccuracy,
+            positiveCount: result.positiveCount,
+            negativeCount: result.negativeCount
+        )
+    }
+
+    private static func toSkippedTag(_ skipped: SkippedTrainingTag) -> SkippedTag {
+        switch skipped.reason {
+        case .insufficientPositives(let found, let required):
+            return SkippedTag(
+                tag: skipped.tag,
+                reason: .insufficientSamples(required: required),
+                sampleCount: found
+            )
+        case .noTrustedNegatives(let positives):
+            return SkippedTag(
+                tag: skipped.tag,
+                reason: .noTrustedNegatives,
+                sampleCount: positives
+            )
         }
     }
 
@@ -761,7 +1090,9 @@ public actor TrainingCoordinator {
     ///   - trainingFileCount: Number of files used for training
     ///   - accuracy: Average validation accuracy
     ///   - categorizedTags: Tags organized by category from training options
-    ///   - featureDimension: The actual feature dimension used during training (1280, 1680, or 2192)
+    ///   - featureDimension: The actual feature dimension used during training (1280, 1680, 2192, or 2960)
+    ///   - stage1ModelVersion: Version of the Stage 1 model set that Stage 2 pairs with
+    ///   - judgmentColumnNames: Stage 2 input schema (nil before/without Phase B)
     /// - Returns: ModelMetadata instance
     public func createModelMetadata(
         name: String,
@@ -770,7 +1101,9 @@ public actor TrainingCoordinator {
         trainingFileCount: Int,
         accuracy: Double,
         categorizedTags: [String: Set<String>] = [:],
-        featureDimension: Int = 1680
+        featureDimension: Int = 1680,
+        stage1ModelVersion: String? = nil,
+        judgmentColumnNames: [String]? = nil
     ) -> ModelMetadata {
         // Use provided categories or fall back to grouping all under "General"
         let tagsByCategory = groupTagsByCategory(tags, categorizedTags: categorizedTags)
@@ -806,7 +1139,9 @@ public actor TrainingCoordinator {
             tagGroups: tagGroupMetadata,
             accuracy: accuracy,
             featureDimension: featureDimension,
-            descriptiveSubCategories: subCategoriesDict.isEmpty ? nil : subCategoriesDict
+            descriptiveSubCategories: subCategoriesDict.isEmpty ? nil : subCategoriesDict,
+            stage1ModelVersion: stage1ModelVersion,
+            judgmentColumnNames: judgmentColumnNames
         )
     }
 
