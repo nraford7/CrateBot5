@@ -76,4 +76,24 @@ final class FeatureExtractionConfigTests: XCTestCase {
         XCTAssertEqual(config.segmentDuration, 30.0)
         XCTAssertEqual(config.segmentStartFractions, [0.33, 0.5, 0.66])
     }
+
+    func testDefaultConfigHasFiveWindows() {
+        let config = FeatureExtractionConfig.default
+        XCTAssertEqual(config.windowFractions, [0.1, 0.3, 0.5, 0.7, 0.9])
+        XCTAssertEqual(config.clapWindowFractions, [0.25, 0.5, 0.75])
+        XCTAssertEqual(config.windowDuration, 15.0)
+    }
+
+    func testWindowFieldsChangeConfigHash() {
+        let a = FeatureExtractionConfig.default
+        let b = FeatureExtractionConfig(
+            featureConfig: a.featureConfig,
+            segmentDuration: a.segmentDuration,
+            segmentStartFractions: a.segmentStartFractions,
+            windowDuration: 15.0,
+            windowFractions: [0.5],          // different windows
+            clapWindowFractions: [0.5]
+        )
+        XCTAssertNotEqual(a.configHash, b.configHash)
+    }
 }

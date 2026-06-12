@@ -42,6 +42,39 @@ public struct FeaturePipelineVersion: Codable, Equatable, Sendable {
         self.normalizationParams = normalizationParams
     }
 
+    /// The pre-windowing (single-window) feature pipeline. Models stamped with
+    /// this versionHash were trained on single-shot embeddings and are
+    /// incompatible with multi-window mean-pooled features. Kept so loaders can
+    /// detect and reject them explicitly.
+    public static let legacySingleWindow = FeaturePipelineVersion(
+        extractorVersions: ["effnet": "v1", "clap": "v1"],
+        windowingParams: WindowingParams(
+            windowSize: 512,    // 32ms at 16kHz (MusiCNN/EffNet)
+            hopSize: 256,       // 16ms at 16kHz (MusiCNN/EffNet)
+            fftSize: 512        // EffNet FFT size
+        ),
+        normalizationParams: NormalizationParams(
+            method: "log_mel",
+            perFeature: false
+        )
+    )
+
+    /// The current feature pipeline: multi-window extraction with mean pooling.
+    /// Encodes the window fractions from `FeatureExtractionConfig.default` so
+    /// any change to the windowing scheme changes the versionHash.
+    public static var current: FeaturePipelineVersion {
+        let config = FeatureExtractionConfig.default
+        let windows = config.windowFractions.map { String($0) }.joined(separator: ",")
+        let clapWindows = config.clapWindowFractions.map { String($0) }.joined(separator: ",")
+        var extractors = legacySingleWindow.extractorVersions
+        extractors["multiwindow"] = "d\(config.windowDuration)|w[\(windows)]|c[\(clapWindows)]"
+        return FeaturePipelineVersion(
+            extractorVersions: extractors,
+            windowingParams: legacySingleWindow.windowingParams,
+            normalizationParams: legacySingleWindow.normalizationParams
+        )
+    }
+
     /// Deterministic hash for cache key comparison
     public var versionHash: String {
         // Sort keys for deterministic encoding

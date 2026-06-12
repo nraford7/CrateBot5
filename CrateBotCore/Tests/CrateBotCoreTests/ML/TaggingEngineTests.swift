@@ -172,4 +172,67 @@ final class TaggingEngineTests: XCTestCase {
         // No classifiers will actually load since the model file is empty
         XCTAssertEqual(count, 0)
     }
+
+    // MARK: - Pipeline version compatibility
+
+    func testLoadModelRejectsPreWindowingPipelineVersion() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // Metadata stamped with the exact pre-windowing (single-window) pipeline hash
+        let metadata = ModelMetadata(
+            name: "OldModel",
+            version: "1.0",
+            pipelineVersion: FeaturePipelineVersion.legacySingleWindow.versionHash,
+            trainedAt: Date(),
+            trainingFileCount: 100,
+            categories: ["Genre"],
+            tags: ["Genre": ["House"]],
+            featureDimension: 1680
+        )
+        try metadata.save(to: tempDir.appendingPathComponent("OldModel.json"))
+
+        let dummyModelDir = tempDir.appendingPathComponent("House.mlmodel")
+        try FileManager.default.createDirectory(at: dummyModelDir, withIntermediateDirectories: true)
+
+        let engine = try TaggingEngine()
+        do {
+            _ = try await engine.loadModel(from: tempDir, modelName: "OldModel")
+            XCTFail("Expected loadModel to reject a pre-windowing pipelineVersion")
+        } catch let error as ModelManager.ModelError {
+            guard case .incompatiblePipelineVersion(let expected, let found) = error else {
+                XCTFail("Expected incompatiblePipelineVersion, got \(error)")
+                return
+            }
+            XCTAssertEqual(found, FeaturePipelineVersion.legacySingleWindow.versionHash)
+            XCTAssertEqual(expected, FeaturePipelineVersion.current.versionHash)
+        }
+    }
+
+    func testLoadModelAcceptsCurrentPipelineVersion() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let metadata = ModelMetadata(
+            name: "NewModel",
+            version: "1.0",
+            pipelineVersion: FeaturePipelineVersion.current.versionHash,
+            trainedAt: Date(),
+            trainingFileCount: 100,
+            categories: ["Genre"],
+            tags: ["Genre": ["House"]],
+            featureDimension: 1680
+        )
+        try metadata.save(to: tempDir.appendingPathComponent("NewModel.json"))
+
+        let dummyModelDir = tempDir.appendingPathComponent("House.mlmodel")
+        try FileManager.default.createDirectory(at: dummyModelDir, withIntermediateDirectories: true)
+
+        let engine = try TaggingEngine()
+        let (count, name) = try await engine.loadModel(from: tempDir, modelName: "NewModel")
+        XCTAssertEqual(name, "NewModel")
+        XCTAssertEqual(count, 0) // dummy model file loads no classifiers, but no version rejection
+    }
 }

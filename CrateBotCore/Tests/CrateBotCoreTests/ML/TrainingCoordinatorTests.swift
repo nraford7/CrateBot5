@@ -204,6 +204,20 @@ final class TrainingCoordinatorTests: XCTestCase {
         XCTAssertEqual(metadata1.pipelineVersion, metadata2.pipelineVersion)
     }
 
+    func testCurrentPipelineVersionDiffersFromLegacySingleWindow() async {
+        let coordinator = TrainingCoordinator()
+        let current = await coordinator.currentPipelineVersion()
+
+        // The windowed pipeline must produce a different versionHash than the
+        // pre-windowing single-window pipeline, so newly trained models carry
+        // a distinguishable ModelMetadata.pipelineVersion.
+        XCTAssertNotEqual(
+            current.versionHash,
+            FeaturePipelineVersion.legacySingleWindow.versionHash
+        )
+        XCTAssertEqual(current.versionHash, FeaturePipelineVersion.current.versionHash)
+    }
+
     func testCreateModelMetadataDateIsRecent() async {
         let coordinator = TrainingCoordinator()
         let beforeCreation = Date()

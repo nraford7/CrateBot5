@@ -823,23 +823,11 @@ public actor TrainingCoordinator {
     }
 
     /// Get the current feature pipeline version
-    /// - Returns: The EffNet-based feature pipeline configuration
+    /// - Returns: The multi-window EffNet-based feature pipeline configuration.
+    ///   Encodes the window fractions so models trained on windowed features
+    ///   carry a versionHash distinct from pre-windowing models.
     public func currentPipelineVersion() -> FeaturePipelineVersion {
-        // Return EffNet-based feature pipeline configuration
-        // EffNet produces 1280-dimensional embeddings from mel spectrograms
-        // CLAP adds 512-dimensional semantic embeddings
-        FeaturePipelineVersion(
-            extractorVersions: ["effnet": "v1", "clap": "v1"],
-            windowingParams: FeaturePipelineVersion.WindowingParams(
-                windowSize: 512,    // 32ms at 16kHz (MusiCNN/EffNet)
-                hopSize: 256,       // 16ms at 16kHz (MusiCNN/EffNet)
-                fftSize: 512        // EffNet FFT size
-            ),
-            normalizationParams: FeaturePipelineVersion.NormalizationParams(
-                method: "log_mel",
-                perFeature: false
-            )
-        )
+        .current
     }
 
     private func recommendedExtractionConcurrency() -> Int {
