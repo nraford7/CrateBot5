@@ -34,16 +34,25 @@ public struct TaggingResult: Sendable {
     /// Raw genre activations from EffNet (400 classes)
     public let genreActivations: [Float]
 
+    /// Whether Stage 2 (judgment) inference ran for this analysis.
+    /// False when no paired judgment models are loaded or the input schema
+    /// mismatched — relational (Timing) tags are then ABSENT, not stale.
+    /// Defaults to false: without evidence of a judgment pass, the honest
+    /// answer is "unavailable".
+    public let judgmentAvailable: Bool
+
     public init(
         userPredictions: UserTagPredictions? = nil,
         essentiaTags: EssentiaTags,
         embeddings: [Float],
-        genreActivations: [Float]
+        genreActivations: [Float],
+        judgmentAvailable: Bool = false
     ) {
         self.userPredictions = userPredictions
         self.essentiaTags = essentiaTags
         self.embeddings = embeddings
         self.genreActivations = genreActivations
+        self.judgmentAvailable = judgmentAvailable
     }
 }
 
@@ -151,6 +160,27 @@ public actor TaggingEngine {
     /// Multi-class classifiers (one per tag group)
     private var multiClassClassifiers: [String: MultiClassClassifier] = [:]
 
+    /// Stage 2 judgment classifiers (tag name → classifier). Loaded ONLY
+    /// when metadata pairs them with the loaded Stage 1
+    /// (`judgmentColumnNames` + `stage1ModelVersion`, written atomically by
+    /// Phase B). Unpaired `_judgment` files are stale leftovers — refused.
+    private var judgmentClassifiers: [String: TagClassifier] = [:]
+
+    /// Stage 2 input schema (metadata.judgmentColumnNames) — set only when
+    /// judgment classifiers loaded. Inference must reproduce these exact
+    /// columns or skip judgment entirely.
+    private var judgmentSchema: [String]?
+
+    /// Category → pipeline-stage mapping (Timing → judgment)
+    private let stageRegistry: TagStageRegistry
+
+    /// Lowercased categories owned by Stage 2 (judgment)
+    private let judgmentCategoriesLower: Set<String>
+
+    /// ID3 reader for the inference-time BPM lookup (TBPM frame),
+    /// mirroring Phase B's production BPM lookup in TrainingCoordinator.
+    private let id3Manager = ID3Manager()
+
     /// Loaded model name
     private var loadedModelName: String?
 
@@ -188,11 +218,20 @@ public actor TaggingEngine {
     /// Tag co-occurrence booster for post-hoc score adjustment
     private let cooccurrenceBooster: TagCooccurrenceBooster?
 
-    /// Whether to apply co-occurrence boosting (set externally for A/B testing)
-    public var useCooccurrenceBoosting: Bool = true
+    /// Whether to apply co-occurrence boosting (set externally for A/B testing).
+    /// Default OFF: Stage 2 subsumes co-occurrence boosting for judgment
+    /// tags, and its Stage-1-only value is unproven pending eval.
+    public var useCooccurrenceBoosting: Bool = false
+
+    /// Minimum separation between a multi-class prediction and its runner-up.
+    /// Below this margin the probability spread is too flat to force an answer.
+    static let multiClassSeparationMargin: Float = 0.15
 
     public init(featureExtractionConfig: FeatureExtractionConfig = .default) throws {
         self.featureExtractionConfig = featureExtractionConfig
+        let registry = TagStageRegistry()
+        self.stageRegistry = registry
+        self.judgmentCategoriesLower = Set(registry.categories(in: .judgment).map { $0.lowercased() })
         self.essentiaClassifier = try EssentiaClassifier()
         self.audioAnalyzer = AudioAnalyzer()
         self.zeroShotMatcher = ZeroShotMatcher.loadFromBundle()
@@ -233,6 +272,8 @@ public actor TaggingEngine {
         // Clear existing classifiers
         userClassifiers.removeAll()
         multiClassClassifiers.removeAll()
+        judgmentClassifiers.removeAll()
+        judgmentSchema = nil
 
         // Load metadata first to detect feature dimension
         // Use modelName.json if provided, otherwise fall back to metadata.json for legacy models
@@ -409,11 +450,69 @@ public actor TaggingEngine {
             }
         }
 
+        // Load Stage 2 judgment classifiers — ONLY when metadata pairs them
+        // with this Stage 1. `judgmentColumnNames` and `stage1ModelVersion`
+        // are written atomically by Phase B against the exact Stage 1 model
+        // set in this directory, so their joint presence IS the pairing.
+        // Missing either one means the `_judgment` files predate the current
+        // Stage 1 (or judgment training never completed): loading them would
+        // produce stale judgments from mismatched inputs. Refuse.
+        let judgmentModelFiles = modelFiles.filter {
+            $0.deletingPathExtension().lastPathComponent.hasSuffix("_judgment")
+        }
+        if !judgmentModelFiles.isEmpty {
+            if let metadata = metadata,
+               let columnNames = metadata.judgmentColumnNames,
+               metadata.stage1ModelVersion != nil {
+                // Training writes `sanitizeFileName(tag)_judgment.mlmodel`;
+                // map sanitized file names back to the original tag names
+                // via the metadata category map (judgment-stage categories).
+                var fileNameToTag: [String: String] = [:]
+                for (category, categoryTags) in metadata.tags
+                where judgmentCategoriesLower.contains(category.lowercased()) {
+                    for tag in categoryTags {
+                        fileNameToTag[Self.sanitizeModelFileName(tag)] = tag
+                    }
+                }
+
+                for modelURL in judgmentModelFiles {
+                    let fileName = modelURL.deletingPathExtension().lastPathComponent
+                    let baseName = String(fileName.dropLast("_judgment".count))
+                    let tagName = fileNameToTag[baseName] ?? baseName
+                    do {
+                        // Threshold 0.5 is a placeholder — judgment decisions
+                        // use effectiveThreshold(forTag:) (Timing default 0.55).
+                        judgmentClassifiers[tagName] = try TagClassifier(
+                            tagName: tagName, modelURL: modelURL, threshold: 0.5)
+                    } catch {
+                        logger.warning("Failed to load judgment classifier '\(tagName)': \(error.localizedDescription)")
+                    }
+                }
+
+                if !judgmentClassifiers.isEmpty {
+                    judgmentSchema = columnNames
+                    logger.info("Loaded \(self.judgmentClassifiers.count) Stage 2 judgment classifiers (schema: \(columnNames.count) columns)")
+                }
+            } else {
+                logger.warning("\(judgmentModelFiles.count) _judgment model files present but metadata does not pair them (judgmentColumnNames: \(metadata?.judgmentColumnNames != nil), stage1ModelVersion: \(metadata?.stage1ModelVersion != nil)) — Stage 2 disabled, no stale judgments")
+            }
+        }
+
         // Use provided model name, or fall back to directory name
         let resolvedModelName = modelName ?? modelDirectory.lastPathComponent
         loadedModelName = resolvedModelName
 
-        return (userClassifiers.count + multiClassClassifiers.count, resolvedModelName)
+        return (userClassifiers.count + multiClassClassifiers.count + judgmentClassifiers.count, resolvedModelName)
+    }
+
+    /// Mirror of ModelTrainer.sanitizeFileName — the transform applied to a
+    /// tag name when its `_judgment` model file is written.
+    private static func sanitizeModelFileName(_ name: String) -> String {
+        let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|")
+        return name
+            .components(separatedBy: invalidCharacters)
+            .joined(separator: "_")
+            .replacingOccurrences(of: " ", with: "_")
     }
 
     /// Load user-trained model (legacy single-classifier support)
@@ -428,6 +527,8 @@ public actor TaggingEngine {
     public func unloadUserModel() {
         userClassifiers.removeAll()
         multiClassClassifiers.removeAll()
+        judgmentClassifiers.removeAll()
+        judgmentSchema = nil
         loadedModelName = nil
         loadedMetadata = nil
         featureExtractor = nil
@@ -447,6 +548,11 @@ public actor TaggingEngine {
     /// Get list of loaded tag classifiers
     public var loadedTags: [String] {
         userClassifiers.map { $0.tagName }
+    }
+
+    /// Tags with a loaded Stage 2 judgment classifier (sorted)
+    public var loadedJudgmentTags: [String] {
+        judgmentClassifiers.keys.sorted()
     }
 
     /// Get list of tags available via fallback mappings
@@ -556,48 +662,36 @@ public actor TaggingEngine {
             }
         }
 
-        // Pass 2: apply co-occurrence boosting if enabled
+        // Pass 2: apply co-occurrence boosting if enabled.
+        // The booster only ever sees perception-stage probabilities —
+        // Stage 2 subsumes its role for judgment (Timing) tags.
         let adjustedProbabilities: [String: Float]
         if useCooccurrenceBoosting, let booster = cooccurrenceBooster {
-            adjustedProbabilities = booster.adjust(probabilities: rawProbabilities)
+            adjustedProbabilities = booster.adjust(
+                probabilities: boosterInputProbabilities(rawProbabilities))
         } else {
             adjustedProbabilities = rawProbabilities
         }
 
-        // Pass 3: threshold and apply tags (hybrid Essentia fallback uses raw, pre-boost confidence)
-        for (tagName, confidence) in adjustedProbabilities {
-            let threshold = effectiveThreshold(forTag: tagName)
-            if confidence >= threshold {
-                // (Possibly boosted) confidence meets threshold - apply tag
-                predictedTags.append(tagName)
-            } else {
-                let raw = rawProbabilities[tagName, default: 0]
-                if raw > 0 {
-                    // Below threshold but non-zero - try hybrid Essentia check
-                    // Use raw (pre-boost) confidence to maintain original fallback semantics
-                    let shouldApply = checkHybridEssentiaFallback(
-                        tagName: tagName,
-                        userConfidence: raw,
-                        moodPredictions: moodPredictions,
-                        genrePredictions: genrePredictions,
-                        instrumentPredictions: instrumentPredictions
-                    )
-                    if shouldApply {
-                        predictedTags.append(tagName)
-                    }
-                }
-            }
-        }
+        // Pass 3: threshold and apply perception tags (judgment-stage tags
+        // are never emitted here — they belong to Stage 2)
+        predictedTags.append(contentsOf: binaryThresholdPass(
+            rawProbabilities: rawProbabilities,
+            adjustedProbabilities: adjustedProbabilities,
+            moodPredictions: moodPredictions,
+            genrePredictions: genrePredictions,
+            instrumentPredictions: instrumentPredictions
+        ))
 
-        // Run multi-class predictions
-        var groupPredictions: [MultiClassClassifier.Prediction] = []
+        // Run multi-class predictions (with confidence + separation gate);
+        // collect each group's full distribution for Stage 2.
+        var groupProbabilities: [String: [String: Float]] = [:]
 
-        for (_, classifier) in multiClassClassifiers {
+        for (groupName, classifier) in multiClassClassifiers {
             do {
                 let prediction = try await classifier.predict(features: extendedFeatures)
-                let threshold = effectiveThreshold(forTag: prediction.predictedClass)
-                if prediction.confidence >= threshold {
-                    groupPredictions.append(prediction)
+                groupProbabilities[groupName] = prediction.classProbabilities
+                if multiClassGatePasses(prediction) {
                     predictedTags.append(prediction.predictedClass)
                 }
                 // Track all classes from this group as trained tags (to avoid fallback duplicates)
@@ -609,7 +703,30 @@ public actor TaggingEngine {
             }
         }
 
+        // Pass 4 (judgment): Stage 2 owns Timing tags. Inputs are the pass-1
+        // calibrated PRE-BOOST probabilities + multi-class distributions +
+        // BPM + duration — exactly the rows JudgmentDataGenerator trained on.
+        let judgmentAvailable: Bool
+        if !judgmentClassifiers.isEmpty {
+            for tagName in judgmentClassifiers.keys {
+                trainedTagNames.insert(tagName.lowercased())
+            }
+            let bpm = await readBPM(from: url)
+            let duration = readDurationSeconds(from: url)
+            let judgment = judgmentPass(
+                binaryConfidences: rawProbabilities,
+                groupProbabilities: groupProbabilities,
+                bpm: bpm,
+                durationSeconds: duration
+            )
+            predictedTags.append(contentsOf: judgment.tags)
+            judgmentAvailable = judgment.judgmentAvailable
+        } else {
+            judgmentAvailable = false
+        }
+
         // Zero-shot CLAP predictions for tags without trained classifiers
+        // (judgment-stage tags excluded — Stage 2's exclusive domain)
         if let matcher = zeroShotMatcher, extendedFeatures.count >= 2192 {
             let clapEmbedding = Array(extendedFeatures[1680..<2192])
             let zeroShotMatches = matcher.match(
@@ -618,7 +735,7 @@ public actor TaggingEngine {
                 maxResults: 3,
                 excludingTags: trainedTagNames
             )
-            for match in zeroShotMatches {
+            for match in zeroShotMatches where !isJudgmentStageTag(match.tag) {
                 predictedTags.append(match.tag)
             }
         }
@@ -641,8 +758,139 @@ public actor TaggingEngine {
             userPredictions: userPredictions,
             essentiaTags: essentiaTags,
             embeddings: embeddings,
-            genreActivations: genreActivations
+            genreActivations: genreActivations,
+            judgmentAvailable: judgmentAvailable
         )
+    }
+
+    // MARK: - Stage partition + decision passes
+
+    /// True when the tag's metadata category is owned by Stage 2 (judgment).
+    /// Uncategorized tags default to perception — Stage 2 only ever handles
+    /// tags it was explicitly trained for.
+    private func isJudgmentStageTag(_ tag: String) -> Bool {
+        guard let category = tagCategoryLookup[tag.lowercased()] else { return false }
+        return judgmentCategoriesLower.contains(category)
+    }
+
+    /// Booster scope: filter to perception-stage tags. Judgment tags never
+    /// reach the co-occurrence booster — Stage 2 subsumes it for them.
+    func boosterInputProbabilities(_ probabilities: [String: Float]) -> [String: Float] {
+        probabilities.filter { !isJudgmentStageTag($0.key) }
+    }
+
+    /// Pass 3: threshold the (possibly boosted) probabilities into emitted
+    /// tags, with the hybrid Essentia fallback on raw (pre-boost) confidence.
+    /// Judgment-stage tags are NEVER emitted by this pass.
+    func binaryThresholdPass(
+        rawProbabilities: [String: Float],
+        adjustedProbabilities: [String: Float],
+        moodPredictions: [String: Float],
+        genrePredictions: [String: Float],
+        instrumentPredictions: [String: Float]
+    ) -> [String] {
+        var emitted: [String] = []
+        for (tagName, confidence) in adjustedProbabilities {
+            if isJudgmentStageTag(tagName) { continue }
+            let threshold = effectiveThreshold(forTag: tagName)
+            if confidence >= threshold {
+                // (Possibly boosted) confidence meets threshold - apply tag
+                emitted.append(tagName)
+            } else {
+                let raw = rawProbabilities[tagName, default: 0]
+                if raw > 0 {
+                    // Below threshold but non-zero - try hybrid Essentia check
+                    // Use raw (pre-boost) confidence to maintain original fallback semantics
+                    let shouldApply = checkHybridEssentiaFallback(
+                        tagName: tagName,
+                        userConfidence: raw,
+                        moodPredictions: moodPredictions,
+                        genrePredictions: genrePredictions,
+                        instrumentPredictions: instrumentPredictions
+                    )
+                    if shouldApply {
+                        emitted.append(tagName)
+                    }
+                }
+            }
+        }
+        return emitted
+    }
+
+    /// Multi-class gate: the predicted class must clear its threshold AND
+    /// beat the runner-up by `multiClassSeparationMargin` — a flat spread
+    /// never forces an answer.
+    func multiClassGatePasses(_ prediction: MultiClassClassifier.Prediction) -> Bool {
+        let threshold = effectiveThreshold(forTag: prediction.predictedClass)
+        return prediction.confidence >= threshold
+            && prediction.confidence - prediction.runnerUpConfidence >= Self.multiClassSeparationMargin
+    }
+
+    /// Pass 4: Stage 2 judgment inference.
+    ///
+    /// Builds the JudgmentFeatureVector from Stage 1 outputs and validates
+    /// its columns against the schema the judgment models were trained on
+    /// (metadata.judgmentColumnNames). Any mismatch — a failed Stage 1
+    /// classifier, a missing group, an extra column — skips judgment with a
+    /// logged error: NEVER garbage predictions from misaligned inputs.
+    ///
+    /// - Returns: emitted judgment tags, and whether judgment actually ran.
+    func judgmentPass(
+        binaryConfidences: [String: Float],
+        groupProbabilities: [String: [String: Float]],
+        bpm: Float?,
+        durationSeconds: Float?
+    ) -> (tags: [String], judgmentAvailable: Bool) {
+        guard !judgmentClassifiers.isEmpty, let schema = judgmentSchema else {
+            return ([], false)
+        }
+
+        let vector = JudgmentFeatureVector(
+            binaryConfidences: binaryConfidences,
+            groupProbabilities: groupProbabilities,
+            bpm: bpm,
+            durationSeconds: durationSeconds
+        )
+        guard vector.columnNames == schema else {
+            logger.error("Stage 2 schema mismatch: built \(vector.columnNames.count) columns but the judgment models expect \(schema.count) (metadata.judgmentColumnNames) — judgment skipped, relational tags unavailable")
+            return ([], false)
+        }
+
+        let namedFeatures = Dictionary(uniqueKeysWithValues: zip(vector.columnNames, vector.values))
+        var emitted: [String] = []
+        for (tagName, classifier) in judgmentClassifiers.sorted(by: { $0.key < $1.key }) {
+            do {
+                let (_, confidence) = try classifier.predictWithConfidence(namedFeatures: namedFeatures)
+                if confidence >= effectiveThreshold(forTag: tagName) {
+                    emitted.append(tagName)
+                }
+            } catch {
+                logger.error("Judgment classifier '\(tagName)' failed: \(error.localizedDescription)")
+            }
+        }
+        return (emitted, true)
+    }
+
+    /// Inference-time BPM: the ID3 TBPM frame, mirroring Phase B's
+    /// production BPM lookup. nil (→ sentinel -1.0) when absent/invalid.
+    private func readBPM(from url: URL) async -> Float? {
+        guard let tags = try? await id3Manager.readTags(from: url),
+              let bpmString = tags.bpm,
+              let bpm = Float(bpmString.trimmingCharacters(in: .whitespaces)),
+              bpm > 0 else {
+            return nil
+        }
+        return bpm
+    }
+
+    /// Inference-time duration in seconds from the audio file header
+    /// (`AVAudioFile.length / processingFormat.sampleRate`) — a header
+    /// read, no decode. Mirrors Phase B's production duration lookup.
+    private func readDurationSeconds(from url: URL) -> Float? {
+        guard let file = try? AVAudioFile(forReading: url) else { return nil }
+        let sampleRate = file.processingFormat.sampleRate
+        guard sampleRate > 0 else { return nil }
+        return Float(Double(file.length) / sampleRate)
     }
 
     /// Analyze audio buffer directly (for cases where buffer is already loaded)
@@ -783,8 +1031,9 @@ public actor TaggingEngine {
 
     // MARK: - Fallback Mapping Support
 
-    /// Apply fallback mappings to generate user tag predictions from Essentia outputs
-    private func applyFallbackMappings(
+    /// Apply fallback mappings to generate user tag predictions from Essentia outputs.
+    /// Judgment-stage (Timing) tags are never emitted — Stage 2's exclusive domain.
+    func applyFallbackMappings(
         moodPredictions: [String: Float],
         genrePredictions: [String: Float],
         instrumentPredictions: [String: Float],
@@ -795,6 +1044,11 @@ public actor TaggingEngine {
         for mapping in fallbackConfig.mappings {
             // Skip if we have a trained classifier for this tag
             if excludingTrained.contains(mapping.userTag.lowercased()) {
+                continue
+            }
+
+            // Judgment-stage tags come only from Stage 2 — never from fallback
+            if isJudgmentStageTag(mapping.userTag) {
                 continue
             }
 

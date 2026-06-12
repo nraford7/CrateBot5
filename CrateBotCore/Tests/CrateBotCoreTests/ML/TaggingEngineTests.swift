@@ -328,6 +328,249 @@ final class TaggingEngineTests: XCTestCase {
         XCTAssertEqual(house, 0.42, accuracy: 0.0001, "Tuned per-tag threshold still wins over user strictness")
     }
 
+    // MARK: - Stage 2 judgment inference (Task 4.2)
+
+    /// One Stage 2 training row with a deterministic schema. `seed` drives
+    /// separability: high seed → Peak-like, low seed → not.
+    private func makeJudgmentRow(seed: Float, labels: Set<String>, trackID: String) -> JudgmentRow {
+        let vector = JudgmentFeatureVector(
+            binaryConfidences: ["Dark": seed, "Driving": 1 - seed],
+            groupProbabilities: ["BassType": ["Punchy": seed / 2, "Walking": 1 - seed / 2]],
+            bpm: 120 + seed * 20,
+            durationSeconds: 300
+        )
+        return (features: vector, labels: labels, trackID: trackID)
+    }
+
+    /// Trains a REAL `Peak_judgment.mlmodel` (separable rows, deterministic
+    /// seeds) into a temp directory and writes metadata that either pairs it
+    /// (stage1ModelVersion + judgmentColumnNames) or deliberately does not.
+    /// Caller must remove the returned directory.
+    private func makeJudgmentModelDirectory(
+        stage1Version: String? = "stage1-v1",
+        writeColumnNames: Bool = true
+    ) async throws -> (dir: URL, schema: [String]) {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+
+        var rows: [JudgmentRow] = []
+        for i in 0..<20 {
+            rows.append(makeJudgmentRow(seed: 0.8 + Float(i) * 0.01, labels: ["Peak"], trackID: "p\(i)"))
+        }
+        for i in 0..<20 {
+            rows.append(makeJudgmentRow(seed: Float(i) * 0.01, labels: ["Build"], trackID: "n\(i)"))
+        }
+
+        let trainer = ModelTrainer()
+        let (results, _, columnNames) = try await trainer.trainJudgmentModels(
+            rows: rows,
+            tags: ["Peak"],
+            outputDirectory: tempDir,
+            config: TrainingConfig(minSamplesPerTag: 10)
+        )
+        XCTAssertEqual(results.count, 1, "Fixture must train exactly the Peak judgment model")
+        let schema = try XCTUnwrap(columnNames)
+
+        let metadata = ModelMetadata(
+            name: "JudgmentModel",
+            version: "1.0",
+            pipelineVersion: FeaturePipelineVersion.current().versionHash,
+            trainedAt: Date(),
+            trainingFileCount: 40,
+            categories: ["Genre", "Timing", "Mood", "Descriptive"],
+            tags: [
+                "Genre": ["House"],
+                "Timing": ["Peak"],
+                "Mood": ["Dark"],
+                "Descriptive": ["Driving"]
+            ],
+            featureDimension: 1680,
+            stage1ModelVersion: stage1Version,
+            judgmentColumnNames: writeColumnNames ? schema : nil
+        )
+        try metadata.save(to: tempDir.appendingPathComponent("JudgmentModel.json"))
+        return (tempDir, schema)
+    }
+
+    private func loadEngine(from dir: URL) async throws -> TaggingEngine {
+        let engine = try TaggingEngine()
+        _ = try await engine.loadModel(from: dir, modelName: "JudgmentModel")
+        return engine
+    }
+
+    func testJudgmentModelsLoadWhenMetadataPairs() async throws {
+        let (dir, _) = try await makeJudgmentModelDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = try await loadEngine(from: dir)
+        let loaded = await engine.loadedJudgmentTags
+        XCTAssertEqual(loaded, ["Peak"], "Paired metadata must load the judgment classifier")
+    }
+
+    func testJudgmentModelsRefusedWithoutStage1Version() async throws {
+        let (dir, _) = try await makeJudgmentModelDirectory(stage1Version: nil)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = try await loadEngine(from: dir)
+        let loaded = await engine.loadedJudgmentTags
+        XCTAssertTrue(loaded.isEmpty, "Judgment models without a stage1ModelVersion pairing are stale — refuse")
+        let pass = await engine.judgmentPass(
+            binaryConfidences: ["Dark": 0.9, "Driving": 0.1],
+            groupProbabilities: ["BassType": ["Punchy": 0.45, "Walking": 0.55]],
+            bpm: 138, durationSeconds: 300)
+        XCTAssertTrue(pass.tags.isEmpty)
+        XCTAssertFalse(pass.judgmentAvailable)
+    }
+
+    func testJudgmentModelsRefusedWithoutJudgmentColumnNames() async throws {
+        let (dir, _) = try await makeJudgmentModelDirectory(writeColumnNames: false)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = try await loadEngine(from: dir)
+        let loaded = await engine.loadedJudgmentTags
+        XCTAssertTrue(loaded.isEmpty, "No judgmentColumnNames in metadata → no schema to validate → refuse")
+    }
+
+    func testJudgmentPassEmitsTimingTagAboveThreshold() async throws {
+        let (dir, _) = try await makeJudgmentModelDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = try await loadEngine(from: dir)
+        // Strongly Peak-like input (mirrors positive training rows)
+        let pass = await engine.judgmentPass(
+            binaryConfidences: ["Dark": 0.95, "Driving": 0.05],
+            groupProbabilities: ["BassType": ["Punchy": 0.475, "Walking": 0.525]],
+            bpm: 139, durationSeconds: 300)
+        XCTAssertTrue(pass.judgmentAvailable)
+        XCTAssertEqual(pass.tags, ["Peak"], "Separable positive input must clear the Timing 0.55 threshold")
+    }
+
+    func testJudgmentPassNegativeInputEmitsNothingButStaysAvailable() async throws {
+        let (dir, _) = try await makeJudgmentModelDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = try await loadEngine(from: dir)
+        let pass = await engine.judgmentPass(
+            binaryConfidences: ["Dark": 0.05, "Driving": 0.95],
+            groupProbabilities: ["BassType": ["Punchy": 0.025, "Walking": 0.975]],
+            bpm: 121, durationSeconds: 300)
+        XCTAssertTrue(pass.judgmentAvailable, "Judgment ran — a negative verdict is still a verdict")
+        XCTAssertTrue(pass.tags.isEmpty)
+    }
+
+    func testJudgmentPassSchemaMismatchSkipsJudgment() async throws {
+        let (dir, _) = try await makeJudgmentModelDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = try await loadEngine(from: dir)
+        // Missing the "Driving" binary column → constructed schema cannot
+        // match metadata.judgmentColumnNames → skip, never garbage.
+        let missing = await engine.judgmentPass(
+            binaryConfidences: ["Dark": 0.95],
+            groupProbabilities: ["BassType": ["Punchy": 0.475, "Walking": 0.525]],
+            bpm: 139, durationSeconds: 300)
+        XCTAssertTrue(missing.tags.isEmpty)
+        XCTAssertFalse(missing.judgmentAvailable)
+
+        // Extra unexpected column → same refusal.
+        let extra = await engine.judgmentPass(
+            binaryConfidences: ["Dark": 0.95, "Driving": 0.05, "Surprise": 0.5],
+            groupProbabilities: ["BassType": ["Punchy": 0.475, "Walking": 0.525]],
+            bpm: 139, durationSeconds: 300)
+        XCTAssertTrue(extra.tags.isEmpty)
+        XCTAssertFalse(extra.judgmentAvailable)
+    }
+
+    func testJudgmentPassUnavailableWithoutJudgmentModels() async throws {
+        let engine = try TaggingEngine()
+        let pass = await engine.judgmentPass(
+            binaryConfidences: ["Dark": 0.95],
+            groupProbabilities: [:],
+            bpm: nil, durationSeconds: nil)
+        XCTAssertTrue(pass.tags.isEmpty)
+        XCTAssertFalse(pass.judgmentAvailable)
+    }
+
+    func testTimingTagNeverEmittedByBinaryThresholdPass() async throws {
+        let (dir, _) = try await makeJudgmentModelDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = try await loadEngine(from: dir)
+        // Even a 0.99-confidence Timing tag must not leak out of Stage 1.
+        let probabilities: [String: Float] = ["Peak": 0.99, "House": 0.95]
+        let emitted = await engine.binaryThresholdPass(
+            rawProbabilities: probabilities,
+            adjustedProbabilities: probabilities,
+            moodPredictions: [:],
+            genrePredictions: [:],
+            instrumentPredictions: [:])
+        XCTAssertEqual(emitted, ["House"], "Timing tags are Stage 2's exclusive domain")
+    }
+
+    func testFallbackMappingsExcludeJudgmentStageTags() async throws {
+        let (dir, _) = try await makeJudgmentModelDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = try await loadEngine(from: dir)
+        await engine.setFallbackConfig(FallbackMappingConfig(
+            mappings: [
+                TagFallbackMapping(userTag: "Peak", essentiaSource: .mood, essentiaLabels: ["energetic"]),
+                TagFallbackMapping(userTag: "Funky", essentiaSource: .mood, essentiaLabels: ["fun"])
+            ],
+            enabled: true
+        ))
+        let predictions = await engine.applyFallbackMappings(
+            moodPredictions: ["energetic": 0.99, "fun": 0.99],
+            genrePredictions: [:],
+            instrumentPredictions: [:],
+            excludingTrained: [])
+        XCTAssertFalse(predictions.contains("Peak"), "Fallback must never emit a judgment-stage tag")
+        XCTAssertTrue(predictions.contains("Funky"))
+    }
+
+    func testCooccurrenceBoostingDefaultsOff() async throws {
+        let engine = try TaggingEngine()
+        let boosting = await engine.useCooccurrenceBoosting
+        XCTAssertFalse(boosting, "Stage 2 subsumes co-occurrence boosting; off by default pending eval")
+    }
+
+    func testBoosterInputScopedToPerceptionStage() async throws {
+        let (dir, _) = try await makeJudgmentModelDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = try await loadEngine(from: dir)
+        let scoped = await engine.boosterInputProbabilities(
+            ["Peak": 0.9, "House": 0.8, "Dark": 0.7])
+        XCTAssertEqual(Set(scoped.keys), ["House", "Dark"],
+            "Booster sees perception-stage probabilities only")
+    }
+
+    func testMultiClassPredictionRunnerUp() {
+        let runnerUp = MultiClassClassifier.runnerUpConfidence(
+            in: ["A": 0.5, "B": 0.3, "C": 0.2], excluding: "A")
+        XCTAssertEqual(runnerUp, 0.3, accuracy: 0.0001)
+        let single = MultiClassClassifier.runnerUpConfidence(in: ["A": 1.0], excluding: "A")
+        XCTAssertEqual(single, 0, accuracy: 0.0001, "Single-class group has no runner-up")
+    }
+
+    func testMultiClassGateRequiresSeparationMargin() async throws {
+        let engine = try await makeEngineWithCategorizedModel() // House: genre, threshold 0.7
+        func prediction(_ confidence: Float, runnerUp: Float) -> MultiClassClassifier.Prediction {
+            MultiClassClassifier.Prediction(
+                groupName: "TestGroup",
+                predictedClass: "House",
+                confidence: confidence,
+                runnerUpConfidence: runnerUp,
+                classProbabilities: ["House": confidence, "Techno": runnerUp])
+        }
+        let flat = await engine.multiClassGatePasses(prediction(0.9, runnerUp: 0.8))
+        XCTAssertFalse(flat, "0.10 separation < 0.15 margin — no forced answer on a flat spread")
+        let separated = await engine.multiClassGatePasses(prediction(0.9, runnerUp: 0.6))
+        XCTAssertTrue(separated)
+        let belowThreshold = await engine.multiClassGatePasses(prediction(0.65, runnerUp: 0.1))
+        XCTAssertFalse(belowThreshold, "Threshold still applies alongside the separation margin")
+    }
+
+    func testTaggingResultJudgmentAvailableDefaultsFalse() {
+        let result = TaggingResult(
+            essentiaTags: EssentiaTags(genres: [], moods: [], instruments: []),
+            embeddings: [],
+            genreActivations: [])
+        XCTAssertFalse(result.judgmentAvailable,
+            "Absent evidence of a judgment pass is honestly 'unavailable'")
+    }
+
     func testLoadModelRejectsFeatureDimensionMismatch() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)

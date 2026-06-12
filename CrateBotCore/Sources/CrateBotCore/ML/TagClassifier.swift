@@ -5,6 +5,7 @@ public enum TagClassifierError: Error, LocalizedError {
     case invalidOutput
     case featureDimensionMismatch(expected: Int, got: Int)
     case modelLoadFailed(String)
+    case inputFormatMismatch(String)
 
     public var errorDescription: String? {
         switch self {
@@ -14,6 +15,8 @@ public enum TagClassifierError: Error, LocalizedError {
             return "Feature dimension mismatch: expected \(expected), got \(got)"
         case .modelLoadFailed(let reason):
             return "Failed to load model: \(reason)"
+        case .inputFormatMismatch(let reason):
+            return "Input format mismatch: \(reason)"
         }
     }
 }
@@ -24,6 +27,10 @@ private enum ClassifierInputFormat {
     case multiArray(inputKey: String, featureCount: Int)
     /// Tabular input with individual feature columns (e.g., BoostedTreeClassifier)
     case tabular(featureCount: Int)
+    /// Tabular input with NAMED scalar columns — Stage 2 judgment models
+    /// trained on JudgmentFeatureVector columns (`bin_*`, `grp_*`, `bpm`,
+    /// `duration`) rather than positional `f0...fN` audio features.
+    case namedTabular(columns: [String])
 }
 
 /// Wrapper for CoreML binary classifier with proper MLFeatureProvider usage
@@ -87,10 +94,15 @@ public class TagClassifier: @unchecked Sendable {
             // Tabular input (BoostedTreeClassifier style with f0, f1, f2, ...)
             // Count how many "fN" inputs exist
             let featureInputs = inputs.keys.filter { $0.hasPrefix("f") && Int($0.dropFirst()) != nil }
-            guard !featureInputs.isEmpty else {
+            if !featureInputs.isEmpty {
+                self.inputFormat = .tabular(featureCount: featureInputs.count)
+            } else if !inputs.isEmpty,
+                      inputs.values.allSatisfy({ $0.type == .double || $0.type == .int64 }) {
+                // Named scalar columns (Stage 2 judgment models)
+                self.inputFormat = .namedTabular(columns: inputs.keys.sorted())
+            } else {
                 throw TagClassifierError.modelLoadFailed("Model has no recognized input format")
             }
-            self.inputFormat = .tabular(featureCount: featureInputs.count)
         }
 
         self.probabilityOutputKey = description.outputDescriptionsByName
@@ -105,10 +117,16 @@ public class TagClassifier: @unchecked Sendable {
             return featureCount
         case .tabular(let featureCount):
             return featureCount
+        case .namedTabular(let columns):
+            return columns.count
         }
     }
 
     private func runPrediction(features: [Float]) throws -> Double {
+        if case .namedTabular = inputFormat {
+            throw TagClassifierError.inputFormatMismatch(
+                "'\(tagName)' takes named feature columns — use predictWithConfidence(namedFeatures:)")
+        }
         guard features.count == expectedFeatureCount else {
             throw TagClassifierError.featureDimensionMismatch(
                 expected: expectedFeatureCount,
@@ -136,8 +154,19 @@ public class TagClassifier: @unchecked Sendable {
                 featureDict["f\(i)"] = MLFeatureValue(double: Double(value))
             }
             inputProvider = try MLDictionaryFeatureProvider(dictionary: featureDict)
+
+        case .namedTabular:
+            // Guarded above — named models never take a positional vector.
+            throw TagClassifierError.inputFormatMismatch(
+                "'\(tagName)' takes named feature columns — use predictWithConfidence(namedFeatures:)")
         }
 
+        return try extractPositiveProbability(from: inputProvider)
+    }
+
+    /// Run the model and read the "positive" class probability — the shared
+    /// label convention across Stage 1 binary and Stage 2 judgment models.
+    private func extractPositiveProbability(from inputProvider: MLFeatureProvider) throws -> Double {
         let output = try compiledModel.prediction(from: inputProvider)
 
         guard let probabilityDict = output.featureValue(for: probabilityOutputKey)?.dictionaryValue,
@@ -158,6 +187,29 @@ public class TagClassifier: @unchecked Sendable {
     public func predictWithConfidence(features: [Float]) throws -> (result: Bool, confidence: Float) {
         let positiveProb = try runPrediction(features: features)
         let confidence = Float(positiveProb)
+        return (confidence > threshold, confidence)
+    }
+
+    /// Predict from NAMED feature columns (Stage 2 judgment models).
+    /// Every model input column must be present in `namedFeatures`;
+    /// a missing column throws rather than silently substituting a value.
+    public func predictWithConfidence(namedFeatures: [String: Float]) throws -> (result: Bool, confidence: Float) {
+        guard case .namedTabular(let columns) = inputFormat else {
+            throw TagClassifierError.inputFormatMismatch(
+                "'\(tagName)' takes a positional feature vector — use predictWithConfidence(features:)")
+        }
+
+        var featureDict: [String: MLFeatureValue] = [:]
+        for column in columns {
+            guard let value = namedFeatures[column] else {
+                throw TagClassifierError.inputFormatMismatch(
+                    "'\(tagName)' is missing feature column '\(column)'")
+            }
+            featureDict[column] = MLFeatureValue(double: Double(value))
+        }
+
+        let inputProvider = try MLDictionaryFeatureProvider(dictionary: featureDict)
+        let confidence = Float(try extractPositiveProbability(from: inputProvider))
         return (confidence > threshold, confidence)
     }
 }

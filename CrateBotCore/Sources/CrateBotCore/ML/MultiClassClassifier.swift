@@ -7,7 +7,33 @@ public actor MultiClassClassifier {
         public let groupName: String
         public let predictedClass: String
         public let confidence: Float
+        /// Second-highest class probability (0 for single-class groups).
+        /// Confidence gates use `confidence - runnerUpConfidence` so a flat
+        /// probability spread never forces an answer.
+        public let runnerUpConfidence: Float
         public let classProbabilities: [String: Float]
+
+        public init(
+            groupName: String,
+            predictedClass: String,
+            confidence: Float,
+            runnerUpConfidence: Float = 0,
+            classProbabilities: [String: Float]
+        ) {
+            self.groupName = groupName
+            self.predictedClass = predictedClass
+            self.confidence = confidence
+            self.runnerUpConfidence = runnerUpConfidence
+            self.classProbabilities = classProbabilities
+        }
+    }
+
+    /// Highest probability among classes other than `predictedClass`.
+    public static func runnerUpConfidence(
+        in probabilities: [String: Float],
+        excluding predictedClass: String
+    ) -> Float {
+        probabilities.filter { $0.key != predictedClass }.values.max() ?? 0
     }
 
     public nonisolated let groupName: String
@@ -62,6 +88,8 @@ public actor MultiClassClassifier {
             groupName: groupName,
             predictedClass: predictedClass,
             confidence: confidence,
+            runnerUpConfidence: Self.runnerUpConfidence(
+                in: classProbabilities, excluding: predictedClass),
             classProbabilities: classProbabilities
         )
     }
