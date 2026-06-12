@@ -87,9 +87,16 @@ public struct BinaryTrainingDataGenerator: Sendable {
         let eligible: [TaggedTrack]
         let excluded: Int
         if let category = category {
-            let considered = tracks.filter { !($0.tagsByCategory[category] ?? []).isEmpty }
+            // Case-insensitive category key match so "timing" and "Timing" behave identically
+            let categoryKey = category.lowercased()
+            let hasCategoryTags: (TaggedTrack) -> Bool = { track in
+                track.tagsByCategory.contains { $0.key.lowercased() == categoryKey && !$0.value.isEmpty }
+            }
+            let considered = tracks.filter(hasCategoryTags)
             eligible = considered.filter { !$0.tags.contains(tagName) }
-            excluded = tracks.count - considered.count
+            // Excluded counts only non-positive unknowns: positives are always
+            // used, so a positive lacking category tags is not "excluded".
+            excluded = tracks.filter { !$0.tags.contains(tagName) && !hasCategoryTags($0) }.count
         } else {
             eligible = tracks.filter { !$0.tags.contains(tagName) }
             excluded = 0

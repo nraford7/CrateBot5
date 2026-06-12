@@ -88,6 +88,42 @@ final class BinaryTrainingDataGeneratorTests: XCTestCase {
         XCTAssertEqual(result.excludedCount, 0)
     }
 
+    func testCategoryKeyMatchIsCaseInsensitive() {
+        let tagged   = TaggedTrack(id: "a", tags: ["Peak"], features: nil,
+                                   tagsByCategory: ["Timing": ["Peak"]])
+        let votedNo  = TaggedTrack(id: "b", tags: ["Build"], features: nil,
+                                   tagsByCategory: ["Timing": ["Build"]])
+        let gen = BinaryTrainingDataGenerator(minPositiveExamples: 1)
+        // Lowercase "timing" must match the "Timing" key on the tracks
+        let result = gen.generateTrainingData(
+            for: "Peak", category: "timing",
+            from: [tagged, votedNo])
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.positive.map(\.id), ["a"])
+        XCTAssertEqual(result?.negative.map(\.id), ["b"])
+        XCTAssertEqual(result?.excludedCount, 0)
+    }
+
+    func testPositiveWithoutCategoryTagsIsNotCountedAsExcluded() {
+        // Positive track with no entry for the target category: it is still
+        // used as a positive, so it must not inflate excludedCount.
+        let posNoCat = TaggedTrack(id: "p", tags: ["Peak"], features: nil,
+                                   tagsByCategory: [:])
+        let tagged   = TaggedTrack(id: "a", tags: ["Peak"], features: nil,
+                                   tagsByCategory: ["Timing": ["Peak"]])
+        let votedNo  = TaggedTrack(id: "b", tags: ["Build"], features: nil,
+                                   tagsByCategory: ["Timing": ["Build"]])
+        let unknown  = TaggedTrack(id: "c", tags: ["House"], features: nil,
+                                   tagsByCategory: ["Genre": ["House"]])
+        let gen = BinaryTrainingDataGenerator(minPositiveExamples: 1)
+        let result = gen.generateTrainingData(
+            for: "Peak", category: "Timing",
+            from: [posNoCat, tagged, votedNo, unknown])!
+        XCTAssertEqual(Set(result.positive.map(\.id)), ["p", "a"])
+        XCTAssertEqual(result.negative.map(\.id), ["b"])
+        XCTAssertEqual(result.excludedCount, 1)  // only c; p is a used positive
+    }
+
     func testCategoryFilteringReturnsNilWhenAllNegativesAreUnknown() {
         let tracks = [
             TaggedTrack(id: "a", tags: ["Peak"], features: nil,

@@ -420,8 +420,8 @@ final class ModelTrainerTests: XCTestCase {
         XCTAssertEqual(skippedTags.count, 2)
 
         let reasonsByTag = Dictionary(uniqueKeysWithValues: skippedTags.map { ($0.tag, $0.reason) })
-        XCTAssertEqual(reasonsByTag["Peak"], .noTrustedNegatives,
-            "Positives but zero trusted negatives must surface as noTrustedNegatives")
+        XCTAssertEqual(reasonsByTag["Peak"], .noTrustedNegatives(positives: 6),
+            "Positives but zero trusted negatives must surface as noTrustedNegatives with the real positive count")
         XCTAssertEqual(reasonsByTag["Rare"], .insufficientPositives(found: 2, required: 5),
             "A thin tag must surface as insufficientPositives")
     }

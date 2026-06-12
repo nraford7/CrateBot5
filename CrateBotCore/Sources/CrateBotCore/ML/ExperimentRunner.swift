@@ -246,9 +246,15 @@ public actor ExperimentRunner {
     static func deriveTagCategories(from tracks: [TaggedTrack]) -> [String: String] {
         var tagToCategory: [String: String] = [:]
         for track in tracks {
-            for (category, tags) in track.tagsByCategory {
-                for tag in tags {
-                    tagToCategory[tag.lowercased()] = category
+            // Keep the alphabetically-first category on collision so duplicate tag
+            // names resolve deterministically, not by dictionary iteration order.
+            for category in track.tagsByCategory.keys.sorted() {
+                for tag in track.tagsByCategory[category] ?? [] {
+                    let key = tag.lowercased()
+                    if let existing = tagToCategory[key], existing <= category {
+                        continue
+                    }
+                    tagToCategory[key] = category
                 }
             }
         }

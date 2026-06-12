@@ -639,11 +639,11 @@ public actor TrainingCoordinator {
                         reason: .insufficientSamples(required: required),
                         sampleCount: found
                     ))
-                case .noTrustedNegatives:
+                case .noTrustedNegatives(let positives):
                     skippedTagDetails.append(SkippedTag(
                         tag: skipped.tag,
                         reason: .noTrustedNegatives,
-                        sampleCount: 0
+                        sampleCount: positives
                     ))
                 }
                 logger.warning("Tag '\(skipped.tag)' produced no training set: \(skipped.reason.description)")

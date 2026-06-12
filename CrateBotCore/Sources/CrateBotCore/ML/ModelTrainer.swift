@@ -119,16 +119,16 @@ public struct SkippedTrainingTag: Sendable {
     public enum Reason: Sendable, Equatable {
         /// Fewer positive examples than the configured minimum
         case insufficientPositives(found: Int, required: Int)
-        /// Enough positives, but no trusted negatives remained after
-        /// category-complete filtering excluded the unknowns
-        case noTrustedNegatives
+        /// Enough positives (count carried through), but no trusted negatives
+        /// remained after category-complete filtering excluded the unknowns
+        case noTrustedNegatives(positives: Int)
 
         public var description: String {
             switch self {
             case .insufficientPositives(let found, let required):
                 return "\(found) positive samples, \(required) required"
-            case .noTrustedNegatives:
-                return "No trusted negatives in category (all candidates unknown)"
+            case .noTrustedNegatives(let positives):
+                return "No trusted negatives in category (\(positives) positives, all candidates unknown)"
             }
         }
     }
@@ -271,11 +271,16 @@ public actor ModelTrainer {
         categorizedTags: [String: Set<String>] = [:],
         progress: ((TrainingProgress) async -> Void)? = nil
     ) async throws -> (results: [TrainingResult], skippedTags: [SkippedTrainingTag]) {
-        // Build tag -> category lookup (lowercased, matching coordinator metadata grouping)
+        // Build tag -> category lookup (lowercased, matching coordinator metadata grouping).
+        // Sorted categories + first-wins so a tag appearing in multiple categories resolves
+        // deterministically (alphabetical category priority), not by dictionary order.
         var tagToCategory: [String: String] = [:]
-        for (category, categoryTags) in categorizedTags {
-            for categoryTag in categoryTags {
-                tagToCategory[categoryTag.lowercased()] = category
+        for category in categorizedTags.keys.sorted() {
+            for categoryTag in categorizedTags[category] ?? [] {
+                let key = categoryTag.lowercased()
+                if tagToCategory[key] == nil {
+                    tagToCategory[key] = category
+                }
             }
         }
 
@@ -324,9 +329,15 @@ public actor ModelTrainer {
                 let positiveCount = tracksWithFeatures.filter { $0.tags.contains(tag) }.count
                 let reason: SkippedTrainingTag.Reason = positiveCount < config.minSamplesPerTag
                     ? .insufficientPositives(found: positiveCount, required: config.minSamplesPerTag)
-                    : .noTrustedNegatives
+                    : .noTrustedNegatives(positives: positiveCount)
                 skippedTags.append(SkippedTrainingTag(tag: tag, reason: reason))
-                logger.info("Skipping tag '\(tag)': \(reason.description)")
+                // Without a category, negatives were never category-filtered,
+                // so don't blame the category in the log message
+                if case .noTrustedNegatives = reason, category == nil {
+                    logger.info("Skipping tag '\(tag)': No trusted negatives (\(positiveCount) positives, no non-positive tracks remain)")
+                } else {
+                    logger.info("Skipping tag '\(tag)': \(reason.description)")
+                }
                 continue
             }
             let positive = trainingData.positive
