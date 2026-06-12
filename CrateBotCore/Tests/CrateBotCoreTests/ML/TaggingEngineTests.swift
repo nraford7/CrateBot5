@@ -236,6 +236,98 @@ final class TaggingEngineTests: XCTestCase {
         XCTAssertEqual(count, 0) // dummy model file loads no classifiers, but no version rejection
     }
 
+    // MARK: - Per-category threshold defaults (Task 4.1)
+
+    /// Loads an engine with metadata covering all four categories and an optional
+    /// set of tuned per-tag thresholds. No real classifiers load (dummy model dir).
+    private func makeEngineWithCategorizedModel(
+        tagThresholds: [String: Float]? = nil
+    ) async throws -> TaggingEngine {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let metadata = ModelMetadata(
+            name: "ThresholdModel",
+            version: "1.0",
+            pipelineVersion: FeaturePipelineVersion.current().versionHash,
+            trainedAt: Date(),
+            trainingFileCount: 100,
+            categories: ["Genre", "Timing", "Mood", "Descriptive"],
+            tags: [
+                "Genre": ["House", "Techno"],
+                "Timing": ["Opener"],
+                "Mood": ["Dark"],
+                "Descriptive": ["Funky"]
+            ],
+            featureDimension: 1680,
+            tagThresholds: tagThresholds
+        )
+        try metadata.save(to: tempDir.appendingPathComponent("ThresholdModel.json"))
+
+        let dummyModelDir = tempDir.appendingPathComponent("House.mlmodel")
+        try FileManager.default.createDirectory(at: dummyModelDir, withIntermediateDirectories: true)
+
+        let engine = try TaggingEngine()
+        _ = try await engine.loadModel(from: tempDir, modelName: "ThresholdModel")
+        return engine
+    }
+
+    func testClassificationThresholdDefaultIsLowered() async throws {
+        let engine = try TaggingEngine()
+        let threshold = await engine.classificationThreshold
+        XCTAssertEqual(threshold, 0.7, accuracy: 0.0001)
+    }
+
+    func testDefaultThresholdForCategory() async throws {
+        let engine = try TaggingEngine()
+        let genre = await engine.defaultThreshold(forCategory: "Genre")
+        let mood = await engine.defaultThreshold(forCategory: "mood")
+        let descriptive = await engine.defaultThreshold(forCategory: "Descriptive")
+        let timing = await engine.defaultThreshold(forCategory: "Timing")
+        let unknown = await engine.defaultThreshold(forCategory: "SomethingElse")
+        let uncategorized = await engine.defaultThreshold(forCategory: nil)
+        XCTAssertEqual(genre, 0.7, accuracy: 0.0001)
+        XCTAssertEqual(mood, 0.55, accuracy: 0.0001)
+        XCTAssertEqual(descriptive, 0.55, accuracy: 0.0001)
+        XCTAssertEqual(timing, 0.55, accuracy: 0.0001)
+        XCTAssertEqual(unknown, 0.7, accuracy: 0.0001)
+        XCTAssertEqual(uncategorized, 0.7, accuracy: 0.0001)
+    }
+
+    func testThresholdResolvesToCategoryDefault() async throws {
+        let engine = try await makeEngineWithCategorizedModel()
+        let house = await engine.effectiveThreshold(forTag: "House")
+        let dark = await engine.effectiveThreshold(forTag: "Dark")
+        let funky = await engine.effectiveThreshold(forTag: "Funky")
+        let opener = await engine.effectiveThreshold(forTag: "Opener")
+        let mystery = await engine.effectiveThreshold(forTag: "Mystery")
+        XCTAssertEqual(house, 0.7, accuracy: 0.0001, "Genre default should be 0.7")
+        XCTAssertEqual(dark, 0.55, accuracy: 0.0001, "Mood default should be 0.55")
+        XCTAssertEqual(funky, 0.55, accuracy: 0.0001, "Descriptive default should be 0.55")
+        XCTAssertEqual(opener, 0.55, accuracy: 0.0001, "Timing default should be 0.55")
+        XCTAssertEqual(mystery, 0.7, accuracy: 0.0001, "Uncategorized tag falls back to classificationThreshold")
+    }
+
+    func testTunedThresholdBeatsCategoryDefault() async throws {
+        let engine = try await makeEngineWithCategorizedModel(tagThresholds: ["House": 0.42])
+        let house = await engine.effectiveThreshold(forTag: "House")
+        let dark = await engine.effectiveThreshold(forTag: "Dark")
+        XCTAssertEqual(house, 0.42, accuracy: 0.0001, "Tuned per-tag threshold must win over category default")
+        XCTAssertEqual(dark, 0.55, accuracy: 0.0001, "Untuned tags still get their category default")
+    }
+
+    func testExplicitStrictnessOverridesCategoryDefault() async throws {
+        let engine = try await makeEngineWithCategorizedModel(tagThresholds: ["House": 0.42])
+        await engine.setClassificationThreshold(0.9)
+        let dark = await engine.effectiveThreshold(forTag: "Dark")
+        let opener = await engine.effectiveThreshold(forTag: "Opener")
+        let house = await engine.effectiveThreshold(forTag: "House")
+        XCTAssertEqual(dark, 0.9, accuracy: 0.0001, "User-set strictness overrides category defaults")
+        XCTAssertEqual(opener, 0.9, accuracy: 0.0001, "User-set strictness overrides category defaults")
+        XCTAssertEqual(house, 0.42, accuracy: 0.0001, "Tuned per-tag threshold still wins over user strictness")
+    }
+
     func testLoadModelRejectsFeatureDimensionMismatch() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)

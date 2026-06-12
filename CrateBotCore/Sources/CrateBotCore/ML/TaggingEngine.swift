@@ -164,10 +164,17 @@ public actor TaggingEngine {
     public var predictionThreshold: Float = 0.2
 
     /// Classification threshold for user-trained classifiers (configurable via strictness setting)
-    public var classificationThreshold: Float = 0.85
+    public var classificationThreshold: Float = 0.7
+
+    /// True once `setClassificationThreshold` is called: the user's explicit strictness then overrides per-category defaults (tuned per-tag thresholds still win).
+    private var userSetStrictness: Bool = false
 
     /// Per-tag threshold overrides (loaded from metadata or tag_thresholds.json)
     private var tagThresholds: [String: Float]?
+
+    /// Lowercased tag name → lowercased category, built once at model load
+    /// from metadata's `tags: [category: [tag]]` (for category threshold defaults)
+    private var tagCategoryLookup: [String: String] = [:]
 
     /// Fallback mappings for tags without trained classifiers
     public var fallbackConfig: FallbackMappingConfig = FallbackMappingConfig()
@@ -257,6 +264,17 @@ public actor TaggingEngine {
             }
         } else {
             logger.error("Model '\(effectiveModelName)' has no readable metadata (\(metadataURL.lastPathComponent) or metadata.json missing/unparseable). Pipeline-version compatibility check SKIPPED — the model may have been trained on an incompatible feature pipeline and could produce unreliable predictions.")
+        }
+
+        // Build the lowercased tag → category reverse lookup once at model load
+        // so threshold resolution can apply per-category defaults.
+        tagCategoryLookup = [:]
+        if let metadata = metadata {
+            for (category, categoryTags) in metadata.tags {
+                for tag in categoryTags {
+                    tagCategoryLookup[tag.lowercased()] = category.lowercased()
+                }
+            }
         }
 
         // Load per-tag thresholds from metadata first, then override with file
@@ -413,6 +431,7 @@ public actor TaggingEngine {
         loadedModelName = nil
         loadedMetadata = nil
         featureExtractor = nil
+        tagCategoryLookup = [:]
     }
 
     /// Check if user model is loaded
@@ -440,9 +459,30 @@ public actor TaggingEngine {
         self.fallbackConfig = config
     }
 
-    /// Update classification threshold (from strictness setting)
+    /// Update classification threshold (from strictness setting).
+    /// Calling this marks the threshold as user-set: it then overrides
+    /// per-category defaults (tuned per-tag thresholds still win).
     public func setClassificationThreshold(_ threshold: Float) {
         self.classificationThreshold = threshold
+        self.userSetStrictness = true
+    }
+
+    /// Default classification threshold for a tag category, used when no tuned
+    /// per-tag threshold exists and no explicit strictness has been set.
+    func defaultThreshold(forCategory category: String?) -> Float {
+        switch category?.lowercased() {
+        case "genre": return 0.7
+        case "mood", "descriptive", "timing": return 0.55
+        default: return classificationThreshold // unknown/uncategorized: global fallback (0.7 default)
+        }
+    }
+
+    /// Resolve the classification threshold for a tag.
+    /// Precedence: tuned `tagThresholds[tag]` → user-set strictness → category default → `classificationThreshold`.
+    func effectiveThreshold(forTag tag: String) -> Float {
+        if let tuned = tagThresholds?[tag] { return tuned }
+        if userSetStrictness { return classificationThreshold }
+        return defaultThreshold(forCategory: tagCategoryLookup[tag.lowercased()])
     }
 
     /// Analyze audio file and return dual taxonomy predictions
@@ -526,8 +566,8 @@ public actor TaggingEngine {
 
         // Pass 3: threshold and apply tags (hybrid Essentia fallback uses raw, pre-boost confidence)
         for (tagName, confidence) in adjustedProbabilities {
-            let effectiveThreshold = tagThresholds?[tagName] ?? classificationThreshold
-            if confidence >= effectiveThreshold {
+            let threshold = effectiveThreshold(forTag: tagName)
+            if confidence >= threshold {
                 // (Possibly boosted) confidence meets threshold - apply tag
                 predictedTags.append(tagName)
             } else {
@@ -555,8 +595,8 @@ public actor TaggingEngine {
         for (_, classifier) in multiClassClassifiers {
             do {
                 let prediction = try await classifier.predict(features: extendedFeatures)
-                let effectiveThreshold = tagThresholds?[prediction.predictedClass] ?? classificationThreshold
-                if prediction.confidence >= effectiveThreshold {
+                let threshold = effectiveThreshold(forTag: prediction.predictedClass)
+                if prediction.confidence >= threshold {
                     groupPredictions.append(prediction)
                     predictedTags.append(prediction.predictedClass)
                 }
@@ -772,10 +812,11 @@ public actor TaggingEngine {
                 predictions = instrumentPredictions
             }
 
-            // Check if ANY of the Essentia labels meet the global threshold
+            // Check if ANY of the Essentia labels meet the user tag's resolved threshold
+            let threshold = effectiveThreshold(forTag: mapping.userTag)
             let matchesThreshold = mapping.essentiaLabels.contains { label in
                 if let probability = predictions[label] {
-                    return probability >= classificationThreshold
+                    return probability >= threshold
                 }
                 return false
             }
