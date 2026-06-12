@@ -47,6 +47,7 @@
 		1E5EFB632F147C4F0042A06E /* Exceptions for "CrateBot" folder in "CrateBot" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Info.plist,
 				App/AppState.swift,
 				App/CrateBotApp.swift,
 				App/UpdateManager.swift,

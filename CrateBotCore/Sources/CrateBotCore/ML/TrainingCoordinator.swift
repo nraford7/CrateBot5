@@ -301,6 +301,19 @@ public actor TrainingCoordinator {
         stateCallback: (@Sendable (State) async -> Void)? = nil
     ) async throws -> TrainingSummary {
         do {
+            // Configure feature augmentation based on training options
+            let defaultAug = AudioAugmenter.AugmentationConfig.default
+            await dataCollector.setAugmentationConfig(AudioAugmenter.AugmentationConfig(
+                featureNoiseEnabled: options.configuration.enableFeatureNoise,
+                featureNoiseScale: options.configuration.featureNoisePercent,
+                mixupEnabled: options.configuration.enableMixup,
+                mixupAlpha: options.configuration.mixupAlpha,
+                freqMaskCount: 0,
+                freqMaskWidth: defaultAug.freqMaskWidth,
+                timeMaskCount: 0,
+                timeMaskWidth: defaultAug.timeMaskWidth
+            ))
+
             // Phase 1: Collect training data
             _state = .collecting(progress: .zero)
             await stateCallback?(_state)
@@ -387,7 +400,8 @@ public actor TrainingCoordinator {
                 let compatibility = checkpointManager.isCheckpointCompatible(
                     checkpoint,
                     sourceDirectories: directories,
-                    currentTracks: collectionResult.tracks
+                    currentTracks: collectionResult.tracks,
+                    currentConfig: dataCollector.featureExtractionConfig
                 )
 
                 switch compatibility {
@@ -446,8 +460,12 @@ public actor TrainingCoordinator {
 
             logger.info("Extracting features for \(collectionResult.tracks.count) tracks\(resumedFromCheckpoint ? " (resumed from checkpoint)" : "")")
 
+            let concurrency = recommendedExtractionConcurrency()
+            logger.info("Feature extraction concurrency: \(concurrency)")
+
             let tracksWithFeatures = await dataCollector.extractFeatures(
                 for: tracksToProcess,
+                concurrency: concurrency,
                 modelName: options.modelName,
                 sourceDirectories: directories,
                 checkpointManager: checkpointManager
@@ -546,7 +564,10 @@ public actor TrainingCoordinator {
                     let result = try await modelTrainer.trainMultiClassModel(
                         data: trainingData,
                         outputDirectory: outputDirectory,
-                        validationSplit: options.configuration.validationSplit
+                        validationSplit: options.configuration.validationSplit,
+                        useLabelSmoothing: options.configuration.enableLabelSmoothing,
+                        smoothingFactor: options.configuration.labelSmoothingFactor,
+                        config: trainingConfig
                     )
                     multiClassResults.append(result)
 
@@ -819,5 +840,22 @@ public actor TrainingCoordinator {
                 perFeature: false
             )
         )
+    }
+
+    private func recommendedExtractionConcurrency() -> Int {
+        let processInfo = ProcessInfo.processInfo
+        let cores = max(2, processInfo.activeProcessorCount)
+        let physicalMemory = Double(processInfo.physicalMemory)
+
+        // Target 80% of physical memory with a moderately aggressive per-track estimate.
+        let targetMemory = physicalMemory * 0.8
+        let perTrackBytes = 32.0 * 1024.0 * 1024.0
+        let memoryCap = max(2, Int(targetMemory / perTrackBytes))
+
+        // Cap by cores and a safe upper bound to avoid UI starvation.
+        let coreCap = cores * 4
+        let hardCap = physicalMemory >= (64.0 * 1024.0 * 1024.0 * 1024.0) ? 96 : 48
+
+        return max(2, min(memoryCap, min(coreCap, hardCap)))
     }
 }

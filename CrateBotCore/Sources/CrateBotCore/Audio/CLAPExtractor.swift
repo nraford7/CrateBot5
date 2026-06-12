@@ -87,7 +87,11 @@ public actor CLAPExtractor {
     ///   - audioBuffer: Audio samples as Float array
     ///   - sampleRate: Sample rate of the input audio
     /// - Returns: 512-dimensional embedding vector
-    public func extract(from audioBuffer: [Float], sampleRate: Double) throws -> [Float] {
+    public func extract(
+        from audioBuffer: [Float],
+        sampleRate: Double,
+        augmentationConfig: AudioAugmenter.AugmentationConfig? = nil
+    ) throws -> [Float] {
         // Resample if needed
         let resampled: [Float]
         if abs(sampleRate - Self.targetSampleRate) > 1 {
@@ -98,6 +102,9 @@ public actor CLAPExtractor {
 
         // Generate mel spectrogram
         var melSpec = generateMelSpectrogram(from: resampled)
+        if let augmentationConfig = augmentationConfig {
+            melSpec = AudioAugmenter.applySpecAugment(to: melSpec, config: augmentationConfig)
+        }
 
         // Pad or truncate to fixed size
         melSpec = normalizeToFixedSize(melSpec, targetFrames: Self.targetFrames)

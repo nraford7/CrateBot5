@@ -115,30 +115,30 @@ struct StatusBar: View {
     }
 
     private func loadModelFromDialog() {
-        // Get models directory first (synchronously since ModelManager uses FileManager)
-        let modelsDir = try? ModelManager().modelsDirectory()
+        Task {
+            let modelsDir = try? await ModelManager().modelsDirectory()
+            let selectedURL: URL? = await MainActor.run {
+                let panel = NSOpenPanel()
+                panel.canChooseDirectories = true
+                panel.canChooseFiles = false
+                panel.allowsMultipleSelection = false
+                panel.message = "Select a trained model directory"
+                panel.prompt = "Load Model"
 
-        // Open file dialog pointing to models directory
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.message = "Select a trained model directory"
-        panel.prompt = "Load Model"
-
-        // Set starting directory to models folder
-        if let modelsDir = modelsDir {
-            panel.directoryURL = modelsDir
-        }
-
-        if panel.runModal() == .OK, let url = panel.url {
-            Task {
-                do {
-                    try await appState.loadModel(from: url)
-                    appState.showToast("Model '\(appState.modelName ?? "Unknown")' loaded")
-                } catch {
-                    appState.showToast("Failed to load model: \(error.localizedDescription)", kind: .error)
+                if let modelsDir = modelsDir {
+                    panel.directoryURL = modelsDir
                 }
+
+                return panel.runModal() == .OK ? panel.url : nil
+            }
+
+            guard let url = selectedURL else { return }
+
+            do {
+                try await appState.loadModel(from: url)
+                appState.showToast("Model '\(appState.modelName ?? "Unknown")' loaded")
+            } catch {
+                appState.showToast("Failed to load model: \(error.localizedDescription)", kind: .error)
             }
         }
     }

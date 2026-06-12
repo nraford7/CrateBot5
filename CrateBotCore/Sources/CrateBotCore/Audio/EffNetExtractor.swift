@@ -60,17 +60,31 @@ public final class EffNetExtractor: FeatureExtractor, @unchecked Sendable {
         throw EffNetError.modelNotFound
     }
 
-    public func extract(from buffer: AVAudioPCMBuffer) async throws -> [Float] {
-        let result = try await extractWithGenres(from: buffer)
+    public func extract(
+        from buffer: AVAudioPCMBuffer,
+        augmentationConfig: AudioAugmenter.AugmentationConfig? = nil
+    ) async throws -> [Float] {
+        let result = try await extractWithGenres(from: buffer, augmentationConfig: augmentationConfig)
         return result.embeddings
+    }
+
+    // Protocol requirement (no augmentation parameter)
+    public func extract(from buffer: AVAudioPCMBuffer) async throws -> [Float] {
+        try await extract(from: buffer, augmentationConfig: nil)
     }
 
     /// Extract both embeddings and genre activations
     /// - Parameter buffer: Audio buffer at 16kHz mono
     /// - Returns: Tuple of (1280-dim embeddings, 400-dim genre activations)
-    public func extractWithGenres(from buffer: AVAudioPCMBuffer) async throws -> (embeddings: [Float], genreActivations: [Float]) {
+    public func extractWithGenres(
+        from buffer: AVAudioPCMBuffer,
+        augmentationConfig: AudioAugmenter.AugmentationConfig? = nil
+    ) async throws -> (embeddings: [Float], genreActivations: [Float]) {
         // Generate mel spectrogram
-        let melSpec = try melGenerator.generate(from: buffer)
+        var melSpec = try melGenerator.generate(from: buffer)
+        if let augmentationConfig = augmentationConfig {
+            melSpec = AudioAugmenter.applySpecAugment(to: melSpec, config: augmentationConfig)
+        }
         let flatMelSpec = melGenerator.flatten(melSpec)
 
         // Create MLMultiArray input [1, 128, 96] = [batch, time_frames, mel_bands]
