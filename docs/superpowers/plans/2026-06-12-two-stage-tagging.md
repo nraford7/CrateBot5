@@ -59,7 +59,9 @@ public let windowFractions: [Double]
 public let clapWindowFractions: [Double]
 ```
 
-Update `init` (new params with defaults `15.0`, `[0.1, 0.3, 0.5, 0.7, 0.9]`, `[0.25, 0.5, 0.75]`) and `.default`. `configHash` already SHA256-encodes all Codable fields with sorted keys (line 34) — new fields invalidate the embedding cache automatically. **Do not add a separate version integer.** Keep `segmentDuration`/`segmentStartFractions` for now (removed in Task 1.3 when the training path stops using them — check then whether anything else references them; delete fully if not).
+Update `init` (new params with defaults `15.0`, `[0.1, 0.3, 0.5, 0.7, 0.9]`, `[0.25, 0.5, 0.75]`) and `.default`. `configHash` already SHA256-encodes all Codable fields with sorted keys (line 34) — new fields invalidate the embedding cache automatically. **Do not add a separate version integer for the cache.** Keep `segmentDuration`/`segmentStartFractions` for now (removed in Task 1.3 when the training path stops using them — check then whether anything else references them; delete fully if not).
+
+**Also in this task — model/feature compatibility (spec component 2, "reconcile with pipelineVersion"):** bump `TrainingCoordinator.currentPipelineVersion()` (~L750) so models trained on windowed features carry a new `ModelMetadata.pipelineVersion`. At model load, `TaggingEngine` must reject (or warn loudly on) a model whose `pipelineVersion` predates windowing — `ModelManager` already has an `incompatiblePipelineVersion` error case to reuse. Without this, an old single-window model silently loads against windowed features. Add a test: metadata with the old pipelineVersion → load refuses/warns.
 
 - [ ] **Step 4: Run, verify pass** — also run full suite: `swift test` (375 tests green)
 - [ ] **Step 5: Commit** — `feat: window fields on FeatureExtractionConfig (cache-invalidating)`
@@ -70,7 +72,7 @@ Update `init` (new params with defaults `15.0`, `[0.1, 0.3, 0.5, 0.7, 0.9]`, `[0
 - Modify: `CrateBotCore/Sources/CrateBotCore/Audio/CombinedFeatureExtractor.swift`
 - Test: `CrateBotCore/Tests/CrateBotCoreTests/Audio/CombinedFeatureExtractorWindowingTests.swift` (new)
 
-- [ ] **Step 1: Write failing tests** (synthetic buffers; see `TrainingPipeline40PercentTests.testCombinedFeatureExtractorWithSyntheticAudio` for the synthetic-audio helper pattern):
+- [ ] **Step 1: Write failing tests** (synthetic buffers; see `CrateBotCore/Tests/CrateBotCoreTests/Integration/TrainingPipeline40PercentTests.swift:30` (`testCombinedFeatureExtractorWithSyntheticAudio`) for the synthetic-audio helper pattern):
 
 ```swift
 func testSliceWindowsProducesRequestedCount() throws {
@@ -174,7 +176,10 @@ public func extractWindowed(
         }
     }
 
-    var combined = Self.meanPool(embeddingsPerWindow) + Self.meanPool(genresPerWindow)
+    var combined = Self.meanPool(embeddingsPerWindow)
+    if actualConfig != .effnetOnly {
+        combined += Self.meanPool(genresPerWindow)
+    }
 
     if let clap = clapExtractor {
         let clapWindows = Self.sliceWindows(
@@ -205,14 +210,15 @@ Note the block order must match the existing layout exactly: EffNet, Genres, CLA
 
 **Files:**
 - Modify: `CrateBotCore/Sources/CrateBotCore/ML/TrainingDataCollector.swift` (segment logic ~L791-829; reads `segmentStartFractions`)
-- Modify: `CrateBotCore/Sources/CrateBotCore/ML/TaggingEngine.swift` (single-buffer extraction ~L303-308 and the `analyze(url:)` path)
+- Modify: `CrateBotCore/Sources/CrateBotCore/ML/TaggingEngine.swift` (`analyze(url:)` extraction site ~L419-421)
 
-- [ ] **Step 1: Find every call site** — `grep -rn "segmentStartFractions\|loadAudioSegments\|extract(from:" CrateBotCore/Sources/`
-- [ ] **Step 2: TrainingDataCollector** replaces its three-segment loop with one `extractWindowed(from:config:augmentationConfig:)` call on the full buffer. Delete the dead segment helpers. The augmentation config still passes through (SpecAugment applies per window inside the extractor).
-- [ ] **Step 3: TaggingEngine** `analyze(url:)` and `analyze(buffer:)` call `extractWindowed` with the same `FeatureExtractionConfig` (inject it; default `.default`). Inference and training now share one code path.
-- [ ] **Step 4: Remove `segmentDuration`/`segmentStartFractions`** from `FeatureExtractionConfig` if nothing references them after steps 2-3 (this also changes `configHash` — fine, cache invalidates once, which we want anyway).
-- [ ] **Step 5: Run full suite; fix broken tests** — tests that asserted three-segment behavior should be rewritten against `extractWindowed`, not deleted.
-- [ ] **Step 6: Commit** — `feat: unify training and inference on windowed extraction path`
+- [ ] **Step 1: Behavioral pin first** — add a test asserting TrainingDataCollector produces exactly one feature vector per track with `featureDimension` length (pins the new contract before the refactor).
+- [ ] **Step 2: Find every call site** — `grep -rn "segmentStartFractions\|loadAudioSegments\|extract(from:" CrateBotCore/Sources/`
+- [ ] **Step 3: TrainingDataCollector** replaces its three-segment loop with one `extractWindowed(from:config:augmentationConfig:)` call on the full buffer. Delete the dead segment helpers. The augmentation config still passes through (SpecAugment applies per window inside the extractor).
+- [ ] **Step 4: TaggingEngine `analyze(url:)`** (extraction at ~L419-421, `extractor.extract(from: buffer)`) switches to `extractWindowed` with the same `FeatureExtractionConfig` (inject it; default `.default`). Inference and training now share one code path. **Leave `analyze(buffer:)` (L567-594) untouched:** it is a fallback-only path using a bare EffNetExtractor and returning `userPredictions: nil` by design — windowing it buys nothing and its semantics are out of scope.
+- [ ] **Step 5: Remove `segmentDuration`/`segmentStartFractions`** from `FeatureExtractionConfig` if nothing references them after steps 2-3 (this also changes `configHash` — fine, cache invalidates once, which we want anyway).
+- [ ] **Step 6: Run full suite; fix broken tests** — tests that asserted three-segment behavior should be rewritten against `extractWindowed`, not deleted.
+- [ ] **Step 7: Commit** — `feat: unify training and inference on windowed extraction path`
 
 ### Task 1.4: Dimension guard in accuracy_eval.py
 
@@ -283,7 +289,8 @@ public struct TagStageRegistry: Sendable {
 }
 ```
 
-- [ ] **Step 3: Run, PASS, commit** — `feat: TagStageRegistry maps categories to pipeline stages`
+- [ ] **Step 3: Verify the category assumption** — the spec describes a tag-level registry; this plan uses category-level mapping because tags arrive pre-categorized by ID3 field (TALB = Timing). Grep Noah's actual tag vocabulary (TrainingDataCollector TagDiscovery output or docs/TAXONOMY.md) to confirm every relational tag (incl. "Set Starter"-type tags) lives in the Timing category. If any relational tag lives elsewhere, add a per-tag override dictionary to the registry (tag → stage) consulted before the category mapping.
+- [ ] **Step 4: Run, PASS, commit** — `feat: TagStageRegistry maps categories to pipeline stages`
 
 ### Task 2.2: Category-complete filtering in BinaryTrainingDataGenerator
 
@@ -393,7 +400,7 @@ func testMissingBPMUsesSentinel() {
 - Test: `CrateBotCore/Tests/CrateBotCoreTests/ML/JudgmentDataGeneratorTests.swift` (new)
 
 - [ ] **Step 1: Failing tests** with mock classifier outputs (protocol-injected, no CoreML in unit tests): builds one row per track from cached features; targets filtered by category-complete rule (reuse Task 2.2 logic for Timing category); tracks with no cached features are skipped and counted.
-- [ ] **Step 2: Implement.** Inputs: `[TaggedTrack]` (with cached feature vectors), a `Stage1Predictor` protocol (`func confidences(features: [Float]) async throws -> (binary: [String: Float], groups: [String: [String: Float]])` — production impl wraps the loaded `TagClassifier`s + `MultiClassClassifier`s; BPM via `ID3Manager` TBPM read (~L158); duration from the audio file's `AVAudioFile.length / sampleRate` captured at collection time (add to `CachedFeatures` if absent — check `Models.swift`). Output: `(rows: [JudgmentRow], skipped: Int)` where `JudgmentRow = (features: JudgmentFeatureVector, labels: Set<String>, trackID: String)`.
+- [ ] **Step 2: Implement.** Inputs: `[TaggedTrack]` (with cached feature vectors), a `Stage1Predictor` protocol (`func confidences(features: [Float]) async throws -> (binary: [String: Float], groups: [String: [String: Float]])` — production impl wraps the loaded `TagClassifier`s + `MultiClassClassifier`s; BPM via `ID3Manager` TBPM read (~L158); duration from the audio file's `AVAudioFile.length / sampleRate` captured at collection time. If duration isn't cached, add it to `EmbeddingCache.CacheEntry` (`ML/EmbeddingCache.swift:11`, currently private Codable) — note this changes the cache file schema, which is acceptable because the configHash bump in Chunk 1 already invalidates the cache. Output: `(rows: [JudgmentRow], skipped: Int)` where `JudgmentRow = (features: JudgmentFeatureVector, labels: Set<String>, trackID: String)`.
 - [ ] **Step 3: PASS, commit** — `feat: JudgmentDataGenerator builds Stage 2 training rows`
 
 ### Task 3.3: Stage 2 training in ModelTrainer + two-phase TrainingCoordinator
@@ -401,12 +408,12 @@ func testMissingBPMUsesSentinel() {
 **Files:**
 - Modify: `CrateBotCore/Sources/CrateBotCore/ML/ModelTrainer.swift` (DataFrame builder ~L280-320 is the pattern to follow)
 - Modify: `CrateBotCore/Sources/CrateBotCore/ML/TrainingCoordinator.swift`
-- Modify: `CrateBotCore/Sources/CrateBotCore/ML/ModelMetadata.swift` (+`stage1ModelVersion: String?`, +`judgmentColumnNames: [String]?`)
+- Modify: `CrateBotCore/Sources/CrateBotCore/ML/ModelMetadata.swift` (+`stage1ModelVersion: String?`, +`judgmentColumnNames: [String]?`; update the stale `featureDimension` doc comment at :42 — "1280, 1680, or 2192" — to include 2960)
 - Modify: `CrateBotCore/Sources/CrateBotCore/ML/TrainingCheckpoint.swift` (+phase marker)
 - Test: extend `ModelTrainerTests` + `TrainingCoordinatorTests`
 
 - [ ] **Step 1: Failing tests** — coordinator runs Phase A then Phase B; checkpoint written after Phase A resumes into Phase B without retraining Stage 1; metadata records `stage1ModelVersion` and `judgmentColumnNames`; Stage 2 model files named `<tag>_judgment.mlmodel`.
-- [ ] **Step 2: Implement Stage 2 training**: per Timing tag, build an `MLDataTable` from `JudgmentRow`s (columns from `JudgmentFeatureVector.columnNames`, label column from category-complete-filtered targets), train `MLBoostedTreeClassifier` with the existing config (`TrainingConfig.swift:41-46` defaults are fine for ~60 dims — do NOT copy the augmentation path; no mixup/noise on judgment features).
+- [ ] **Step 2: Implement Stage 2 training**: per Timing tag, build an `MLDataTable` from `JudgmentRow`s (columns from `JudgmentFeatureVector.columnNames`, label column from category-complete-filtered targets), train `MLBoostedTreeClassifier` with the existing config (`TrainingConfig` is defined in `ModelTrainer.swift:7`, tree hyperparameters at ~L40-48 — NOT `TrainingConfiguration.swift`, a different type; defaults are fine for ~60 dims — do NOT copy the augmentation path; no mixup/noise on judgment features).
 - [ ] **Step 3: Implement Phase B in TrainingCoordinator**: after Phase A completes, load the just-trained Stage 1 models, run `JudgmentDataGenerator` over the library (cached features only — no audio re-extraction), train Stage 2, write paired metadata. Checkpoint gains `case phaseACompleted` so a crash resumes into Phase B. **Pairing enforcement:** Phase B refuses to run against a Stage 1 version other than the one in the checkpoint.
 - [ ] **Step 4: Run full suite; commit** — `feat: two-phase training — Stage 2 judgment models paired to Stage 1`
 
