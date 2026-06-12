@@ -34,10 +34,20 @@ STAGE 1 — PERCEPTION
         → calibration → Stage 1 per-tag thresholds
 
 STAGE 2 — JUDGMENT
-  input: Stage 1 tag confidences (~50 floats) + BPM, key, duration, energy
+  input: Stage 1 binary tag confidences + multi-class group probabilities
+         (BassType, VocalType) + BPM + duration
   one BoostedTree per relational tag (Peak, Build, Start, Release, Set Starter, …)
   → Stage 2 per-tag thresholds → final tags
 ```
+
+**Stage 2 input vector, precisely:** every Stage 1 binary confidence, every
+multi-class group class probability, BPM (from ID3 TBPM via ID3Manager; sentinel
+-1.0 when absent — BoostedTrees split on it natively), and track duration in
+seconds (from the audio file, always available). Musical key and a scalar
+"energy" are deliberately excluded: neither exists in the codebase (no TKEY
+reading, no track-level energy), and energy is already expressed through Stage 1
+confidences (Driving, Aggressive, mood tags). No new feature extraction is
+invented for Stage 2.
 
 Stage 2 is a learned model of the user's judgment function: 2,500 tracks of his
 historical ID3 decisions, predicted from perceptible track properties. It is small
@@ -66,9 +76,12 @@ coordinator, and TaggingEngine.
 - **Symmetry rule:** training and inference call the identical windowing path.
   The training-only multi-segment logic in TrainingDataCollector is replaced by
   this single code path.
-- **Cache versioning:** bump `FeatureExtractionConfig` pipeline version and add
-  `windowCount` to the cache key. Stale single-window entries must never mix with
-  windowed ones (this failure mode has occurred twice before — see
+- **Cache versioning:** add window fields (`windowCount`, window fractions) to
+  `FeatureExtractionConfig` — its existing `configHash` (SHA256 of config fields,
+  FeatureExtractionConfig.swift:34) then invalidates the cache automatically; no
+  separate version integer. Reconcile with `ModelMetadata.pipelineVersion` /
+  `TrainingCoordinator.currentPipelineVersion()`. Stale single-window entries must
+  never mix with windowed ones (this failure mode has occurred twice before — see
   docs/plans/2026-01-29-training-pipeline-fixes.md and 2026-04-11-ml-pipeline-fix.md).
 - Full re-extraction of ~2,250 tracks at ~5x cost is absorbed by the already-pending
   MAEST retrain (one overnight run covers both).
@@ -76,8 +89,14 @@ coordinator, and TaggingEngine.
 ### 3. Category-complete label filtering (modify BinaryTrainingDataGenerator)
 
 A track is a valid negative for tag T only if the user applied at least one tag in
-T's category to that track (proof the category was considered). Tracks with no tags
-in the category are excluded for that tag — unknown, not negative. Applies to both
+T's **top-level category** (Genre, Timing, Mood, Descriptive — the four categories
+in TrainingCoordinator) to that track, proof the category was considered. Tracks
+with no tags in that category are excluded for that tag — unknown, not negative.
+Granularity is deliberately top-category, not descriptive sub-category: sub-category
+filtering (e.g. only instrument-tagged tracks count as instrument negatives) would
+shrink trusted negatives below trainable counts for most descriptive tags. If
+instrument tags evaluate poorly under the top-category rule, tightening to
+sub-category granularity is a one-line change in the filter, flagged as a known lever. Applies to both
 Stage 1 and Stage 2 training. The generator logs per-tag counts (positives / trusted
 negatives / excluded) and reports tags too thin to train rather than silently
 skipping them (fixes the silent-skip behavior in the multi-class path).
@@ -97,6 +116,15 @@ Stage 2 is trained on Stage 1's actual prediction distribution, so retraining
 Stage 1 invalidates Stage 2 — the coordinator enforces that both are retrained
 together and ModelMetadata records the Stage 1 model version Stage 2 was paired with.
 
+**Known tradeoff — in-sample confidences:** Phase B computes Stage 1 confidences on
+tracks Stage 1 trained on, which run hotter than what unseen tracks produce at
+inference. The clean fix (out-of-fold predictions) means training Stage 1 k times —
+unacceptable cost for v1. Accepted mitigations: Stage 2 per-tag thresholds are tuned
+on the held-out 20% (where Stage 1 confidences are honest), and the eval reports
+Stage 2 F1 on that same holdout, so the optimism is measured rather than hidden.
+Out-of-fold generation is a named phase-2 option if Stage 2 holdout F1 lags badly
+behind its training F1.
+
 ### 6. Inference rewire (modify TaggingEngine)
 
 ```
@@ -108,7 +136,7 @@ windowed extract → Stage 1 → calibrate → Stage 1 thresholds
 Cleanups folded in:
 - Per-tag thresholds are tuned on **final pipeline scores** (post-calibration),
   ending the raw-vs-calibrated mismatch. Defaults until tuned: genres 0.7,
-  descriptive 0.55 (replacing the global 0.85).
+  moods 0.55, descriptive 0.55 (replacing the global 0.85).
 - `TagCooccurrenceBooster` retires for relational tags (Stage 2 subsumes it);
   remains available for Stage 1 only, off by default pending eval.
 - Zero-shot CLAP fires only for tags with no trained classifier.
