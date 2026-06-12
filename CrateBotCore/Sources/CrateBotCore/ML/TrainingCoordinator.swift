@@ -173,6 +173,9 @@ public actor TrainingCoordinator {
         public enum SkipReason: Sendable {
             case insufficientSamples(required: Int)
             case trainingFailed(error: String)
+            /// Category-complete filtering left no trusted negatives:
+            /// every candidate negative was unknown for the tag's category
+            case noTrustedNegatives
 
             public var description: String {
                 switch self {
@@ -180,6 +183,8 @@ public actor TrainingCoordinator {
                     return "Needs \(required)+ samples"
                 case .trainingFailed(let error):
                     return "Training failed: \(error)"
+                case .noTrustedNegatives:
+                    return "No trusted negatives in category"
                 }
             }
         }
@@ -427,7 +432,8 @@ public actor TrainingCoordinator {
                             let updatedTrack = TaggedTrack(
                                 id: track.id,
                                 tags: track.tags,  // Use current tags, not checkpoint tags
-                                features: features
+                                features: features,
+                                tagsByCategory: track.tagsByCategory  // Current categories too
                             )
                             tracksWithCheckpointFeatures.append(updatedTrack)
                         } else {
@@ -602,12 +608,15 @@ public actor TrainingCoordinator {
 
             logger.info("Training \(binaryTags.count) binary classifiers (after filtering \(viableTags.count - binaryTags.count) grouped tags)")
 
-            // Phase 4c: Train binary classifiers for remaining tags
-            let trainingResults = try await modelTrainer.trainModels(
+            // Phase 4c: Train binary classifiers for remaining tags.
+            // Pass the category breakdown so negatives are restricted to tracks
+            // assessed for the tag's category (absence elsewhere = unknown).
+            let (trainingResults, skippedDuringTraining) = try await modelTrainer.trainModelsWithReport(
                 from: validTracks,
                 tags: binaryTags,
                 outputDirectory: outputDirectory,
-                config: trainingConfig
+                config: trainingConfig,
+                categorizedTags: options.tagsByCategory
             ) { [weak self] progress in
                 guard let self = self else { return }
                 // Adjust progress to account for multi-class training phase
@@ -618,6 +627,26 @@ public actor TrainingCoordinator {
                     currentTag: progress.currentTag
                 ))
                 await stateCallback?(await self.state)
+            }
+
+            // Surface tags the trainer could not build a training set for
+            // (insufficient positives or no trusted negatives) — never silent
+            for skipped in skippedDuringTraining {
+                switch skipped.reason {
+                case .insufficientPositives(let found, let required):
+                    skippedTagDetails.append(SkippedTag(
+                        tag: skipped.tag,
+                        reason: .insufficientSamples(required: required),
+                        sampleCount: found
+                    ))
+                case .noTrustedNegatives:
+                    skippedTagDetails.append(SkippedTag(
+                        tag: skipped.tag,
+                        reason: .noTrustedNegatives,
+                        sampleCount: 0
+                    ))
+                }
+                logger.warning("Tag '\(skipped.tag)' produced no training set: \(skipped.reason.description)")
             }
 
             // Check that we have at least some trained models (either multi-class or binary)

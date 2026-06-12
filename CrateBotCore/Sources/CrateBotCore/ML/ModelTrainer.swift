@@ -114,6 +114,34 @@ public struct TrainingResult: Sendable {
     }
 }
 
+/// A tag that produced no viable training set (BinaryTrainingDataGenerator returned nil)
+public struct SkippedTrainingTag: Sendable {
+    public enum Reason: Sendable, Equatable {
+        /// Fewer positive examples than the configured minimum
+        case insufficientPositives(found: Int, required: Int)
+        /// Enough positives, but no trusted negatives remained after
+        /// category-complete filtering excluded the unknowns
+        case noTrustedNegatives
+
+        public var description: String {
+            switch self {
+            case .insufficientPositives(let found, let required):
+                return "\(found) positive samples, \(required) required"
+            case .noTrustedNegatives:
+                return "No trusted negatives in category (all candidates unknown)"
+            }
+        }
+    }
+
+    public let tag: String
+    public let reason: Reason
+
+    public init(tag: String, reason: Reason) {
+        self.tag = tag
+        self.reason = reason
+    }
+}
+
 /// Progress information during training
 public struct TrainingProgress: Sendable {
     /// Current phase of training
@@ -207,6 +235,10 @@ public actor ModelTrainer {
     ///   - tags: Tags to train classifiers for
     ///   - outputDirectory: Directory to save trained models
     ///   - config: Training configuration
+    ///   - categorizedTags: Tags organized by top-level category (Genre, Timing,
+    ///     Mood, Descriptive). Enables category-complete negative filtering:
+    ///     tracks with no tags in a tag's category are excluded as unknown rather
+    ///     than used as negatives. Empty dictionary disables filtering.
     ///   - progress: Optional progress callback
     /// - Returns: Array of training results for successfully trained models
     public func trainModels(
@@ -214,13 +246,38 @@ public actor ModelTrainer {
         tags: [String],
         outputDirectory: URL,
         config: TrainingConfig = TrainingConfig(),
+        categorizedTags: [String: Set<String>] = [:],
         progress: ((TrainingProgress) async -> Void)? = nil
     ) async throws -> [TrainingResult] {
-        // Create data generator with config values
-        let dataGenerator = BinaryTrainingDataGenerator(
-            minPositiveExamples: config.minSamplesPerTag,
-            maxNegativeRatio: config.maxNegativeRatio
-        )
+        try await trainModelsWithReport(
+            from: tracks,
+            tags: tags,
+            outputDirectory: outputDirectory,
+            config: config,
+            categorizedTags: categorizedTags,
+            progress: progress
+        ).results
+    }
+
+    /// Train binary classifiers and also report tags that produced no viable
+    /// training set, so callers can surface them instead of silently skipping.
+    /// See trainModels(from:tags:outputDirectory:config:categorizedTags:progress:)
+    /// for parameter details.
+    public func trainModelsWithReport(
+        from tracks: [TaggedTrack],
+        tags: [String],
+        outputDirectory: URL,
+        config: TrainingConfig = TrainingConfig(),
+        categorizedTags: [String: Set<String>] = [:],
+        progress: ((TrainingProgress) async -> Void)? = nil
+    ) async throws -> (results: [TrainingResult], skippedTags: [SkippedTrainingTag]) {
+        // Build tag -> category lookup (lowercased, matching coordinator metadata grouping)
+        var tagToCategory: [String: String] = [:]
+        for (category, categoryTags) in categorizedTags {
+            for categoryTag in categoryTags {
+                tagToCategory[categoryTag.lowercased()] = category
+            }
+        }
 
         // Filter tracks that have features (using safe unwrapping)
         let tracksWithFeatures = tracks.compactMap { track -> TaggedTrack? in
@@ -240,6 +297,7 @@ public actor ModelTrainer {
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
         var results: [TrainingResult] = []
+        var skippedTags: [SkippedTrainingTag] = []
 
         for (index, tag) in tags.enumerated() {
             // Report preparing phase
@@ -250,17 +308,31 @@ public actor ModelTrainer {
                 totalTags: tags.count
             ))
 
-            // Generate balanced training data using current config
+            // Generate balanced training data using current config,
+            // with category-complete negative filtering when the tag's
+            // category is known
             let generator = BinaryTrainingDataGenerator(
                 minPositiveExamples: config.minSamplesPerTag,
                 maxNegativeRatio: config.maxNegativeRatio
             )
-            guard let (positive, negative) = generator.generateTrainingData(for: tag, from: tracksWithFeatures) else {
-                logger.info("Skipping tag '\(tag)': insufficient data")
+            let category = tagToCategory[tag.lowercased()]
+            guard let trainingData = generator.generateTrainingData(
+                for: tag,
+                category: category,
+                from: tracksWithFeatures
+            ) else {
+                let positiveCount = tracksWithFeatures.filter { $0.tags.contains(tag) }.count
+                let reason: SkippedTrainingTag.Reason = positiveCount < config.minSamplesPerTag
+                    ? .insufficientPositives(found: positiveCount, required: config.minSamplesPerTag)
+                    : .noTrustedNegatives
+                skippedTags.append(SkippedTrainingTag(tag: tag, reason: reason))
+                logger.info("Skipping tag '\(tag)': \(reason.description)")
                 continue
             }
+            let positive = trainingData.positive
+            let negative = trainingData.negative
 
-            logger.info("Training '\(tag)' with \(positive.count) positive, \(negative.count) negative samples")
+            logger.info("\(tag): \(positive.count) positive / \(negative.count) trusted negative / \(trainingData.excludedCount) excluded-unknown")
 
             // Log contrastive loss diagnostic before training
             let allSamples: [(features: [Float], label: String)] =
@@ -370,7 +442,7 @@ public actor ModelTrainer {
             totalTags: tags.count
         ))
 
-        return results
+        return (results, skippedTags)
     }
 
     /// Prepare a DataFrame from tracks for training

@@ -6,16 +6,49 @@ public struct TaggedTrack: Identifiable, Sendable {
     public let tags: Set<String>
     public let features: [Float]?
 
-    public init(id: String, tags: Set<String>, features: [Float]? = nil) {
+    /// Tags grouped by their top-level category ("Genre", "Timing", "Mood", "Descriptive").
+    /// Drives category-complete negative filtering: a track with no tags in a category
+    /// is "unknown" for that category's tags, not a trusted negative.
+    public let tagsByCategory: [String: Set<String>]
+
+    public init(
+        id: String,
+        tags: Set<String>,
+        features: [Float]? = nil,
+        tagsByCategory: [String: Set<String>] = [:]
+    ) {
         self.id = id
         self.tags = tags
         self.features = features
+        self.tagsByCategory = tagsByCategory
     }
 
-    public init(id: String, tags: [String], features: [Float]? = nil) {
+    public init(
+        id: String,
+        tags: [String],
+        features: [Float]? = nil,
+        tagsByCategory: [String: Set<String>] = [:]
+    ) {
         self.id = id
         self.tags = Set(tags)
         self.features = features
+        self.tagsByCategory = tagsByCategory
+    }
+}
+
+/// Result of generating training data for a single tag
+public struct TrainingDataResult: Sendable {
+    public let positive: [TaggedTrack]
+    public let negative: [TaggedTrack]
+    /// Unknowns: tracks with no tags in the target tag's category.
+    /// They are excluded from negatives because tag absence there means
+    /// "never assessed", not "voted no".
+    public let excludedCount: Int
+
+    public init(positive: [TaggedTrack], negative: [TaggedTrack], excludedCount: Int) {
+        self.positive = positive
+        self.negative = negative
+        self.excludedCount = excludedCount
     }
 }
 
@@ -32,29 +65,61 @@ public struct BinaryTrainingDataGenerator: Sendable {
         self.maxNegativeRatio = maxNegativeRatio
     }
 
-    /// Generate balanced positive/negative training sets for a specific tag
+    /// Generate balanced positive/negative training sets for a specific tag,
+    /// applying the category-complete rule when a category is given:
+    /// only tracks with at least one tag in the target tag's top-level category
+    /// are eligible negatives. Tracks with no tags in that category are excluded
+    /// as unknown (absence = never assessed, not "voted no").
+    ///
+    /// - Parameters:
+    ///   - tagName: The tag to build a training set for.
+    ///   - category: The tag's top-level category (e.g. "Timing"). Pass nil to
+    ///     treat every non-positive track as a negative (legacy behavior).
+    ///   - tracks: Candidate tracks.
+    /// - Returns: The training data, or nil when positives are insufficient or
+    ///   no trusted negatives remain.
     public func generateTrainingData(
         for tagName: String,
+        category: String?,
         from tracks: [TaggedTrack]
-    ) -> (positive: [TaggedTrack], negative: [TaggedTrack])? {
+    ) -> TrainingDataResult? {
         let positive = tracks.filter { $0.tags.contains(tagName) }
-        let negative = tracks.filter { !$0.tags.contains(tagName) }
-
-        // Skip tags with insufficient positive data
-        guard positive.count >= minPositiveExamples else {
-            return nil
+        let eligible: [TaggedTrack]
+        let excluded: Int
+        if let category = category {
+            let considered = tracks.filter { !($0.tagsByCategory[category] ?? []).isEmpty }
+            eligible = considered.filter { !$0.tags.contains(tagName) }
+            excluded = tracks.count - considered.count
+        } else {
+            eligible = tracks.filter { !$0.tags.contains(tagName) }
+            excluded = 0
         }
 
-        // Skip tags with no negative samples (can't train binary classifier with single class)
-        guard !negative.isEmpty else {
+        // Skip tags with insufficient positive data, and tags with no trusted
+        // negatives (can't train a binary classifier with a single class)
+        guard positive.count >= minPositiveExamples, !eligible.isEmpty else {
             return nil
         }
 
         // Balance negative samples to avoid overwhelming positives
         let maxNegatives = Int(Double(positive.count) * maxNegativeRatio)
-        let balancedNegative = Array(negative.shuffled().prefix(maxNegatives))
+        return TrainingDataResult(
+            positive: positive,
+            negative: Array(eligible.shuffled().prefix(maxNegatives)),
+            excludedCount: excluded
+        )
+    }
 
-        return (positive, balancedNegative)
+    /// Generate balanced positive/negative training sets for a specific tag
+    @available(*, deprecated, message: "Use generateTrainingData(for:category:from:) for category-complete negative filtering")
+    public func generateTrainingData(
+        for tagName: String,
+        from tracks: [TaggedTrack]
+    ) -> (positive: [TaggedTrack], negative: [TaggedTrack])? {
+        guard let result = generateTrainingData(for: tagName, category: nil, from: tracks) else {
+            return nil
+        }
+        return (result.positive, result.negative)
     }
 
     /// Get all viable tags (those with sufficient positive examples)

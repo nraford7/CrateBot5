@@ -324,7 +324,7 @@ public actor TrainingDataCollector {
 
             do {
                 let extractedTags = try await id3Manager.readTags(from: fileURL)
-                let tagSet = convertToTagSet(extractedTags, mapping: mapping)
+                let (tagSet, tagsByCategory) = convertToTags(extractedTags, mapping: mapping)
 
                 // Skip files with no tags
                 guard !tagSet.isEmpty else { continue }
@@ -332,7 +332,8 @@ public actor TrainingDataCollector {
                 let track = TaggedTrack(
                     id: fileURL.path,
                     tags: tagSet,
-                    features: nil
+                    features: nil,
+                    tagsByCategory: tagsByCategory
                 )
                 tracks.append(track)
             } catch {
@@ -744,7 +745,7 @@ public actor TrainingDataCollector {
                     addNoise: self.augmentationConfig.featureNoiseEnabled,
                     noiseScale: self.augmentationConfig.featureNoiseScale
                 )
-                let updatedTrack = TaggedTrack(id: track.id, tags: track.tags, features: augmentedCached)
+                let updatedTrack = TaggedTrack(id: track.id, tags: track.tags, features: augmentedCached, tagsByCategory: track.tagsByCategory)
                 cachedTracks.append(updatedTrack)
             } else {
                 uncachedTracks.append(track)
@@ -872,7 +873,7 @@ public actor TrainingDataCollector {
                         addNoise: augConfig.featureNoiseEnabled,
                         noiseScale: augConfig.featureNoiseScale
                     )
-                    let updatedTrack = TaggedTrack(id: track.id, tags: track.tags, features: augmentedFeatures)
+                    let updatedTrack = TaggedTrack(id: track.id, tags: track.tags, features: augmentedFeatures, tagsByCategory: track.tagsByCategory)
                     extractedTracks.append(updatedTrack)
                 } else {
                     // Failed to extract features - keep track without features
@@ -989,31 +990,48 @@ public actor TrainingDataCollector {
         return mp3Files
     }
 
-    /// Converts ExtractedTags to a Set<String> for TaggedTrack using the configured field mapping.
+    /// Converts ExtractedTags to tags for TaggedTrack using the configured field mapping.
+    ///
+    /// Each ID3 field maps to one top-level category (genre/TCON, timing/TALB,
+    /// mood/TIT1, descriptive/COMM by default), so the per-category breakdown is
+    /// known here and recorded for category-complete negative filtering.
     ///
     /// - Parameters:
     ///   - tags: The extracted ID3 tags from the file.
     ///   - mapping: Configuration for which ID3 fields map to which training categories.
-    /// - Returns: A set of tag strings to use for training.
-    private func convertToTagSet(_ tags: ExtractedTags, mapping: TagFieldMapping) -> Set<String> {
+    /// - Returns: The full tag set plus the same tags grouped by category.
+    private func convertToTags(
+        _ tags: ExtractedTags,
+        mapping: TagFieldMapping
+    ) -> (all: Set<String>, byCategory: [String: Set<String>]) {
         var tagSet = Set<String>()
+        var byCategory: [String: Set<String>] = [:]
 
         // Add genre from mapped field (single value)
         if let value = getFieldValue(tags, field: mapping.genreField), !value.isEmpty {
             let normalized = TagNormalizer.normalize(value)
-            if !normalized.isEmpty { tagSet.insert(normalized) }
+            if !normalized.isEmpty {
+                tagSet.insert(normalized)
+                byCategory["Genre", default: []].insert(normalized)
+            }
         }
 
         // Add timing from mapped field (single value)
         if let value = getFieldValue(tags, field: mapping.timingField), !value.isEmpty {
             let normalizedTiming = TagNormalizer.normalize(value)
-            if !normalizedTiming.isEmpty { tagSet.insert(normalizedTiming) }
+            if !normalizedTiming.isEmpty {
+                tagSet.insert(normalizedTiming)
+                byCategory["Timing", default: []].insert(normalizedTiming)
+            }
         }
 
         // Add mood from mapped field (single value)
         if let value = getFieldValue(tags, field: mapping.moodField), !value.isEmpty {
             let normalizedMood = TagNormalizer.normalize(value)
-            if !normalizedMood.isEmpty { tagSet.insert(normalizedMood) }
+            if !normalizedMood.isEmpty {
+                tagSet.insert(normalizedMood)
+                byCategory["Mood", default: []].insert(normalizedMood)
+            }
         }
 
         // Add descriptive tags from mapped field (comma-separated values)
@@ -1024,9 +1042,10 @@ public actor TrainingDataCollector {
             }
             for tag in individualTags where !tag.isEmpty {
                 tagSet.insert(tag)
+                byCategory["Descriptive", default: []].insert(tag)
             }
         }
 
-        return tagSet
+        return (tagSet, byCategory)
     }
 }

@@ -54,6 +54,52 @@ final class BinaryTrainingDataGeneratorTests: XCTestCase {
         XCTAssertEqual(result?.negative.count, 30)  // 15 * 2.0 ratio
     }
 
+    // MARK: - Category-Complete Negative Filtering
+
+    func testTrackWithoutCategoryTagsIsExcludedFromNegatives() {
+        let tagged   = TaggedTrack(id: "a", tags: ["Peak"], features: nil,
+                                   tagsByCategory: ["Timing": ["Peak"]])
+        let votedNo  = TaggedTrack(id: "b", tags: ["Build"], features: nil,
+                                   tagsByCategory: ["Timing": ["Build"]])
+        let untagged = TaggedTrack(id: "c", tags: ["House"], features: nil,
+                                   tagsByCategory: ["Genre": ["House"]])
+        let gen = BinaryTrainingDataGenerator(minPositiveExamples: 1)
+        let result = gen.generateTrainingData(
+            for: "Peak", category: "Timing",
+            from: [tagged, votedNo, untagged])!
+        XCTAssertEqual(result.positive.map(\.id), ["a"])
+        XCTAssertEqual(result.negative.map(\.id), ["b"])     // c excluded: unknown, not negative
+        XCTAssertEqual(result.excludedCount, 1)
+    }
+
+    func testNilCategoryKeepsOldBehaviorWithZeroExcluded() {
+        let tracks = [
+            TaggedTrack(id: "a", tags: ["Peak"], features: nil,
+                        tagsByCategory: ["Timing": ["Peak"]]),
+            TaggedTrack(id: "b", tags: ["Build"], features: nil,
+                        tagsByCategory: ["Timing": ["Build"]]),
+            TaggedTrack(id: "c", tags: ["House"], features: nil,
+                        tagsByCategory: ["Genre": ["House"]]),
+        ]
+        let gen = BinaryTrainingDataGenerator(minPositiveExamples: 1, maxNegativeRatio: 2.0)
+        let result = gen.generateTrainingData(for: "Peak", category: nil, from: tracks)!
+        XCTAssertEqual(result.positive.map(\.id), ["a"])
+        XCTAssertEqual(Set(result.negative.map(\.id)), ["b", "c"])  // no filtering without category
+        XCTAssertEqual(result.excludedCount, 0)
+    }
+
+    func testCategoryFilteringReturnsNilWhenAllNegativesAreUnknown() {
+        let tracks = [
+            TaggedTrack(id: "a", tags: ["Peak"], features: nil,
+                        tagsByCategory: ["Timing": ["Peak"]]),
+            TaggedTrack(id: "c", tags: ["House"], features: nil,
+                        tagsByCategory: ["Genre": ["House"]]),
+        ]
+        let gen = BinaryTrainingDataGenerator(minPositiveExamples: 1)
+        // Only "unknown" tracks remain as candidate negatives -> cannot train
+        XCTAssertNil(gen.generateTrainingData(for: "Peak", category: "Timing", from: tracks))
+    }
+
     func testGeneratorWithDefaultMinSamplesRejectsSmallDataset() {
         let generator = BinaryTrainingDataGenerator()
 
