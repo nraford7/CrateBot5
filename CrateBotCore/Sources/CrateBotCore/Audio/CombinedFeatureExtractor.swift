@@ -161,6 +161,116 @@ public actor CombinedFeatureExtractor {
         }
     }
 
+    // MARK: - Windowed Extraction
+
+    /// Slice a buffer into windows at the given start fractions.
+    /// Windows are clamped to the buffer; starts closer than duration/2 to a
+    /// previous window are dropped (short-track collapse). Always returns >= 1 window.
+    static func sliceWindows(
+        buffer: AVAudioPCMBuffer, fractions: [Double], duration: Double
+    ) -> [AVAudioPCMBuffer] {
+        let sampleRate = buffer.format.sampleRate
+        let totalFrames = Int(buffer.frameLength)
+        let windowFrames = min(Int(duration * sampleRate), totalFrames)
+        guard windowFrames > 0 else { return [buffer] }
+
+        var startFrames: [Int] = []
+        let minGap = windowFrames / 2
+        for fraction in fractions {
+            let start = min(Int(Double(totalFrames) * fraction), totalFrames - windowFrames)
+            let clamped = max(0, start)
+            if let last = startFrames.last, clamped - last < minGap { continue }
+            startFrames.append(clamped)
+        }
+        if startFrames.isEmpty { startFrames = [0] }
+
+        return startFrames.compactMap { start in
+            copySlice(of: buffer, fromFrame: start, frameCount: windowFrames)
+        }
+    }
+
+    /// Element-wise mean of equal-length vectors. Vectors whose length differs
+    /// from the first are skipped (defensive; should not happen in practice).
+    static func meanPool(_ vectors: [[Float]]) -> [Float] {
+        guard let first = vectors.first else { return [] }
+        var sum = [Float](repeating: 0, count: first.count)
+        for v in vectors where v.count == first.count {
+            for i in 0..<v.count { sum[i] += v[i] }
+        }
+        let n = Float(vectors.count)
+        return sum.map { $0 / n }
+    }
+
+    /// Copy a frame range from a buffer into a new buffer of the same format.
+    private static func copySlice(
+        of buffer: AVAudioPCMBuffer, fromFrame start: Int, frameCount: Int
+    ) -> AVAudioPCMBuffer? {
+        guard let sourceData = buffer.floatChannelData,
+              let slice = AVAudioPCMBuffer(
+                pcmFormat: buffer.format, frameCapacity: AVAudioFrameCount(frameCount)),
+              let sliceData = slice.floatChannelData else {
+            return nil
+        }
+        slice.frameLength = AVAudioFrameCount(frameCount)
+        let channelCount = Int(buffer.format.channelCount)
+        for channel in 0..<channelCount {
+            memcpy(sliceData[channel], sourceData[channel] + start,
+                   frameCount * MemoryLayout<Float>.size)
+        }
+        return slice
+    }
+
+    /// Extract features from multiple windows across the track and mean-pool
+    /// per extractor block, preserving the block order of `extract`:
+    /// EffNet(1280) → Genres(400) → CLAP(512) → MAEST(768).
+    /// CLAP uses its own (fewer) window fractions from the config.
+    public func extractWindowed(
+        from buffer: AVAudioPCMBuffer,
+        config: FeatureExtractionConfig,
+        augmentationConfig: AudioAugmenter.AugmentationConfig? = nil
+    ) async throws -> [Float] {
+        let windows = Self.sliceWindows(
+            buffer: buffer, fractions: config.windowFractions, duration: config.windowDuration)
+
+        var embeddingsPerWindow: [[Float]] = []
+        var genresPerWindow: [[Float]] = []
+        var maestPerWindow: [[Float]] = []
+
+        for window in windows {
+            let (emb, gen) = try await effnetExtractor.extractWithGenres(
+                from: window, augmentationConfig: augmentationConfig)
+            embeddingsPerWindow.append(emb)
+            genresPerWindow.append(gen)
+            if let maest = maestExtractor {
+                maestPerWindow.append(try await maest.extract(
+                    from: window, augmentationConfig: augmentationConfig))
+            }
+        }
+
+        var combined = Self.meanPool(embeddingsPerWindow)
+        if actualConfig != .effnetOnly {
+            combined += Self.meanPool(genresPerWindow)
+        }
+
+        if let clap = clapExtractor {
+            let clapWindows = Self.sliceWindows(
+                buffer: buffer, fractions: config.clapWindowFractions, duration: config.windowDuration)
+            var clapPerWindow: [[Float]] = []
+            for window in clapWindows {
+                let samples = extractFloatSamples(from: window)
+                clapPerWindow.append(try await clap.extract(
+                    from: samples, sampleRate: Double(window.format.sampleRate),
+                    augmentationConfig: augmentationConfig))
+            }
+            combined += Self.meanPool(clapPerWindow)
+        }
+
+        if !maestPerWindow.isEmpty {
+            combined += Self.meanPool(maestPerWindow)
+        }
+        return combined
+    }
+
     /// Extract combined features from a raw audio buffer
     /// - Parameters:
     ///   - audioBuffer: Audio samples as Float array
