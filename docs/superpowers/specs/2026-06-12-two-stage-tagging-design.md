@@ -56,7 +56,7 @@ every prediction is inspectable ("Peak because Driving 0.91 + Dark 0.84 + 132 BP
 
 ## Components
 
-### 1. TagStageRegistry (new, Sources/CrateBotCore/ML/)
+### 1. TagStageRegistry (new, CrateBotCore/Sources/CrateBotCore/ML/)
 
 Single config mapping every tag to a stage. Genre, Mood, and all Descriptive
 sub-categories → Stage 1. Timing and set-role tags → Stage 2. One place to move a
@@ -103,9 +103,10 @@ skipping them (fixes the silent-skip behavior in the multi-class path).
 
 ### 4. JudgmentDataGenerator (new)
 
-Builds Stage 2 training rows: one per track — Stage 1 confidences (computed from
-cached embeddings, no re-extraction) + BPM, key, duration, energy; targets are the
-user's ID3 relational tags, filtered by the category-complete rule.
+Builds Stage 2 training rows: one per track — Stage 1 binary confidences +
+multi-class group probabilities (computed from cached embeddings, no re-extraction)
++ BPM (sentinel -1.0 when absent) + duration; targets are the user's ID3 relational
+tags, filtered by the category-complete rule.
 
 ### 5. Two-phase training (modify TrainingCoordinator, ModelTrainer, TrainingCheckpoint)
 
