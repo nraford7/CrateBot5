@@ -803,7 +803,7 @@ public actor TrainingDataCollector {
                             // One windowed extraction over the full track — same
                             // code path as inference (mean-pooled multi-window).
                             // SpecAugment applies per window inside the extractor.
-                            let features = try await extractor.extractWindowed(
+                            var features = try await extractor.extractWindowed(
                                 from: buffer,
                                 config: extractionConfig,
                                 augmentationConfig: augConfig
@@ -815,14 +815,34 @@ public actor TrainingDataCollector {
                                 return (globalIndex, track, nil)
                             }
 
-                            // Validate no NaN/Inf values
-                            guard !features.contains(where: { !$0.isFinite }) else {
-                                Self.debugLog("Track \(fileURL.lastPathComponent) has non-finite features - skipping")
-                                return (globalIndex, track, nil)
+                            // Validate no NaN/Inf values. SpecAugment masking can
+                            // occasionally produce non-finite values; retry once
+                            // without augmentation before giving up on the track.
+                            // (No retry when SpecAugment is inactive — nil config
+                            // would deterministically reproduce the same vector.)
+                            if features.contains(where: { !$0.isFinite }) {
+                                let specAugmentActive = augConfig.freqMaskCount > 0 || augConfig.timeMaskCount > 0
+                                guard specAugmentActive else {
+                                    Self.debugLog("Track \(fileURL.lastPathComponent) has non-finite features - skipping")
+                                    return (globalIndex, track, nil)
+                                }
+                                Self.debugLog("Track \(fileURL.lastPathComponent) has non-finite features with augmentation - retrying once without augmentation")
+                                features = try await extractor.extractWindowed(
+                                    from: buffer,
+                                    config: extractionConfig,
+                                    augmentationConfig: nil
+                                )
+                                guard features.count == expectedDimension,
+                                      !features.contains(where: { !$0.isFinite }) else {
+                                    Self.debugLog("Track \(fileURL.lastPathComponent) still has non-finite features after unaugmented retry - skipping")
+                                    return (globalIndex, track, nil)
+                                }
                             }
 
-                            // Return raw features — augmentation is applied after caching
-                            // so cached embeddings remain clean and reusable across configs
+                            // NOTE: SpecAugment runs inside extraction, so these
+                            // features (and the cache entry written below) carry
+                            // any spectrogram masking from augConfig. Only the
+                            // Gaussian feature noise is applied after caching.
                             return (globalIndex, track, features)
                         } catch {
                             Self.debugLog("Track \(URL(fileURLWithPath: track.id).lastPathComponent) extraction failed: \(error.localizedDescription)")
@@ -841,11 +861,12 @@ public actor TrainingDataCollector {
             // Combine results and cache
             for (_, track, features) in batchResults {
                 if let features = features, !features.isEmpty {
-                    // Cache raw (unaugmented) embeddings
+                    // Cache embeddings as extracted (may include SpecAugment
+                    // masking when augConfig enables it — see NOTE above)
                     let fileURL = URL(fileURLWithPath: track.id)
                     await embeddingCache.set(features, for: fileURL)
 
-                    // Apply augmentation AFTER caching for training robustness
+                    // Gaussian feature noise is applied AFTER caching
                     let augmentedFeatures = AudioAugmenter.augmentFeatures(
                         features,
                         addNoise: augConfig.featureNoiseEnabled,

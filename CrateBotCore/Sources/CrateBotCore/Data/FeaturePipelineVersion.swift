@@ -60,10 +60,9 @@ public struct FeaturePipelineVersion: Codable, Equatable, Sendable {
     )
 
     /// The current feature pipeline: multi-window extraction with mean pooling.
-    /// Encodes the window fractions from `FeatureExtractionConfig.default` so
-    /// any change to the windowing scheme changes the versionHash.
-    public static var current: FeaturePipelineVersion {
-        let config = FeatureExtractionConfig.default
+    /// Encodes the given config's window fractions so any change to the
+    /// windowing scheme changes the versionHash.
+    public static func current(for config: FeatureExtractionConfig = .default) -> FeaturePipelineVersion {
         let windows = config.windowFractions.map { String($0) }.joined(separator: ",")
         let clapWindows = config.clapWindowFractions.map { String($0) }.joined(separator: ",")
         var extractors = legacySingleWindow.extractorVersions

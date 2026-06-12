@@ -206,7 +206,7 @@ final class TaggingEngineTests: XCTestCase {
                 return
             }
             XCTAssertEqual(found, FeaturePipelineVersion.legacySingleWindow.versionHash)
-            XCTAssertEqual(expected, FeaturePipelineVersion.current.versionHash)
+            XCTAssertEqual(expected, FeaturePipelineVersion.current().versionHash)
         }
     }
 
@@ -218,7 +218,7 @@ final class TaggingEngineTests: XCTestCase {
         let metadata = ModelMetadata(
             name: "NewModel",
             version: "1.0",
-            pipelineVersion: FeaturePipelineVersion.current.versionHash,
+            pipelineVersion: FeaturePipelineVersion.current().versionHash,
             trainedAt: Date(),
             trainingFileCount: 100,
             categories: ["Genre"],

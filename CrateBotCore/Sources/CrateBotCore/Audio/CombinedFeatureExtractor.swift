@@ -194,10 +194,13 @@ public actor CombinedFeatureExtractor {
     static func meanPool(_ vectors: [[Float]]) -> [Float] {
         guard let first = vectors.first else { return [] }
         var sum = [Float](repeating: 0, count: first.count)
+        var matched = 0
         for v in vectors where v.count == first.count {
             for i in 0..<v.count { sum[i] += v[i] }
+            matched += 1
         }
-        let n = Float(vectors.count)
+        guard matched > 0 else { return sum }  // all skipped → zero vector
+        let n = Float(matched)
         return sum.map { $0 / n }
     }
 
@@ -241,7 +244,11 @@ public actor CombinedFeatureExtractor {
                 from: window, augmentationConfig: augmentationConfig)
             embeddingsPerWindow.append(emb)
             genresPerWindow.append(gen)
-            if let maest = maestExtractor {
+            // Gate on actualConfig, not extractor presence: if CLAP failed to
+            // load but MAEST loaded, actualConfig degrades to .effnetPlusGenres
+            // and MAEST must NOT be appended (mirrors `extract` switch semantics,
+            // keeping output dimension == featureDimension).
+            if actualConfig == .effnetGenresCLAPMAEST, let maest = maestExtractor {
                 maestPerWindow.append(try await maest.extract(
                     from: window, augmentationConfig: augmentationConfig))
             }
@@ -265,7 +272,7 @@ public actor CombinedFeatureExtractor {
             combined += Self.meanPool(clapPerWindow)
         }
 
-        if !maestPerWindow.isEmpty {
+        if actualConfig == .effnetGenresCLAPMAEST && !maestPerWindow.isEmpty {
             combined += Self.meanPool(maestPerWindow)
         }
         return combined

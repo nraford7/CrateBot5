@@ -30,6 +30,13 @@ final class CombinedFeatureExtractorWindowingTests: XCTestCase {
         XCTAssertEqual(pooled, [2, 3])
     }
 
+    func testMeanPoolSkipsMismatchedLengthsWithoutBias() {
+        // Mismatched-length vector is skipped; mean divides by the number of
+        // vectors actually summed (2), not the total submitted (3).
+        let pooled = CombinedFeatureExtractor.meanPool([[1, 2], [9, 9, 9], [3, 4]])
+        XCTAssertEqual(pooled, [2, 3])
+    }
+
     func testWindowedExtractionOutputDimensionUnchanged() async throws {
         // Skip if model not available in test environment
         let extractor: CombinedFeatureExtractor
@@ -43,6 +50,27 @@ final class CombinedFeatureExtractorWindowingTests: XCTestCase {
         let vector = try await extractor.extractWindowed(
             from: buffer, config: FeatureExtractionConfig.default)
         XCTAssertEqual(vector.count, 1680)   // same shape as single-shot
+    }
+
+    func testWindowedExtractionMatchesEffectiveDimensionUnderDegradedConfig() async throws {
+        // Regression: when the full CLAP+MAEST config is requested but some
+        // extractors fail to load, actualConfig degrades (e.g. CLAP missing +
+        // MAEST present must NOT append MAEST). The invariant — extractWindowed
+        // output count == featureDimension (actualConfig.dimension) — catches
+        // any config/output mismatch regardless of which extractors loaded in
+        // this test environment.
+        let extractor: CombinedFeatureExtractor
+        do {
+            extractor = try CombinedFeatureExtractor(config: .effnetGenresCLAPMAEST)
+        } catch {
+            throw XCTSkip("CombinedFeatureExtractor requires EffNet model: \(error)")
+        }
+
+        let buffer = try makeSyntheticBuffer(seconds: 120, sampleRate: 16000)
+        let vector = try await extractor.extractWindowed(
+            from: buffer, config: FeatureExtractionConfig.default)
+        let expected = await extractor.featureDimension
+        XCTAssertEqual(vector.count, expected)
     }
 
     // MARK: - Helpers

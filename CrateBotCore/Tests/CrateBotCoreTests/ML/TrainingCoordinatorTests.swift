@@ -215,7 +215,7 @@ final class TrainingCoordinatorTests: XCTestCase {
             current.versionHash,
             FeaturePipelineVersion.legacySingleWindow.versionHash
         )
-        XCTAssertEqual(current.versionHash, FeaturePipelineVersion.current.versionHash)
+        XCTAssertEqual(current.versionHash, FeaturePipelineVersion.current().versionHash)
     }
 
     func testCreateModelMetadataDateIsRecent() async {

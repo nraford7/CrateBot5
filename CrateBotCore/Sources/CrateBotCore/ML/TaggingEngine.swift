@@ -244,7 +244,7 @@ public actor TaggingEngine {
         // pipeline: their classifiers expect single-shot embeddings and would
         // silently produce garbage against multi-window mean-pooled features.
         if let metadata = metadata {
-            let currentHash = FeaturePipelineVersion.current.versionHash
+            let currentHash = FeaturePipelineVersion.current(for: featureExtractionConfig).versionHash
             if metadata.pipelineVersion == FeaturePipelineVersion.legacySingleWindow.versionHash {
                 logger.error("Model '\(effectiveModelName)' was trained on the pre-windowing feature pipeline (\(metadata.pipelineVersion)). Refusing to load — retrain with windowed extraction (expected \(currentHash)).")
                 loadedMetadata = nil
@@ -255,6 +255,8 @@ public actor TaggingEngine {
             } else if metadata.pipelineVersion != currentHash {
                 logger.warning("Model '\(effectiveModelName)' has unrecognized pipelineVersion '\(metadata.pipelineVersion)' (current: \(currentHash)). Loading anyway — predictions may be unreliable if features changed.")
             }
+        } else {
+            logger.error("Model '\(effectiveModelName)' has no readable metadata (\(metadataURL.lastPathComponent) or metadata.json missing/unparseable). Pipeline-version compatibility check SKIPPED — the model may have been trained on an incompatible feature pipeline and could produce unreliable predictions.")
         }
 
         // Load per-tag thresholds from metadata first, then override with file

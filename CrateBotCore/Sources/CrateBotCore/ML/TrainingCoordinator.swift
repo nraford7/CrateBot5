@@ -827,7 +827,7 @@ public actor TrainingCoordinator {
     ///   Encodes the window fractions so models trained on windowed features
     ///   carry a versionHash distinct from pre-windowing models.
     public func currentPipelineVersion() -> FeaturePipelineVersion {
-        .current
+        .current(for: dataCollector.featureExtractionConfig)
     }
 
     private func recommendedExtractionConcurrency() -> Int {
