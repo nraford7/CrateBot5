@@ -366,6 +366,66 @@ final class ModelTrainerTests: XCTestCase {
         XCTAssertEqual(results.count, 0)
     }
 
+    /// trainModelsWithReport must surface skipped tags with the right reason:
+    /// a tag with positives but zero trusted negatives (category-complete
+    /// filtering excluded every candidate) lands as noTrustedNegatives, and a
+    /// thin tag lands as insufficientPositives.
+    func testTrainModelsWithReportSurfacesSkipReasons() async throws {
+        let trainer = ModelTrainer()
+        let config = TrainingConfig(minSamplesPerTag: 5)
+
+        var tracks: [TaggedTrack] = []
+        // "Peak" (Timing): 6 positives, and no OTHER track carries a Timing
+        // tag, so every non-positive is an unknown — zero trusted negatives.
+        for i in 0..<6 {
+            tracks.append(TaggedTrack(
+                id: "peak_\(i)",
+                tags: ["Peak"],
+                features: [Float(i), 1.0, 2.0, 3.0],
+                tagsByCategory: ["Timing": ["Peak"]]
+            ))
+        }
+        // Genre-only tracks: unknowns for the Timing category
+        for i in 0..<4 {
+            tracks.append(TaggedTrack(
+                id: "house_\(i)",
+                tags: ["House"],
+                features: [Float(i), 4.0, 5.0, 6.0],
+                tagsByCategory: ["Genre": ["House"]]
+            ))
+        }
+        // "Rare" (Genre): only 2 positives, below minSamplesPerTag
+        for i in 0..<2 {
+            tracks.append(TaggedTrack(
+                id: "rare_\(i)",
+                tags: ["Rare"],
+                features: [Float(i), 7.0, 8.0, 9.0],
+                tagsByCategory: ["Genre": ["Rare"]]
+            ))
+        }
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let (results, skippedTags) = try await trainer.trainModelsWithReport(
+            from: tracks,
+            tags: ["Peak", "Rare"],
+            outputDirectory: tempDir,
+            config: config,
+            categorizedTags: ["Timing": ["Peak"], "Genre": ["House", "Rare"]]
+        )
+
+        XCTAssertTrue(results.isEmpty, "Both tags should be skipped, not trained")
+        XCTAssertEqual(skippedTags.count, 2)
+
+        let reasonsByTag = Dictionary(uniqueKeysWithValues: skippedTags.map { ($0.tag, $0.reason) })
+        XCTAssertEqual(reasonsByTag["Peak"], .noTrustedNegatives,
+            "Positives but zero trusted negatives must surface as noTrustedNegatives")
+        XCTAssertEqual(reasonsByTag["Rare"], .insufficientPositives(found: 2, required: 5),
+            "A thin tag must surface as insufficientPositives")
+    }
+
     func testTrainModelsCallsProgressCallback() async throws {
         let trainer = ModelTrainer()
 

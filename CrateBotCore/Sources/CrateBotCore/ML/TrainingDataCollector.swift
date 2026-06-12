@@ -171,15 +171,18 @@ public actor TrainingDataCollector {
     ///   - id3Manager: The ID3 manager for reading tags. Defaults to a new instance.
     ///   - audioAnalyzer: The audio analyzer for loading audio. Defaults to a new instance.
     ///   - featureExtractionConfig: Configuration for feature extraction. Defaults to .default.
+    ///   - embeddingCache: The embedding cache for reusing extracted features.
+    ///     Defaults to a new cache built from `featureExtractionConfig`; injectable for tests.
     public init(
         id3Manager: ID3Manager = ID3Manager(),
         audioAnalyzer: AudioAnalyzer = AudioAnalyzer(),
-        featureExtractionConfig: FeatureExtractionConfig = .default
+        featureExtractionConfig: FeatureExtractionConfig = .default,
+        embeddingCache: EmbeddingCache? = nil
     ) {
         self.id3Manager = id3Manager
         self.audioAnalyzer = audioAnalyzer
         self.featureExtractionConfig = featureExtractionConfig
-        self.embeddingCache = EmbeddingCache(extractionConfig: featureExtractionConfig)
+        self.embeddingCache = embeddingCache ?? EmbeddingCache(extractionConfig: featureExtractionConfig)
     }
 
     /// Get or create the CombinedFeatureExtractor (lazy initialization)

@@ -234,6 +234,112 @@ final class TrainingDataCollectorTests: XCTestCase {
         XCTAssertTrue(result.isEmpty)
     }
 
+    // MARK: - tagsByCategory Population Tests
+
+    /// A track whose ID3 fields map to known categories must produce a
+    /// TaggedTrack whose tagsByCategory carries the per-category breakdown
+    /// (the input to category-complete negative filtering).
+    func testCollectTrainingDataPopulatesTagsByCategory() async throws {
+        guard let exampleURL = Bundle.module.url(forResource: "example", withExtension: "mp3") else {
+            throw XCTSkip("Example MP3 file not found in test bundle")
+        }
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CrateBotTests_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: tempDir, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o755]
+        )
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let mp3URL = tempDir.appendingPathComponent("categorized.mp3")
+        try FileManager.default.copyItem(at: exampleURL, to: mp3URL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: mp3URL.path)
+
+        // Write one tag per category via the default field mapping
+        // (genre=TCON, timing=TALB, mood=TIT1, descriptive=COMM)
+        let id3Manager = ID3Manager()
+        try await id3Manager.writeTags(
+            TagsToWrite(
+                genre: "House",
+                timing: "Peak",
+                mood: "Energetic",
+                comments: "Vinyl, Classic"
+            ),
+            to: mp3URL
+        )
+
+        let collector = TrainingDataCollector(id3Manager: id3Manager)
+        let result = await collector.collectTrainingData(from: [tempDir])
+
+        XCTAssertEqual(result.tracks.count, 1, "Expected exactly one collected track")
+        guard let track = result.tracks.first else { return }
+
+        XCTAssertEqual(track.tagsByCategory["Genre"], ["House"])
+        XCTAssertEqual(track.tagsByCategory["Timing"], ["Peak"])
+        XCTAssertEqual(track.tagsByCategory["Mood"], ["Energetic"])
+        XCTAssertEqual(track.tagsByCategory["Descriptive"], ["Vinyl", "Classic"])
+
+        // Flat tag set must contain the union of all categories
+        XCTAssertTrue(track.tags.isSuperset(of: ["House", "Peak", "Energetic", "Vinyl", "Classic"]))
+    }
+
+    /// tagsByCategory must survive the cached-features rebuild path: when
+    /// extractFeatures rebuilds a TaggedTrack from an EmbeddingCache hit, the
+    /// per-category breakdown carries over to the rebuilt track.
+    func testExtractFeaturesPreservesTagsByCategoryOnCacheHit() async throws {
+        // Short windows + effnetPlusGenres avoid CLAP/MAEST loads; the cache
+        // hit means no audio is ever decoded, so the WAV can be tiny.
+        let config = FeatureExtractionConfig(
+            featureConfig: .effnetPlusGenres,
+            windowDuration: 10.0,
+            windowFractions: [0.2, 0.6],
+            clapWindowFractions: [0.5]
+        )
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CrateBotTests_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let wavURL = tempDir.appendingPathComponent("cached.wav")
+        try writeSyntheticWAV(to: wavURL, seconds: 1.0, sampleRate: 16000)
+
+        // Pre-populate the cache with known fake features for this file
+        let cachedFeatures: [Float] = [0.1, 0.2, 0.3, 0.4]
+        let cache = EmbeddingCache(extractionConfig: config)
+        await cache.set(cachedFeatures, for: wavURL)
+
+        let collector = TrainingDataCollector(
+            featureExtractionConfig: config,
+            embeddingCache: cache
+        )
+        // No feature noise: cached features must come back byte-identical
+        await collector.setAugmentationConfig(.none)
+
+        let tagsByCategory: [String: Set<String>] = [
+            "Genre": ["House"],
+            "Timing": ["Peak"],
+        ]
+        let track = TaggedTrack(
+            id: wavURL.path,
+            tags: ["House", "Peak"],
+            features: nil,
+            tagsByCategory: tagsByCategory
+        )
+
+        let result = await collector.extractFeatures(for: [track])
+
+        XCTAssertEqual(result.count, 1)
+        guard let features = result[0].features else {
+            throw XCTSkip("Feature extractor unavailable in this environment (EffNet model missing?)")
+        }
+        XCTAssertEqual(features, cachedFeatures, "Cache hit must return the cached features unmodified")
+        XCTAssertEqual(result[0].tagsByCategory, tagsByCategory,
+            "tagsByCategory must survive the cached-features track rebuild")
+        XCTAssertEqual(result[0].tags, track.tags)
+    }
+
     // MARK: - Progress Callback Tests
 
     func testCollectTrainingDataCallsProgressCallback() async throws {

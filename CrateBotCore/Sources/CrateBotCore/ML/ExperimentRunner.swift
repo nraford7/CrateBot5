@@ -202,6 +202,10 @@ public actor ExperimentRunner {
         }
 
         // Phase 3: Run cross-validation for each tag
+        // Derive tag -> category from the collected tracks (a tag's category is
+        // whichever tagsByCategory key contains it), so experiments use the same
+        // category-complete negative sampling as production training.
+        let tagToCategory = Self.deriveTagCategories(from: sampledTracks)
         var tagResults: [TagExperimentResult] = []
         let validator = CrossValidator(folds: configuration.folds, seed: configuration.seed)
 
@@ -217,6 +221,7 @@ public actor ExperimentRunner {
 
             let result = await evaluateTag(
                 tag,
+                category: tagToCategory[tag.lowercased()],
                 tracks: sampledTracks,
                 validator: validator
             )
@@ -236,14 +241,31 @@ public actor ExperimentRunner {
         )
     }
 
+    /// Build a tag -> category lookup (lowercased keys, matching ModelTrainer)
+    /// from the per-track category breakdown.
+    static func deriveTagCategories(from tracks: [TaggedTrack]) -> [String: String] {
+        var tagToCategory: [String: String] = [:]
+        for track in tracks {
+            for (category, tags) in track.tagsByCategory {
+                for tag in tags {
+                    tagToCategory[tag.lowercased()] = category
+                }
+            }
+        }
+        return tagToCategory
+    }
+
     /// Evaluate a single tag with cross-validation
     private func evaluateTag(
         _ tag: String,
+        category: String?,
         tracks: [TaggedTrack],
         validator: CrossValidator
     ) async -> TagExperimentResult {
-        // Get positive/negative samples
-        guard let (positive, negative) = dataGenerator.generateTrainingData(for: tag, from: tracks) else {
+        // Get positive/negative samples with category-complete negative
+        // filtering when the tag's category is known (nil category falls back
+        // to legacy all-non-positives-are-negatives behavior)
+        guard let trainingData = dataGenerator.generateTrainingData(for: tag, category: category, from: tracks) else {
             return TagExperimentResult(
                 tag: tag,
                 metrics: ValidationMetrics(
@@ -256,6 +278,8 @@ public actor ExperimentRunner {
                 negativeCount: 0
             )
         }
+        let positive = trainingData.positive
+        let negative = trainingData.negative
 
         // Combine and label
         let combined = positive + negative
