@@ -22,9 +22,7 @@ final class EmbeddingCacheTests: XCTestCase {
 
     func testCacheMissWhenFeatureConfigChanges() async {
         let config1 = FeatureExtractionConfig(
-            featureConfig: .effnetGenresCLAP,
-            segmentDuration: 30.0,
-            segmentStartFractions: [0.33, 0.5, 0.66]
+            featureConfig: .effnetGenresCLAP
         )
         let cache1 = EmbeddingCache(extractionConfig: config1)
 
@@ -38,9 +36,7 @@ final class EmbeddingCacheTests: XCTestCase {
         XCTAssertEqual(retrieved1, embeddings)
 
         let config2 = FeatureExtractionConfig(
-            featureConfig: .effnetPlusGenres,  // Different!
-            segmentDuration: 30.0,
-            segmentStartFractions: [0.33, 0.5, 0.66]
+            featureConfig: .effnetPlusGenres  // Different!
         )
         let cache2 = EmbeddingCache(extractionConfig: config2)
 
@@ -48,11 +44,10 @@ final class EmbeddingCacheTests: XCTestCase {
         XCTAssertNil(retrieved2)
     }
 
-    func testCacheMissWhenSegmentDurationChanges() async {
+    func testCacheMissWhenWindowDurationChanges() async {
         let config1 = FeatureExtractionConfig(
             featureConfig: .effnetGenresCLAP,
-            segmentDuration: 30.0,
-            segmentStartFractions: [0.33, 0.5, 0.66]
+            windowDuration: 15.0
         )
         let cache1 = EmbeddingCache(extractionConfig: config1)
 
@@ -63,8 +58,7 @@ final class EmbeddingCacheTests: XCTestCase {
 
         let config2 = FeatureExtractionConfig(
             featureConfig: .effnetGenresCLAP,
-            segmentDuration: 20.0,  // Different duration
-            segmentStartFractions: [0.33, 0.5, 0.66]
+            windowDuration: 10.0  // Different duration
         )
         let cache2 = EmbeddingCache(extractionConfig: config2)
 

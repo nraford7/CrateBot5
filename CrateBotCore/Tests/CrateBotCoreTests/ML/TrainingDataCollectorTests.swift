@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 @testable import CrateBotCore
 
 final class TrainingDataCollectorTests: XCTestCase {
@@ -185,6 +186,46 @@ final class TrainingDataCollectorTests: XCTestCase {
         XCTAssertEqual(result[0].features, existingFeatures)
     }
 
+    /// Behavioral pin: extractFeatures produces exactly ONE feature vector per
+    /// track, with exactly featureDimension elements. This is the contract the
+    /// windowed-extraction refactor must preserve (previously: mean of three
+    /// 30s segments; now: mean-pooled multi-window extraction — either way,
+    /// one vector per track).
+    func testExtractFeaturesProducesOneVectorPerTrackWithFeatureDimension() async throws {
+        // Short windows keep the test fast; effnetPlusGenres avoids CLAP/MAEST loads
+        let config = FeatureExtractionConfig(
+            featureConfig: .effnetPlusGenres,
+            windowDuration: 10.0,
+            windowFractions: [0.2, 0.6],
+            clapWindowFractions: [0.5]
+        )
+        let collector = TrainingDataCollector(featureExtractionConfig: config)
+        // Deterministic: SpecAugment's random masking can (rarely) push the
+        // EffNet model to NaN on synthetic pure-tone audio. The pin is about
+        // vector count/shape, not augmentation.
+        await collector.setAugmentationConfig(.none)
+
+        // Write a synthetic 25s WAV to disk (extractFeatures loads from track.id path)
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let wavURL = tempDir.appendingPathComponent("pin_test.wav")
+        try writeSyntheticWAV(to: wavURL, seconds: 25.0, sampleRate: 16000)
+
+        let tracks = [TaggedTrack(id: wavURL.path, tags: ["House"])]
+        let result = await collector.extractFeatures(for: tracks)
+
+        XCTAssertEqual(result.count, 1, "Exactly one output track per input track")
+        guard let features = result[0].features else {
+            throw XCTSkip("Feature extraction unavailable in this environment (EffNet model missing?)")
+        }
+        XCTAssertEqual(features.count, 1680,
+            "Exactly one feature vector per track, with featureDimension (1680) elements")
+        XCTAssertTrue(features.allSatisfy { $0.isFinite }, "All features must be finite")
+    }
+
     func testExtractFeaturesEmptyTracksReturnsEmpty() async {
         let collector = TrainingDataCollector()
 
@@ -227,5 +268,26 @@ final class TrainingDataCollectorTests: XCTestCase {
         let wasCalled = await tracker.wasCalled()
         XCTAssertTrue(wasCalled)
         XCTAssertEqual(result.tracks.count, 0)
+    }
+
+    // MARK: - Helpers
+
+    private func writeSyntheticWAV(to url: URL, seconds: Double, sampleRate: Double) throws {
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
+            throw NSError(domain: "TrainingDataCollectorTests", code: 1)
+        }
+        let sampleCount = Int(seconds * sampleRate)
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: format, frameCapacity: AVAudioFrameCount(sampleCount)
+        ) else {
+            throw NSError(domain: "TrainingDataCollectorTests", code: 2)
+        }
+        buffer.frameLength = AVAudioFrameCount(sampleCount)
+        let channel = buffer.floatChannelData![0]
+        for i in 0..<sampleCount {
+            channel[i] = Float(sin(2.0 * .pi * 440.0 * Double(i) / sampleRate))
+        }
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        try file.write(from: buffer)
     }
 }

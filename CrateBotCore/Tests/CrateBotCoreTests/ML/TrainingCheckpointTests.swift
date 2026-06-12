@@ -446,9 +446,7 @@ final class TrainingCheckpointTests: XCTestCase {
 
     func testCheckpointStoresFeatureExtractionConfig() {
         let config = FeatureExtractionConfig(
-            featureConfig: .effnetGenresCLAP,
-            segmentDuration: 30.0,
-            segmentStartFractions: [0.33, 0.5, 0.66]
+            featureConfig: .effnetGenresCLAP
         )
 
         let tracks = [TaggedTrack(id: "track1", tags: ["House"])]
@@ -467,9 +465,7 @@ final class TrainingCheckpointTests: XCTestCase {
 
     func testCheckpointIncompatibleWhenFeatureConfigChanges() throws {
         let config1 = FeatureExtractionConfig(
-            featureConfig: .effnetGenresCLAP,
-            segmentDuration: 30.0,
-            segmentStartFractions: [0.33, 0.5, 0.66]
+            featureConfig: .effnetGenresCLAP
         )
 
         let tracks = [TaggedTrack(id: "track1", tags: ["House"])]
@@ -483,9 +479,7 @@ final class TrainingCheckpointTests: XCTestCase {
         )
 
         let config2 = FeatureExtractionConfig(
-            featureConfig: .effnetPlusGenres,
-            segmentDuration: 30.0,
-            segmentStartFractions: [0.33, 0.5, 0.66]
+            featureConfig: .effnetPlusGenres
         )
 
         let compatibility = checkpointManager.isCheckpointCompatible(

@@ -141,6 +141,10 @@ public actor TaggingEngine {
     private let audioAnalyzer: AudioAnalyzer
     private let logger = Logger(subsystem: "com.cratebot", category: "TaggingEngine")
 
+    /// Feature extraction configuration (windowing). Must match the config the
+    /// loaded model was trained with so inference and training share one path.
+    private let featureExtractionConfig: FeatureExtractionConfig
+
     /// User-trained classifiers (one per tag)
     private var userClassifiers: [TagClassifier] = []
 
@@ -180,7 +184,8 @@ public actor TaggingEngine {
     /// Whether to apply co-occurrence boosting (set externally for A/B testing)
     public var useCooccurrenceBoosting: Bool = true
 
-    public init() throws {
+    public init(featureExtractionConfig: FeatureExtractionConfig = .default) throws {
+        self.featureExtractionConfig = featureExtractionConfig
         self.essentiaClassifier = try EssentiaClassifier()
         self.audioAnalyzer = AudioAnalyzer()
         self.zeroShotMatcher = ZeroShotMatcher.loadFromBundle()
@@ -434,8 +439,11 @@ public actor TaggingEngine {
         let genreActivations: [Float]
 
         if let extractor = featureExtractor {
-            // Use combined extractor - this matches the trained model's feature dimension
-            extendedFeatures = try await extractor.extract(from: buffer)
+            // Use combined extractor with multi-window mean pooling — the same
+            // extraction path TrainingDataCollector uses, so features at
+            // inference match the features the model was trained on.
+            extendedFeatures = try await extractor.extractWindowed(
+                from: buffer, config: featureExtractionConfig)
 
             // For Essentia predictions, we still need the raw embeddings and genre activations
             // These are always the first 1280 and next 400 dimensions respectively

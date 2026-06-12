@@ -154,7 +154,7 @@ public actor TrainingDataCollector {
 
     // MARK: - Feature Extraction Configuration
 
-    /// Configuration for feature extraction (segment sampling, feature config)
+    /// Configuration for feature extraction (windowing, feature config)
     /// This affects cache compatibility - changing it invalidates cached embeddings
     public let featureExtractionConfig: FeatureExtractionConfig
 
@@ -788,51 +788,42 @@ public actor TrainingDataCollector {
             // Capture augmentation config and expected feature dimension for use in task group
             let augConfig = self.augmentationConfig
             let expectedDimension = await extractor.featureDimension
-            let segmentDuration = self.featureExtractionConfig.segmentDuration
-            let startFractions = self.featureExtractionConfig.segmentStartFractions
+            let extractionConfig = self.featureExtractionConfig
             let batchResults = await withTaskGroup(of: (Int, TaggedTrack, [Float]?).self) { group in
                 for (localIndex, track) in batch.enumerated() {
-                    group.addTask { [audioAnalyzer, extractor, segmentDuration, startFractions] in
+                    group.addTask { [audioAnalyzer, extractor, extractionConfig] in
                         let globalIndex = batchStart + localIndex
                         do {
                             let fileURL = URL(fileURLWithPath: track.id)
-                            let buffers = try await audioAnalyzer.loadAudioSegments(
+                            let buffer = try await audioAnalyzer.loadAudio(
                                 from: fileURL,
-                                targetSampleRate: EffNetExtractor.targetSampleRate,
-                                segmentDuration: segmentDuration,
-                                startFractions: startFractions
+                                targetSampleRate: EffNetExtractor.targetSampleRate
                             )
 
-                            var segmentFeatures: [[Float]] = []
-                            segmentFeatures.reserveCapacity(buffers.count)
+                            // One windowed extraction over the full track — same
+                            // code path as inference (mean-pooled multi-window).
+                            // SpecAugment applies per window inside the extractor.
+                            let features = try await extractor.extractWindowed(
+                                from: buffer,
+                                config: extractionConfig,
+                                augmentationConfig: augConfig
+                            )
 
-                            for buffer in buffers {
-                                // Use CombinedFeatureExtractor for unified feature extraction
-                                let features = try await extractor.extract(from: buffer, augmentationConfig: augConfig)
-
-                                // Validate feature dimensions
-                                if features.count != expectedDimension {
-                                    Self.debugLog("Track \(fileURL.lastPathComponent) has \(features.count) features, expected \(expectedDimension) - skipping segment")
-                                    continue
-                                }
-
-                                // Validate no NaN/Inf values
-                                if features.contains(where: { !$0.isFinite }) {
-                                    Self.debugLog("Track \(fileURL.lastPathComponent) has non-finite features - skipping segment")
-                                    continue
-                                }
-
-                                segmentFeatures.append(features)
+                            // Validate feature dimensions
+                            guard features.count == expectedDimension else {
+                                Self.debugLog("Track \(fileURL.lastPathComponent) has \(features.count) features, expected \(expectedDimension) - skipping")
+                                return (globalIndex, track, nil)
                             }
 
-                            guard let averaged = Self.averageFeatures(segmentFeatures, expectedDimension: expectedDimension) else {
-                                Self.debugLog("Track \(fileURL.lastPathComponent) produced no valid segments - skipping")
+                            // Validate no NaN/Inf values
+                            guard !features.contains(where: { !$0.isFinite }) else {
+                                Self.debugLog("Track \(fileURL.lastPathComponent) has non-finite features - skipping")
                                 return (globalIndex, track, nil)
                             }
 
                             // Return raw features — augmentation is applied after caching
                             // so cached embeddings remain clean and reusable across configs
-                            return (globalIndex, track, averaged)
+                            return (globalIndex, track, features)
                         } catch {
                             Self.debugLog("Track \(URL(fileURLWithPath: track.id).lastPathComponent) extraction failed: \(error.localizedDescription)")
                             return (globalIndex, track, nil)
@@ -1016,23 +1007,5 @@ public actor TrainingDataCollector {
         }
 
         return tagSet
-    }
-
-    private static func averageFeatures(_ segments: [[Float]], expectedDimension: Int) -> [Float]? {
-        guard !segments.isEmpty else { return nil }
-        var sums = [Double](repeating: 0.0, count: expectedDimension)
-        var count = 0
-
-        for features in segments {
-            guard features.count == expectedDimension else { continue }
-            for i in 0..<expectedDimension {
-                sums[i] += Double(features[i])
-            }
-            count += 1
-        }
-
-        guard count > 0 else { return nil }
-
-        return sums.map { Float($0 / Double(count)) }
     }
 }
