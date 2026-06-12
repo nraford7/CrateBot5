@@ -103,6 +103,15 @@ def load_data_and_run_inference():
         if track_tags:
             tracks.append({'id': path, 'tags': list(track_tags), 'features': entry['embeddings']})
 
+    expected_dim = metadata["featureDimension"]
+    bad = [t["id"] for t in tracks if len(t["features"]) != expected_dim]
+    if bad:
+        sys.exit(
+            f"FATAL: {len(bad)} cached vectors do not match model featureDimension "
+            f"{expected_dim} (first: {bad[0]}). The embedding cache is stale — "
+            f"re-extract before evaluating. Refusing to produce garbage numbers."
+        )
+
     # Sample
     random.seed(SEED)
     sampled = random.sample(tracks, min(SAMPLE_SIZE, len(tracks)))
