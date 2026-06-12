@@ -628,11 +628,49 @@ public actor TrainingCoordinator {
             logger.info("Stage partition: \(perceptionViable.count) perception tags, \(judgmentViable.count) judgment tags")
 
             // ---- Resume: a phaseACompleted checkpoint jumps straight to
-            // Phase B, but ONLY against the exact Stage 1 it recorded. ----
+            // Phase B, but ONLY against the exact Stage 1 it recorded, and
+            // only when the Stage 1 model FILES actually load — metadata
+            // alone is not proof the models survived on disk. ----
             if let checkpoint = checkpointManager.load(modelName: options.modelName),
                case .phaseACompleted(let checkpointedVersion) = checkpoint.phase {
-                let onDiskVersion = (try? ModelMetadata.load(from: metadataURL))?.stage1ModelVersion
-                if onDiskVersion == checkpointedVersion {
+                let onDiskMetadata = try? ModelMetadata.load(from: metadataURL)
+                var resumePredictor: (any Stage1Predictor)? = predictorOverride
+                var refusalReason: String?
+
+                if onDiskMetadata?.stage1ModelVersion != checkpointedVersion {
+                    refusalReason = "checkpointed Stage 1 version '\(checkpointedVersion)' does not match on-disk '\(onDiskMetadata?.stage1ModelVersion ?? "none")'"
+                } else if predictorOverride == nil, !judgmentViable.isEmpty, let onDiskMetadata {
+                    // Verify the Stage 1 model set loads and is complete.
+                    // Expected binary classifiers: every metadata tag that is
+                    // not judgment-stage (a crash after Phase B's paired-
+                    // metadata write merges judgment tags into the map).
+                    // Resuming against missing/corrupt models would train
+                    // judgment on a crippled schema (e.g. bpm+duration only).
+                    do {
+                        let loaded = try ProductionStage1Predictor.load(
+                            from: outputDirectory,
+                            metadata: onDiskMetadata
+                        )
+                        let expectedBinary = onDiskMetadata.tags.values
+                            .flatMap { $0 }
+                            .filter { !isJudgmentTag($0) }
+                            .count
+                        let expectedGroups = onDiskMetadata.tagGroups.count
+                        if loaded.binaryTagNames.count < expectedBinary
+                            || loaded.groupNames.count < expectedGroups {
+                            refusalReason = "Stage 1 model files do not match metadata (loaded \(loaded.binaryTagNames.count)/\(expectedBinary) binary classifiers, \(loaded.groupNames.count)/\(expectedGroups) groups)"
+                        } else {
+                            resumePredictor = loaded
+                        }
+                    } catch {
+                        refusalReason = "Stage 1 models failed to load: \(error.localizedDescription)"
+                    }
+                }
+
+                if let refusalReason {
+                    logger.warning("Phase B refused: \(refusalReason). Stage 2 must pair with the Stage 1 it was generated from — retraining BOTH stages.")
+                    try? checkpointManager.delete(modelName: options.modelName)
+                } else {
                     logger.info("Resuming into Phase B: checkpointed Stage 1 version '\(checkpointedVersion)' verified on disk — Stage 1 will NOT be retrained")
                     _state = .training(progress: 0.8, currentTag: "[judgment]")
                     await stateCallback?(_state)
@@ -647,7 +685,7 @@ public actor TrainingCoordinator {
                         tagToCategory: tagToCategory,
                         trainingConfig: trainingConfig,
                         stageRegistry: stageRegistry,
-                        predictorOverride: predictorOverride,
+                        predictorOverride: resumePredictor,
                         bpmLookup: bpmLookup,
                         durationLookup: durationLookup
                     )
@@ -674,12 +712,13 @@ public actor TrainingCoordinator {
                         totalTracksScanned: totalTracksScanned ?? tracks.count,
                         tracksUsedForTraining: tracks.count,
                         tracksWithInvalidFeatures: tracksWithInvalidFeatures,
+                        // Note: on resume this is the Stage-1-only average
+                        // recorded in Phase A metadata; the resumed Phase B
+                        // accuracies are reported per-tag in tagResults but
+                        // not folded into this average.
                         averageAccuracy: metadata?.accuracy ?? 0.0,
                         modelURL: outputDirectory
                     )
-                } else {
-                    logger.warning("Phase B refused: checkpointed Stage 1 version '\(checkpointedVersion)' does not match on-disk '\(onDiskVersion ?? "none")'. Stage 2 must pair with the Stage 1 it was generated from — retraining BOTH stages.")
-                    try? checkpointManager.delete(modelName: options.modelName)
                 }
             }
 
@@ -1000,7 +1039,10 @@ public actor TrainingCoordinator {
                 descriptiveSubCategories: phaseAMetadata.descriptiveSubCategories,
                 tagThresholds: phaseAMetadata.tagThresholds,
                 stage1ModelVersion: stage1ModelVersion,
-                judgmentColumnNames: columnNames
+                // No judgment models trained → no schema to pair with.
+                // Writing a schema with zero models would advertise a Stage 2
+                // that does not exist.
+                judgmentColumnNames: results.isEmpty ? nil : columnNames
             )
             do {
                 try paired.save(to: metadataURL)

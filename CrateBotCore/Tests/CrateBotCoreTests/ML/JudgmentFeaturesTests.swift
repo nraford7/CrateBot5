@@ -14,9 +14,15 @@ final class JudgmentFeaturesTests: XCTestCase {
         XCTAssertEqual(v.values, [0.5, 0.8, 0.7, 0.3, 128, 372])
     }
 
-    func testMissingBPMUsesSentinel() {
+    /// Missing-value semantics live INSIDE the schema type: nil bpm AND nil
+    /// duration both become the shared sentinel here, not at call sites.
+    func testMissingBPMAndDurationUseSharedSentinel() {
         let v = JudgmentFeatureVector(binaryConfidences: [:], groupProbabilities: [:],
-                                      bpm: nil, durationSeconds: 200)
-        XCTAssertEqual(v.values[v.columnNames.firstIndex(of: "bpm")!], -1.0)
+                                      bpm: nil, durationSeconds: nil)
+        XCTAssertEqual(v.values[v.columnNames.firstIndex(of: "bpm")!],
+                       JudgmentFeatureVector.missingValueSentinel)
+        XCTAssertEqual(v.values[v.columnNames.firstIndex(of: "duration")!],
+                       JudgmentFeatureVector.missingValueSentinel)
+        XCTAssertEqual(JudgmentFeatureVector.missingValueSentinel, -1.0)
     }
 }

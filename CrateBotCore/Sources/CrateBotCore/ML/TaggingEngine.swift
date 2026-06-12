@@ -336,10 +336,13 @@ public actor TaggingEngine {
             confidenceCalibrator = ConfidenceCalibrator()
         }
 
-        // Filter out multi-class model files (they have _multiclass suffix)
+        // Filter out multi-class (_multiclass) and Stage 2 judgment
+        // (_judgment) model files: judgment models take JudgmentFeatureVector
+        // columns, not audio features — loading one as a binary classifier
+        // would silently misfire. (Chunk 4 adds the actual judgment loading.)
         let binaryModelFiles = modelFiles.filter { url in
             let name = url.deletingPathExtension().lastPathComponent
-            return !name.hasSuffix("_multiclass")
+            return !name.hasSuffix("_multiclass") && !name.hasSuffix("_judgment")
         }
 
         let totalFiles = binaryModelFiles.count

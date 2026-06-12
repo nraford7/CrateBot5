@@ -4,15 +4,18 @@ import Foundation
 ///
 /// Flattens Stage 1 outputs plus track metadata into a fixed columnar layout:
 /// `bin_<tag>` columns (sorted), then `grp_<group>_<class>` columns (sorted),
-/// then `bpm` (sentinel `-1.0` when unknown), then `duration`.
+/// then `bpm`, then `duration` (each sentinel `-1.0` when unknown).
 ///
 /// The sorted column order IS the Stage 2 schema — training and inference
 /// must produce identical columns. `columnNames` is encoded into Stage 2
-/// model metadata so a schema mismatch is detectable at load.
+/// model metadata so a schema mismatch is detectable at load. ALL value
+/// semantics (including missing-value sentinels) live here, so every
+/// producer — training row generation and Chunk 4 inference — shares one
+/// source of truth.
 public struct JudgmentFeatureVector {
 
-    /// Sentinel value used for `bpm` when the track's BPM is unknown.
-    public static let missingBPMSentinel: Float = -1.0
+    /// Sentinel value used for `bpm` and `duration` when unknown.
+    public static let missingValueSentinel: Float = -1.0
 
     /// Column names in deterministic sorted order (the Stage 2 schema).
     public let columnNames: [String]
@@ -23,7 +26,7 @@ public struct JudgmentFeatureVector {
     public init(binaryConfidences: [String: Float],
                 groupProbabilities: [String: [String: Float]],
                 bpm: Float?,
-                durationSeconds: Float) {
+                durationSeconds: Float?) {
         var names: [String] = []
         var vals: [Float] = []
 
@@ -41,10 +44,10 @@ public struct JudgmentFeatureVector {
         }
 
         names.append("bpm")
-        vals.append(bpm ?? Self.missingBPMSentinel)
+        vals.append(bpm ?? Self.missingValueSentinel)
 
         names.append("duration")
-        vals.append(durationSeconds)
+        vals.append(durationSeconds ?? Self.missingValueSentinel)
 
         self.columnNames = names
         self.values = vals

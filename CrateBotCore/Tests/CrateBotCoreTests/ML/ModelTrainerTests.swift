@@ -521,6 +521,57 @@ final class ModelTrainerTests: XCTestCase {
         XCTAssertNil(columnNames)
     }
 
+    /// Doc-comment contract: requested tags with no rows are reported as
+    /// skipped — including when there are NO rows at all.
+    func testTrainJudgmentModelsEmptyRowsReportsRequestedTagsSkipped() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let trainer = ModelTrainer()
+        let (results, skipped, columnNames) = try await trainer.trainJudgmentModels(
+            rows: [],
+            tags: ["Peak", "Build"],
+            outputDirectory: tempDir,
+            config: TrainingConfig(minSamplesPerTag: 10)
+        )
+        XCTAssertTrue(results.isEmpty)
+        XCTAssertNil(columnNames)
+        XCTAssertEqual(skipped.map(\.tag), ["Peak", "Build"],
+            "Requested tags with zero rows must surface as skipped, never vanish silently")
+        XCTAssertEqual(skipped.first?.reason, .insufficientPositives(found: 0, required: 10))
+    }
+
+    /// Schema is anchored to the MAJORITY of rows, not the first row: an
+    /// aberrant first row (e.g. one intermittent Stage 1 classifier failure)
+    /// must be the row that gets dropped — not the 30 well-formed ones.
+    func testTrainJudgmentModelsAberrantFirstRowDoesNotDiscardMajority() async throws {
+        var rows = makeSeparableRows()
+        let majoritySchema = rows[0].features.columnNames
+        let alien = JudgmentFeatureVector(
+            binaryConfidences: ["Dark": 0.9],  // "Driving" column missing
+            groupProbabilities: ["BassType": ["Punchy": 0.4, "Walking": 0.6]],
+            bpm: 120,
+            durationSeconds: 300
+        )
+        rows.insert((features: alien, labels: Set(["Peak"]), trackID: "alien_first"), at: 0)
+
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let trainer = ModelTrainer()
+        let (results, skipped, columnNames) = try await trainer.trainJudgmentModels(
+            rows: rows,
+            outputDirectory: tempDir,
+            config: TrainingConfig(minSamplesPerTag: 10)
+        )
+
+        XCTAssertEqual(columnNames, majoritySchema,
+            "The majority column layout must win, not the first row's")
+        XCTAssertEqual(Set(results.map(\.tag)), ["Peak", "Build"],
+            "All well-formed rows must train; only the aberrant row is dropped")
+        XCTAssertTrue(skipped.isEmpty)
+        let peak = try XCTUnwrap(results.first { $0.tag == "Peak" })
+        XCTAssertEqual(peak.positiveCount, 15, "The aberrant first row must be excluded from training")
+    }
+
     func testTrainJudgmentModelsDropsSchemaMismatchedRows() async throws {
         var rows = makeSeparableRows()
         // One row with a different Stage 1 schema (extra binary tag) — must be

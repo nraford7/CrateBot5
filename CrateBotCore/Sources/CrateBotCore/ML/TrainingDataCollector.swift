@@ -758,6 +758,18 @@ public actor TrainingDataCollector {
         let cacheStats = await embeddingCache.statistics
         Self.debugLog("Cache check: \(cachedTracks.count) hits, \(uncachedTracks.count) misses (total cache entries: \(cacheStats.totalEntries))")
 
+        // Preserve any phase marker already on disk: a `.phaseACompleted`
+        // checkpoint (written by trainTwoPhase) must survive the saves below,
+        // or a Phase-B crash resume would silently retrain Stage 1 from
+        // scratch. No existing checkpoint → the default extraction phase.
+        let checkpointPhase: TrainingPhase
+        if let modelName = modelName,
+           let existingCheckpoint = checkpointManager?.load(modelName: modelName) {
+            checkpointPhase = existingCheckpoint.phase
+        } else {
+            checkpointPhase = .featureExtraction
+        }
+
         // Phase 2: Process uncached tracks with concurrent individual inference
         // (Batch inference not supported by this CoreML model's fixed input shape)
         var extractedTracks: [TaggedTrack] = cachedTracks
@@ -906,7 +918,8 @@ public actor TrainingDataCollector {
                     sourceDirectories: sourceDirectories,
                     processedTracks: tracksForCheckpoint,
                     totalTracksDiscovered: total,
-                    featureExtractionConfig: featureExtractionConfig
+                    featureExtractionConfig: featureExtractionConfig,
+                    phase: checkpointPhase
                 )
                 do {
                     try checkpointManager.save(checkpoint)
@@ -952,7 +965,8 @@ public actor TrainingDataCollector {
                 sourceDirectories: sourceDirectories,
                 processedTracks: allTracks.filter { $0.features != nil },
                 totalTracksDiscovered: total,
-                featureExtractionConfig: featureExtractionConfig
+                featureExtractionConfig: featureExtractionConfig,
+                phase: checkpointPhase
             )
             do {
                 try checkpointManager.save(checkpoint)

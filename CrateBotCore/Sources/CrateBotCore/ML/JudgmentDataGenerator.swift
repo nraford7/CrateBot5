@@ -41,8 +41,9 @@ public typealias JudgmentRow = (
 /// generation time — a per-file metadata read, chosen over adding a
 /// duration field to `EmbeddingCache.CacheEntry` because the cache route
 /// would touch every extraction call site and only pay off after a full
-/// re-extraction. Missing values use the `-1.0` sentinel
-/// (`JudgmentFeatureVector.missingBPMSentinel`).
+/// re-extraction. Missing values use the `-1.0` sentinel, applied inside
+/// `JudgmentFeatureVector` (`missingValueSentinel`) so the schema type owns
+/// all value semantics.
 public struct JudgmentDataGenerator: Sendable {
     private let predictor: any Stage1Predictor
     private let bpmLookup: @Sendable (String) async -> Float?
@@ -91,7 +92,6 @@ public struct JudgmentDataGenerator: Sendable {
             let (binary, groups) = try await predictor.confidences(features: features)
             let bpm = await bpmLookup(track.id)
             let duration = await durationLookup(track.id)
-                ?? JudgmentFeatureVector.missingBPMSentinel
             let vector = JudgmentFeatureVector(
                 binaryConfidences: binary,
                 groupProbabilities: groups,

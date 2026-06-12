@@ -19,6 +19,12 @@ public struct ProductionStage1Predictor: Stage1Predictor {
         classifiers.map(\.tagName).sorted()
     }
 
+    /// Names of the wrapped multi-class groups (sorted, for diagnostics and
+    /// resume-time load verification).
+    public var groupNames: [String] {
+        groupClassifiers.keys.sorted()
+    }
+
     public init(
         classifiers: [TagClassifier],
         groupClassifiers: [String: MultiClassClassifier],

@@ -655,8 +655,11 @@ public actor ModelTrainer {
     ///
     /// Design constraints (from the two-stage spec):
     /// - Columns are EXACTLY `JudgmentFeatureVector.columnNames` — the sorted
-    ///   schema shared with inference. Rows whose schema differs from the
-    ///   first row are dropped (logged), never mixed in.
+    ///   schema shared with inference. The MAJORITY schema across rows wins;
+    ///   rows with any other schema are dropped (logged), never mixed in.
+    ///   (Majority, not first-row: Stage 1 classifiers can fail
+    ///   intermittently per row, and an aberrant first row must not silently
+    ///   discard every well-formed row.)
     /// - NO augmentation: no mixup, no feature noise. Judgment features are
     ///   Stage 1 confidences + BPM + duration; synthetic interpolation would
     ///   fabricate judgment evidence.
@@ -681,11 +684,31 @@ public actor ModelTrainer {
         config: TrainingConfig = TrainingConfig(),
         progress: ((TrainingProgress) async -> Void)? = nil
     ) async throws -> (results: [TrainingResult], skippedTags: [SkippedTrainingTag], columnNames: [String]?) {
-        guard let schema = rows.first?.features.columnNames else {
-            return ([], [], nil)
+        guard !rows.isEmpty else {
+            // Contract: requested tags with no rows are reported as skipped,
+            // never silently dropped.
+            let skipped = (tags ?? []).map {
+                SkippedTrainingTag(
+                    tag: $0,
+                    reason: .insufficientPositives(found: 0, required: config.minSamplesPerTag)
+                )
+            }
+            return ([], skipped, nil)
         }
 
-        // Schema enforcement: every row must match the first row's columns
+        // Majority schema: the most common column layout across rows wins.
+        // Ties break deterministically (more columns, then lexicographic).
+        var schemaCounts: [[String]: Int] = [:]
+        for row in rows {
+            schemaCounts[row.features.columnNames, default: 0] += 1
+        }
+        let schema = schemaCounts.max { lhs, rhs in
+            if lhs.value != rhs.value { return lhs.value < rhs.value }
+            if lhs.key.count != rhs.key.count { return lhs.key.count < rhs.key.count }
+            return lhs.key.joined(separator: "|") > rhs.key.joined(separator: "|")
+        }!.key
+
+        // Schema enforcement: every row must match the majority schema
         let usableRows = rows.filter { $0.features.columnNames == schema }
         let droppedCount = rows.count - usableRows.count
         if droppedCount > 0 {
