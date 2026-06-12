@@ -256,7 +256,7 @@ final class TaggingEngineTests: XCTestCase {
             categories: ["Genre", "Timing", "Mood", "Descriptive"],
             tags: [
                 "Genre": ["House", "Techno"],
-                "Timing": ["Opener"],
+                "Timing": ["Opener", "Late Night"],
                 "Mood": ["Dark"],
                 "Descriptive": ["Funky"]
             ],
@@ -317,15 +317,97 @@ final class TaggingEngineTests: XCTestCase {
         XCTAssertEqual(dark, 0.55, accuracy: 0.0001, "Untuned tags still get their category default")
     }
 
-    func testExplicitStrictnessOverridesCategoryDefault() async throws {
+    func testStrictnessOffsetShiftsCategoryDefaults() async throws {
         let engine = try await makeEngineWithCategorizedModel(tagThresholds: ["House": 0.42])
-        await engine.setClassificationThreshold(0.9)
+        await engine.setStrictnessOffset(0.15)
         let dark = await engine.effectiveThreshold(forTag: "Dark")
         let opener = await engine.effectiveThreshold(forTag: "Opener")
+        let techno = await engine.effectiveThreshold(forTag: "Techno")
         let house = await engine.effectiveThreshold(forTag: "House")
-        XCTAssertEqual(dark, 0.9, accuracy: 0.0001, "User-set strictness overrides category defaults")
-        XCTAssertEqual(opener, 0.9, accuracy: 0.0001, "User-set strictness overrides category defaults")
-        XCTAssertEqual(house, 0.42, accuracy: 0.0001, "Tuned per-tag threshold still wins over user strictness")
+        XCTAssertEqual(dark, 0.70, accuracy: 0.0001, "Strict offset raises the Mood default by 0.15")
+        XCTAssertEqual(opener, 0.70, accuracy: 0.0001, "Strict offset raises the Timing default by 0.15")
+        XCTAssertEqual(techno, 0.85, accuracy: 0.0001, "Strict offset raises the Genre default by 0.15")
+        XCTAssertEqual(house, 0.42, accuracy: 0.0001, "Tuned per-tag threshold still wins over the strictness offset")
+
+        // Offsets clamp to [0.05, 0.99] — never an impossible threshold.
+        await engine.setStrictnessOffset(0.50)
+        let ceiling = await engine.effectiveThreshold(forTag: "Techno")
+        XCTAssertEqual(ceiling, 0.99, accuracy: 0.0001, "Offset result clamps at 0.99")
+        await engine.setStrictnessOffset(-0.60)
+        let floor = await engine.effectiveThreshold(forTag: "Dark")
+        XCTAssertEqual(floor, 0.05, accuracy: 0.0001, "Offset result clamps at 0.05")
+    }
+
+    func testAverageStrictnessPreservesCategoryStructure() async throws {
+        let engine = try await makeEngineWithCategorizedModel()
+        // Average strictness (offset 0) keeps the per-category structure intact.
+        await engine.setStrictnessOffset(0.0)
+        let genreDefault = await engine.effectiveThreshold(forTag: "House")
+        let moodDefault = await engine.effectiveThreshold(forTag: "Dark")
+        XCTAssertEqual(genreDefault, 0.7, accuracy: 0.0001, "Average strictness preserves the Genre 0.7 default")
+        XCTAssertEqual(moodDefault, 0.55, accuracy: 0.0001, "Average strictness preserves the Mood 0.55 default")
+        // Strict raises BOTH by 0.15 — the structure shifts, never flattens.
+        await engine.setStrictnessOffset(0.15)
+        let genreStrict = await engine.effectiveThreshold(forTag: "House")
+        let moodStrict = await engine.effectiveThreshold(forTag: "Dark")
+        XCTAssertEqual(genreStrict, 0.85, accuracy: 0.0001)
+        XCTAssertEqual(moodStrict, 0.70, accuracy: 0.0001)
+        XCTAssertEqual(genreStrict - moodStrict, genreDefault - moodDefault, accuracy: 0.0001,
+            "The Genre/Mood gap is identical at every strictness level")
+    }
+
+    // MARK: - Stem/name dual-key resolution (S2)
+
+    func testMultiWordTimingTagResolvesViaSanitizedStem() async throws {
+        // Binary classifiers are keyed by sanitized file stems ("Late_Night");
+        // metadata and tag_thresholds.json use tag names ("Late Night").
+        let engine = try await makeEngineWithCategorizedModel()
+        let stemDefault = await engine.effectiveThreshold(forTag: "Late_Night")
+        XCTAssertEqual(stemDefault, 0.55, accuracy: 0.0001,
+            "Sanitized stem must resolve to the Timing category default, not the 0.7 fallback")
+
+        // The stem must hit the judgment-stage partition too.
+        let probs: [String: Float] = ["Late_Night": 0.99, "House": 0.95]
+        let emitted = await engine.binaryThresholdPass(
+            rawProbabilities: probs,
+            adjustedProbabilities: probs,
+            moodPredictions: [:],
+            genrePredictions: [:],
+            instrumentPredictions: [:])
+        XCTAssertEqual(emitted, ["House"], "Stem-keyed Timing tag must not leak from the perception pass")
+
+        // A tuned threshold stored under the tag name resolves for its stem.
+        let tuned = try await makeEngineWithCategorizedModel(tagThresholds: ["Late Night": 0.42])
+        let tunedStem = await tuned.effectiveThreshold(forTag: "Late_Night")
+        XCTAssertEqual(tunedStem, 0.42, accuracy: 0.0001,
+            "Tuned threshold keyed by tag name must win for the sanitized stem")
+    }
+
+    // MARK: - Multi-class partition guard (S3)
+
+    func testMultiClassTimingClassNotEmittedByPerceptionPass() async throws {
+        let engine = try await makeEngineWithCategorizedModel()
+        func prediction(_ cls: String) -> MultiClassClassifier.Prediction {
+            MultiClassClassifier.Prediction(
+                groupName: "Energy",
+                predictedClass: cls,
+                confidence: 0.9,
+                runnerUpConfidence: 0.1,
+                classProbabilities: [cls: 0.9, "Other": 0.1])
+        }
+        let timingEmits = await engine.multiClassEmits(prediction("Opener"))
+        XCTAssertFalse(timingEmits, "A multi-class winner that is a Timing tag belongs to Stage 2 — never emitted by perception")
+        let genreEmits = await engine.multiClassEmits(prediction("House"))
+        XCTAssertTrue(genreEmits, "Perception-stage winners that pass the gate still emit")
+    }
+
+    // MARK: - Zero-shot partition (S6)
+
+    func testZeroShotPerceptionFilterExcludesJudgmentTags() async throws {
+        let engine = try await makeEngineWithCategorizedModel()
+        let filtered = await engine.zeroShotPerceptionFilter(["Opener", "House", "Late_Night", "Funky"])
+        XCTAssertEqual(filtered, ["House", "Funky"],
+            "Zero-shot never emits judgment-stage tags — by name or by stem")
     }
 
     // MARK: - Stage 2 judgment inference (Task 4.2)
@@ -348,7 +430,8 @@ final class TaggingEngineTests: XCTestCase {
     /// Caller must remove the returned directory.
     private func makeJudgmentModelDirectory(
         stage1Version: String? = "stage1-v1",
-        writeColumnNames: Bool = true
+        writeColumnNames: Bool = true,
+        tagThresholds: [String: Float]? = nil
     ) async throws -> (dir: URL, schema: [String]) {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -385,6 +468,7 @@ final class TaggingEngineTests: XCTestCase {
                 "Descriptive": ["Driving"]
             ],
             featureDimension: 1680,
+            tagThresholds: tagThresholds,
             stage1ModelVersion: stage1Version,
             judgmentColumnNames: writeColumnNames ? schema : nil
         )
@@ -473,6 +557,22 @@ final class TaggingEngineTests: XCTestCase {
             bpm: 139, durationSeconds: 300)
         XCTAssertTrue(extra.tags.isEmpty)
         XCTAssertFalse(extra.judgmentAvailable)
+    }
+
+    func testStaleTimingThresholdsDroppedWhenJudgmentActive() async throws {
+        // Tuned Timing thresholds were optimized on legacy Stage-1 scores —
+        // with Stage 2 active they must be dropped at load, not silently
+        // applied to the new judgment confidences. Perception entries survive.
+        let (dir, _) = try await makeJudgmentModelDirectory(
+            tagThresholds: ["Peak": 0.42, "Dark": 0.48])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = try await loadEngine(from: dir)
+        let peak = await engine.effectiveThreshold(forTag: "Peak")
+        let dark = await engine.effectiveThreshold(forTag: "Dark")
+        XCTAssertEqual(peak, 0.55, accuracy: 0.0001,
+            "Stale tuned Timing threshold must fall back to the category default")
+        XCTAssertEqual(dark, 0.48, accuracy: 0.0001,
+            "Tuned perception-stage thresholds survive the drop")
     }
 
     func testJudgmentPassUnavailableWithoutJudgmentModels() async throws {

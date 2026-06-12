@@ -66,7 +66,7 @@ struct SettingsPanel: View {
             .background(Theme.Colors.bgSurface)
             .cornerRadius(Theme.Radius.md)
 
-            Text("Controls the confidence threshold for applying tags. Lower values apply more tags but may include uncertain matches. Essentia predictions are used to validate low-confidence tags.")
+            Text("Shifts each tag category's default confidence threshold up or down. Looser settings apply more tags but may include uncertain matches. Essentia predictions are used to validate low-confidence tags.")
                 .font(Theme.Fonts.body(12))
                 .foregroundColor(Theme.Colors.textTertiary)
         }
@@ -217,7 +217,7 @@ struct SettingsPanel: View {
             .background(Theme.Colors.bgSurface)
             .cornerRadius(Theme.Radius.md)
 
-            Text("Fallback mappings apply Essentia predictions when your trained classifiers have low confidence. Uses the global strictness threshold.")
+            Text("Fallback mappings apply Essentia predictions when your trained classifiers have low confidence. Uses each tag's resolved threshold (category default plus strictness).")
                 .font(Theme.Fonts.body(12))
                 .foregroundColor(Theme.Colors.textTertiary)
         }

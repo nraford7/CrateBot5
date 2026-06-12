@@ -98,9 +98,9 @@ final class AppState {
             self?.modelLoadingProgress = progress
         }
 
-        // Sync fallback config and strictness threshold to engine
+        // Sync fallback config and strictness offset to engine
         await engine.setFallbackConfig(fallbackMappingConfig)
-        await engine.setClassificationThreshold(taggingPreferences.strictness.threshold)
+        await engine.setStrictnessOffset(taggingPreferences.strictness.offset)
 
         // Update state on main actor
         modelLoaded = true
@@ -220,7 +220,7 @@ final class AppState {
     /// Sync tagging preferences to engine (call before tagging)
     @MainActor
     func syncTaggingPreferences() async {
-        await taggingEngine?.setClassificationThreshold(taggingPreferences.strictness.threshold)
+        await taggingEngine?.setStrictnessOffset(taggingPreferences.strictness.offset)
     }
 
     // Toasts
@@ -426,39 +426,38 @@ final class AppState {
 }
 
 /// How strict the tagging threshold should be.
-/// Calibrated against accuracy evaluation on 200 tracks:
-///   0.70 = high recall, low precision (tags everything, many false positives)
-///   0.85 = balanced precision/recall (macro F1 peaks here)
-///   0.90 = best macro F1, precision > recall (tags are trustworthy)
-///   0.95 = high precision, low recall (only very confident tags applied)
+/// Each level is an OFFSET applied to the engine's per-category default
+/// thresholds (Genre 0.70, Mood/Descriptive/Timing 0.55), so the category
+/// structure survives every strictness level instead of collapsing into one
+/// absolute number. Tuned per-tag thresholds always win.
 enum TaggingStrictness: String, Codable, CaseIterable {
-    case loose = "loose"        // 0.70 threshold
-    case average = "average"    // 0.85 threshold
-    case strict = "strict"      // 0.90 threshold
-    case veryStrict = "veryStrict" // 0.95 threshold
+    case loose = "loose"        // category defaults − 0.15
+    case average = "average"    // category defaults as-is
+    case strict = "strict"      // category defaults + 0.15
+    case veryStrict = "veryStrict" // category defaults + 0.25
 
-    var threshold: Float {
+    var offset: Float {
         switch self {
-        case .loose: return 0.70
-        case .average: return 0.85
-        case .strict: return 0.90
-        case .veryStrict: return 0.95
+        case .loose: return -0.15
+        case .average: return 0.0
+        case .strict: return 0.15
+        case .veryStrict: return 0.25
         }
     }
 
     var displayName: String {
         switch self {
-        case .loose: return "Loose (70%)"
-        case .average: return "Balanced (85%)"
-        case .strict: return "Strict (90%)"
-        case .veryStrict: return "Very Strict (95%)"
+        case .loose: return "Loose (−15%)"
+        case .average: return "Balanced (category defaults)"
+        case .strict: return "Strict (+15%)"
+        case .veryStrict: return "Very Strict (+25%)"
         }
     }
 
     var description: String {
         switch self {
         case .loose: return "More tags, may include uncertain matches"
-        case .average: return "Balanced precision and recall"
+        case .average: return "Per-category default thresholds — balanced precision and recall"
         case .strict: return "Fewer tags, higher confidence"
         case .veryStrict: return "Only very confident predictions"
         }

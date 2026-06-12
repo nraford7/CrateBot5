@@ -193,11 +193,16 @@ public actor TaggingEngine {
     /// Minimum probability threshold for Essentia predictions display
     public var predictionThreshold: Float = 0.2
 
-    /// Classification threshold for user-trained classifiers (configurable via strictness setting)
+    /// Global fallback classification threshold (uncategorized tags and the
+    /// hybrid Essentia check). Per-category defaults + the strictness offset
+    /// drive everything else — see `effectiveThreshold(forTag:)`.
     public var classificationThreshold: Float = 0.7
 
-    /// True once `setClassificationThreshold` is called: the user's explicit strictness then overrides per-category defaults (tuned per-tag thresholds still win).
-    private var userSetStrictness: Bool = false
+    /// Strictness offset applied ON TOP of per-category default thresholds
+    /// (tuned per-tag thresholds still win). 0 = category defaults as-is.
+    /// An offset — not an absolute threshold — so the category structure
+    /// (Genre 0.7, Mood/Descriptive/Timing 0.55) survives every strictness level.
+    private var strictnessOffset: Float = 0
 
     /// Per-tag threshold overrides (loaded from metadata or tag_thresholds.json)
     private var tagThresholds: [String: Float]?
@@ -309,11 +314,21 @@ public actor TaggingEngine {
 
         // Build the lowercased tag → category reverse lookup once at model load
         // so threshold resolution can apply per-category defaults.
+        // Indexed under BOTH the metadata tag name and its sanitized model-file
+        // stem: binary classifiers are keyed by file stems, so multi-word tags
+        // ("Late Night" → "Late_Night") would otherwise miss their category.
+        // Sorted category keys + first-wins so a tag appearing in two categories
+        // resolves deterministically (alphabetical category priority) — same
+        // convention as ModelTrainer.trainModelsWithReport (ModelTrainer.swift:274-284).
         tagCategoryLookup = [:]
         if let metadata = metadata {
-            for (category, categoryTags) in metadata.tags {
-                for tag in categoryTags {
-                    tagCategoryLookup[tag.lowercased()] = category.lowercased()
+            for category in metadata.tags.keys.sorted() {
+                let categoryLower = category.lowercased()
+                for tag in metadata.tags[category] ?? [] {
+                    for key in [tag.lowercased(), Self.sanitizeModelFileName(tag).lowercased()]
+                    where tagCategoryLookup[key] == nil {
+                        tagCategoryLookup[key] = categoryLower
+                    }
                 }
             }
         }
@@ -351,6 +366,13 @@ public actor TaggingEngine {
                 }
                 logger.info("Loaded per-tag thresholds from tag_thresholds.json (\(fileThresholds.count) entries)")
             }
+        }
+
+        // Index tuned thresholds under their sanitized model-file stems too:
+        // binary classifiers look up by file stem ("Late_Night"), while
+        // tag_thresholds.json keys are metadata tag names ("Late Night").
+        if let thresholds = tagThresholds {
+            tagThresholds = Self.addingSanitizedStemAliases(thresholds)
         }
 
         // Detect feature config from metadata if not provided
@@ -498,6 +520,21 @@ public actor TaggingEngine {
             }
         }
 
+        // With Stage 2 active, tuned thresholds for judgment-stage (Timing)
+        // tags are stale: they were optimized on legacy Stage-1 scores and
+        // would silently gate the new judgment confidences. Drop them —
+        // `--optimize` rewrites them on final pipeline scores post-retrain.
+        if !judgmentClassifiers.isEmpty, let thresholds = tagThresholds {
+            let stale = thresholds.keys.filter { key in
+                guard let category = tagCategoryLookup[key.lowercased()] else { return false }
+                return judgmentCategoriesLower.contains(category)
+            }.sorted()
+            if !stale.isEmpty {
+                tagThresholds = thresholds.filter { !stale.contains($0.key) }
+                logger.info("Dropped \(stale.count) stale tuned Timing threshold(s) (optimized on legacy Stage-1 scores; Stage 2 judgment now owns these tags): \(stale.joined(separator: ", "))")
+            }
+        }
+
         // Use provided model name, or fall back to directory name
         let resolvedModelName = modelName ?? modelDirectory.lastPathComponent
         loadedModelName = resolvedModelName
@@ -513,6 +550,21 @@ public actor TaggingEngine {
             .components(separatedBy: invalidCharacters)
             .joined(separator: "_")
             .replacingOccurrences(of: " ", with: "_")
+    }
+
+    /// Add a `sanitizeModelFileName(key)` alias for every tuned threshold so
+    /// stem-keyed lookups (binary classifiers) resolve. Sorted keys +
+    /// first-wins keeps alias collisions deterministic; explicit keys are
+    /// never overwritten.
+    private static func addingSanitizedStemAliases(_ thresholds: [String: Float]) -> [String: Float] {
+        var result = thresholds
+        for key in thresholds.keys.sorted() {
+            let alias = sanitizeModelFileName(key)
+            if alias != key, result[alias] == nil {
+                result[alias] = thresholds[key]
+            }
+        }
+        return result
     }
 
     /// Load user-trained model (legacy single-classifier support)
@@ -565,16 +617,23 @@ public actor TaggingEngine {
         self.fallbackConfig = config
     }
 
-    /// Update classification threshold (from strictness setting).
-    /// Calling this marks the threshold as user-set: it then overrides
-    /// per-category defaults (tuned per-tag thresholds still win).
+    /// Update the strictness offset (from the app's strictness setting).
+    /// The offset shifts every per-category default threshold up or down;
+    /// tuned per-tag thresholds still win.
+    public func setStrictnessOffset(_ offset: Float) {
+        self.strictnessOffset = offset
+    }
+
+    /// Deprecated shim: legacy callers passed an absolute threshold, which
+    /// flattened the per-category defaults into one number. Map it to an
+    /// offset relative to the 0.7 base so unknown callers degrade sanely.
+    @available(*, deprecated, message: "Use setStrictnessOffset(_:) — absolute thresholds flatten per-category defaults")
     public func setClassificationThreshold(_ threshold: Float) {
-        self.classificationThreshold = threshold
-        self.userSetStrictness = true
+        setStrictnessOffset(threshold - 0.7)
     }
 
     /// Default classification threshold for a tag category, used when no tuned
-    /// per-tag threshold exists and no explicit strictness has been set.
+    /// per-tag threshold exists (the strictness offset is applied on top).
     func defaultThreshold(forCategory category: String?) -> Float {
         switch category?.lowercased() {
         case "genre": return 0.7
@@ -584,15 +643,24 @@ public actor TaggingEngine {
     }
 
     /// Resolve the classification threshold for a tag.
-    /// Precedence: tuned `tagThresholds[tag]` → user-set strictness → category default → `classificationThreshold`.
+    /// Precedence: tuned `tagThresholds` (tag name or sanitized stem — both
+    /// indexed at load) → category default + strictness offset, clamped to
+    /// [0.05, 0.99].
     func effectiveThreshold(forTag tag: String) -> Float {
         if let tuned = tagThresholds?[tag] { return tuned }
-        if userSetStrictness { return classificationThreshold }
-        return defaultThreshold(forCategory: tagCategoryLookup[tag.lowercased()])
+        let base = defaultThreshold(forCategory: tagCategoryLookup[tag.lowercased()])
+        return min(max(base + strictnessOffset, 0.05), 0.99)
     }
 
     /// Analyze audio file and return dual taxonomy predictions
     public func analyze(url: URL) async throws -> TaggingResult {
+        // Snapshot Stage 2 state BEFORE any suspension point: the awaits below
+        // (feature extraction, BPM read) are actor reentrancy windows where a
+        // concurrent loadModel could swap judgmentClassifiers/judgmentSchema
+        // mid-analysis. Judgment must run against the state this pass started with.
+        let judgmentSnapshot = JudgmentSnapshot(
+            classifiers: judgmentClassifiers, schema: judgmentSchema)
+
         // Load audio at 16kHz
         let buffer = try await audioAnalyzer.loadAudio(from: url, targetSampleRate: EffNetExtractor.targetSampleRate)
 
@@ -691,7 +759,7 @@ public actor TaggingEngine {
             do {
                 let prediction = try await classifier.predict(features: extendedFeatures)
                 groupProbabilities[groupName] = prediction.classProbabilities
-                if multiClassGatePasses(prediction) {
+                if multiClassEmits(prediction) {
                     predictedTags.append(prediction.predictedClass)
                 }
                 // Track all classes from this group as trained tags (to avoid fallback duplicates)
@@ -707,13 +775,14 @@ public actor TaggingEngine {
         // calibrated PRE-BOOST probabilities + multi-class distributions +
         // BPM + duration — exactly the rows JudgmentDataGenerator trained on.
         let judgmentAvailable: Bool
-        if !judgmentClassifiers.isEmpty {
-            for tagName in judgmentClassifiers.keys {
+        if !judgmentSnapshot.classifiers.isEmpty {
+            for tagName in judgmentSnapshot.classifiers.keys {
                 trainedTagNames.insert(tagName.lowercased())
             }
             let bpm = await readBPM(from: url)
             let duration = readDurationSeconds(from: url)
             let judgment = judgmentPass(
+                snapshot: judgmentSnapshot,
                 binaryConfidences: rawProbabilities,
                 groupProbabilities: groupProbabilities,
                 bpm: bpm,
@@ -735,9 +804,8 @@ public actor TaggingEngine {
                 maxResults: 3,
                 excludingTags: trainedTagNames
             )
-            for match in zeroShotMatches where !isJudgmentStageTag(match.tag) {
-                predictedTags.append(match.tag)
-            }
+            predictedTags.append(
+                contentsOf: zeroShotPerceptionFilter(zeroShotMatches.map { $0.tag }))
         }
 
         // Apply fallback mappings for tags without trained classifiers
@@ -826,6 +894,27 @@ public actor TaggingEngine {
             && prediction.confidence - prediction.runnerUpConfidence >= Self.multiClassSeparationMargin
     }
 
+    /// Multi-class emission guard: the gate must pass AND the winning class
+    /// must not be a judgment-stage tag — a group like Energy can contain a
+    /// Timing class ("Peak") that only Stage 2 may emit.
+    func multiClassEmits(_ prediction: MultiClassClassifier.Prediction) -> Bool {
+        multiClassGatePasses(prediction) && !isJudgmentStageTag(prediction.predictedClass)
+    }
+
+    /// Zero-shot pass partition: judgment-stage tags never come from CLAP
+    /// zero-shot — Stage 2's exclusive domain (same partition as the other passes).
+    func zeroShotPerceptionFilter(_ tags: [String]) -> [String] {
+        tags.filter { !isJudgmentStageTag($0) }
+    }
+
+    /// Immutable snapshot of Stage 2 state, captured at the start of an
+    /// analyze pass so actor reentrancy (a concurrent loadModel during an
+    /// await) cannot swap the classifier/schema pairing mid-analysis.
+    struct JudgmentSnapshot {
+        let classifiers: [String: TagClassifier]
+        let schema: [String]?
+    }
+
     /// Pass 4: Stage 2 judgment inference.
     ///
     /// Builds the JudgmentFeatureVector from Stage 1 outputs and validates
@@ -841,7 +930,26 @@ public actor TaggingEngine {
         bpm: Float?,
         durationSeconds: Float?
     ) -> (tags: [String], judgmentAvailable: Bool) {
-        guard !judgmentClassifiers.isEmpty, let schema = judgmentSchema else {
+        judgmentPass(
+            snapshot: JudgmentSnapshot(classifiers: judgmentClassifiers, schema: judgmentSchema),
+            binaryConfidences: binaryConfidences,
+            groupProbabilities: groupProbabilities,
+            bpm: bpm,
+            durationSeconds: durationSeconds
+        )
+    }
+
+    /// Snapshot-based judgment pass: `analyze` captures the snapshot before
+    /// its first await so reentrant loadModel calls cannot swap the
+    /// classifier/schema pairing between Stage 1 and Stage 2.
+    func judgmentPass(
+        snapshot: JudgmentSnapshot,
+        binaryConfidences: [String: Float],
+        groupProbabilities: [String: [String: Float]],
+        bpm: Float?,
+        durationSeconds: Float?
+    ) -> (tags: [String], judgmentAvailable: Bool) {
+        guard !snapshot.classifiers.isEmpty, let schema = snapshot.schema else {
             return ([], false)
         }
 
@@ -858,7 +966,7 @@ public actor TaggingEngine {
 
         let namedFeatures = Dictionary(uniqueKeysWithValues: zip(vector.columnNames, vector.values))
         var emitted: [String] = []
-        for (tagName, classifier) in judgmentClassifiers.sorted(by: { $0.key < $1.key }) {
+        for (tagName, classifier) in snapshot.classifiers.sorted(by: { $0.key < $1.key }) {
             do {
                 let (_, confidence) = try classifier.predictWithConfidence(namedFeatures: namedFeatures)
                 if confidence >= effectiveThreshold(forTag: tagName) {
@@ -927,7 +1035,7 @@ public actor TaggingEngine {
 
     /// Categorize predicted tags into genre, timing, mood, and structured descriptive based on model metadata
     private func categorizePredictions(_ tags: [String]) -> UserTagPredictions {
-        guard let metadata = loadedMetadata else {
+        guard loadedMetadata != nil else {
             // No metadata - fall back to organizing descriptive tags only
             let organized = DescriptiveTagMapping.organize(tags)
 
@@ -955,16 +1063,11 @@ public actor TaggingEngine {
         var moodTags: [String] = []
         var descriptiveTags: [String] = []
 
-        // Build lookup: tag name (lowercased) -> category
-        var tagToCategory: [String: String] = [:]
-        for (category, categoryTags) in metadata.tags {
-            for tag in categoryTags {
-                tagToCategory[tag.lowercased()] = category.lowercased()
-            }
-        }
-
+        // Use the dual-keyed (tag name + sanitized stem) deterministic lookup
+        // built at model load — stem-named predictions ("Late_Night") must
+        // categorize the same as their metadata tag names.
         for tag in tags {
-            let category = tagToCategory[tag.lowercased()] ?? "descriptive"
+            let category = tagCategoryLookup[tag.lowercased()] ?? "descriptive"
 
             switch category {
             case "genre":

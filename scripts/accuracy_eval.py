@@ -158,6 +158,15 @@ def positive_probability(output):
     return prob_dict.get('positive', 0.0)
 
 
+def sanitize_model_file_name(name):
+    """Mirror of ModelTrainer.sanitizeFileName / TaggingEngine.sanitizeModelFileName:
+    invalid filename characters and spaces become underscores. Used to write
+    threshold keys under the same sanitized-stem alias Swift indexes at load."""
+    for ch in '/\\:*?"<>|':
+        name = name.replace(ch, '_')
+    return name.replace(' ', '_')
+
+
 # ---------------------------------------------------------------------------
 # Shared environment loading
 # ---------------------------------------------------------------------------
@@ -401,7 +410,9 @@ def per_tag_counts(scores, tracks, tag, threshold):
     for i, track in enumerate(tracks):
         if tag not in scores[i]:
             continue
-        predicted = scores[i][tag] > threshold
+        # >= matches Swift's decision rule (`confidence >= threshold` in
+        # TaggingEngine) — a strict > here would drift the eval semantics.
+        predicted = scores[i][tag] >= threshold
         actual = tag in set(track['tags'])
         if predicted and actual:        tp += 1
         elif predicted and not actual:  fp += 1
@@ -459,6 +470,11 @@ def run_stage_aware(env, use_boost, use_optimize):
     train_split, holdout = stratified_holdout(tracks)
     print(f"\nStratified holdout: {len(holdout)} eval / {len(train_split)} train "
           f"({HOLDOUT_FRACTION:.0%} per tag, seed {SEED}) — same holdout for both stages")
+    print("  WARNING (contamination): this holdout is drawn from the same tracks the "
+          "loaded models were TRAINED on, so absolute numbers are in-sample-optimistic. "
+          f"The {BASELINE_MACRO_F1:.1f}% baseline was measured identically, so the "
+          "RELATIVE comparison stands. Clean absolute numbers require a training-side "
+          "holdout — a known limitation, not fixed here.")
 
     # --- Load Stage 1 binary classifiers (mirrors ProductionStage1Predictor.load:
     # every model file except _multiclass / _judgment suffixes) ---
@@ -672,7 +688,8 @@ def threshold_sweep(data):
             ground_truth = set(track['tags'])
             for tag_name in classifiers:
                 if tag_name not in raw_probs[i]: continue
-                predicted = raw_probs[i][tag_name] > threshold
+                # >= matches Swift's `confidence >= threshold` decision rule.
+                predicted = raw_probs[i][tag_name] >= threshold
                 actual = tag_name in ground_truth
 
                 if predicted and actual:      tag_tp[tag_name] += 1; total_correct += 1
@@ -802,12 +819,23 @@ def optimize_thresholds(scores, tracks, tag_names, model_dir, sweep_lo=0.50, swe
         print(f"  Tags with F1 >= 50%: {f1_above_50}/{len(with_support)}")
         print(f"  Average optimal threshold: {avg_thresh:.2f}")
 
-    # Save JSON — only thresholds map for direct consumption by the app
+    # Save JSON — only thresholds map for direct consumption by the app.
+    # Each tag is written under BOTH its resolved name and its sanitized
+    # model-file stem (first-wins, never overwriting an explicit key), so the
+    # lookup resolves regardless of which form Swift queries with. Swift also
+    # dual-keys at load (TaggingEngine.addingSanitizedStemAliases) — this is
+    # the matching producer-side alignment.
+    tags_out = dict(results)
+    for tag in sorted(results):
+        alias = sanitize_model_file_name(tag)
+        if alias != tag and alias not in tags_out:
+            tags_out[alias] = results[tag]
+
     out_path = model_dir / "tag_thresholds.json"
     output = {
         'description': 'Per-tag optimized thresholds (maximized F1 on eval set)',
         'sample_size': len(tracks),
-        'tags': results,
+        'tags': tags_out,
     }
     with open(out_path, 'w') as f:
         json.dump(output, f, indent=2)
