@@ -16,6 +16,14 @@ DerivedData/
 .swiftpm/
 Package.resolved
 
+# Xcode build output (xcodebuild -derivedDataPath ./build)
+build/
+
+# Local research/output dirs
+graphify-out/
+__pycache__/
+*.pyc
+
 # IDE
 .idea/
 .vscode/

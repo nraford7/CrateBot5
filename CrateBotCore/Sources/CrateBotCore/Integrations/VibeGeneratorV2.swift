@@ -29,7 +29,7 @@ public enum VibeGeneratorError: Error, LocalizedError, Sendable {
 /// - `long`: 1–2 sentence prose description. TIT3 target.
 /// - `mixHint`: Optional DJ mix-context hint. TXXX:CRATEBOT_MIXHINT target. Always
 ///   `nil` when the mix-hint gate is closed, even if the model returned a value.
-public struct VibeGenerationResult: Sendable, Equatable {
+public struct VibeGenerationResult: Sendable, Equatable, Codable {
     public let short: String
     public let long: String
     public let mixHint: String?
