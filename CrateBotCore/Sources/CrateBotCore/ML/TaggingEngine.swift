@@ -86,7 +86,7 @@ public struct TaggingResult: Sendable {
     }
 }
 
-public struct UserTagPredictions: Sendable {
+public struct UserTagPredictions: Sendable, Equatable {
     public let genre: String?
     public let timing: String?
     public let mood: String?

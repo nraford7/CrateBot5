@@ -111,19 +111,54 @@ final class VibeGenerationInputsTests: XCTestCase {
     func testPromptPayloadRoundsConfidencesTo3DecimalPlaces() {
         let inputs = makeInputs()
         let payload = inputs.promptPayload()
-        // 0.876543 → "0.877" (standard half-up rounding)
+        // 0.876543 → exact "0.877" (no Float→Double promotion noise like 0.8770000338554382).
+        // We assert the EXACT substring boundary (`,` or `}`) to catch any promotion regression.
         XCTAssertTrue(
-            payload.contains("\"Dark\":0.877"),
-            "Expected 0.877 (rounded) in payload, got: \(payload)"
+            payload.contains("\"Dark\":0.877,") || payload.contains("\"Dark\":0.877}"),
+            "Expected exact \"Dark\":0.877 (no trailing precision) in payload, got: \(payload)"
         )
-        // 0.123456 → "0.123"
+        // 0.123456 → exact "0.123"
         XCTAssertTrue(
-            payload.contains("\"Driving\":0.123"),
-            "Expected 0.123 in payload, got: \(payload)"
+            payload.contains("\"Driving\":0.123,") || payload.contains("\"Driving\":0.123}"),
+            "Expected exact \"Driving\":0.123 in payload, got: \(payload)"
         )
-        // No raw 6-digit precision should leak through.
+        // No raw 6-digit precision and no Float-promotion artifacts should leak through.
         XCTAssertFalse(payload.contains("0.876543"))
         XCTAssertFalse(payload.contains("0.123456"))
+        XCTAssertFalse(payload.contains("0.8770000"), "Float→Double promotion leaked into payload: \(payload)")
+        XCTAssertFalse(payload.contains("0.1230000"), "Float→Double promotion leaked into payload: \(payload)")
+    }
+
+    // MARK: - NaN / Inf sanitization
+
+    func testPromptPayloadSanitizesNaNToZero() {
+        // A NaN bpm or confidence used to silently swallow the entire payload into "{}"
+        // because nonConformingFloatEncodingStrategy = .throw fired and try? returned nil.
+        // round3 now sanitizes NaN/Inf to 0.0 so the encoder never sees a non-conforming value.
+        let inputs = VibeGenerationInputs(
+            binaryConfidences: ["Dark": Float.nan, "Hypnotic": 0.5],
+            groupProbabilities: ["BassType": ["Sub Bass": Float.infinity]],
+            predictedTags: makePredictions(),
+            bpm: Float.nan,
+            key: "Am",
+            durationSeconds: 300,
+            title: nil,
+            artist: nil,
+            stage2Timing: TimingPrediction(label: "Peak", confidence: Float.nan),
+            cooccurrence: nil
+        )
+        let payload = inputs.promptPayload()
+        XCTAssertNotEqual(payload, "{}", "NaN must not silently produce empty payload")
+        // NaN-cleaned values should appear as 0
+        XCTAssertTrue(payload.contains("\"Dark\":0"), "Expected NaN Dark → 0 in payload, got: \(payload)")
+        XCTAssertTrue(payload.contains("\"bpm\":0"), "Expected NaN bpm → 0 in payload, got: \(payload)")
+        XCTAssertTrue(payload.contains("\"Sub Bass\":0"), "Expected Inf Sub Bass → 0 in payload, got: \(payload)")
+        XCTAssertTrue(payload.contains("\"confidence\":0"), "Expected NaN stage2Timing.confidence → 0 in payload, got: \(payload)")
+        // Non-NaN sibling should still round normally
+        XCTAssertTrue(payload.contains("\"Hypnotic\":0.5"))
+        // No raw NaN/Infinity tokens leaked
+        XCTAssertFalse(payload.lowercased().contains("nan"))
+        XCTAssertFalse(payload.lowercased().contains("inf"))
     }
 
     func testPromptPayloadRoundsGroupProbabilitiesTo3DecimalPlaces() {

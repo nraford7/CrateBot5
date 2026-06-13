@@ -10,7 +10,7 @@ final class CooccurrenceContextTests: XCTestCase {
         conditional: [String: [String: Double]],
         totalTracks: Int
     ) -> Cooccurrence.Stats {
-        // Round-trip through JSON to honor the Decodable contract.
+        // Round-trip through JSON to honor the Decodable contract (snake_case wire form).
         let payload: [String: Any] = [
             "base_rates": baseRates,
             "conditional": conditional,
@@ -32,7 +32,6 @@ final class CooccurrenceContextTests: XCTestCase {
         )
 
         let ctx = Cooccurrence.context(
-            forTags: [],
             timing: "Peak",
             stats: stats,
             topK: 2,
@@ -57,7 +56,6 @@ final class CooccurrenceContextTests: XCTestCase {
             totalTracks: 1
         )
         XCTAssertNil(Cooccurrence.context(
-            forTags: [],
             timing: "Peak",
             stats: thinTotal
         ))
@@ -69,7 +67,6 @@ final class CooccurrenceContextTests: XCTestCase {
             totalTracks: 100
         )
         XCTAssertNil(Cooccurrence.context(
-            forTags: [],
             timing: "Peak",
             stats: emptyRow
         ))
@@ -81,7 +78,6 @@ final class CooccurrenceContextTests: XCTestCase {
             totalTracks: 100
         )
         XCTAssertNil(Cooccurrence.context(
-            forTags: [],
             timing: "Peak",
             stats: missingRow
         ))
@@ -97,7 +93,6 @@ final class CooccurrenceContextTests: XCTestCase {
         )
 
         let ctx = Cooccurrence.context(
-            forTags: [],
             timing: "Peak",
             stats: stats,
             topK: 3,
@@ -108,5 +103,68 @@ final class CooccurrenceContextTests: XCTestCase {
         XCTAssertNotNil(ctx)
         XCTAssertEqual(ctx?.coOccurringTags, ["Signal"])
         XCTAssertFalse(ctx?.coOccurringTags.contains("Common") ?? true)
+    }
+
+    // MARK: - Base-rate edge cases
+
+    func testCooccurrenceContextDropsTagsMissingFromBaseRates() {
+        // "Ghost" appears in conditional but has no base_rate entry — we cannot compute
+        // lift without P(tag), so it must be dropped silently (not crash, not divide-by-nil).
+        // "Signal" has both, lift=2.5, kept.
+        let stats = makeStats(
+            baseRates: ["Signal": 0.20],
+            conditional: ["Peak": ["Ghost": 0.9, "Signal": 0.50]],
+            totalTracks: 200
+        )
+
+        let ctx = Cooccurrence.context(
+            timing: "Peak",
+            stats: stats,
+            topK: 3,
+            minSupport: 3,
+            minLift: 1.2
+        )
+
+        XCTAssertNotNil(ctx)
+        XCTAssertEqual(ctx?.coOccurringTags, ["Signal"])
+        XCTAssertFalse(ctx?.coOccurringTags.contains("Ghost") ?? true)
+    }
+
+    func testCooccurrenceContextDropsTagsWithZeroBaseRate() {
+        // "Zero" has base_rate=0.0 — division would explode; must be dropped silently.
+        let stats = makeStats(
+            baseRates: ["Zero": 0.0, "Signal": 0.20],
+            conditional: ["Peak": ["Zero": 0.9, "Signal": 0.50]],
+            totalTracks: 200
+        )
+
+        let ctx = Cooccurrence.context(
+            timing: "Peak",
+            stats: stats,
+            topK: 3,
+            minSupport: 3,
+            minLift: 1.2
+        )
+
+        XCTAssertNotNil(ctx)
+        XCTAssertEqual(ctx?.coOccurringTags, ["Signal"])
+        XCTAssertFalse(ctx?.coOccurringTags.contains("Zero") ?? true)
+    }
+
+    // MARK: - Stats camelCase / snake_case mapping
+
+    func testStatsDecodesSnakeCaseWireFormat() {
+        // The decoded Swift properties must be camelCase even though the JSON is snake_case.
+        let json = """
+        {
+          "base_rates": {"Dark": 0.3},
+          "conditional": {"Peak": {"Dark": 0.6}},
+          "total_tracks": 42
+        }
+        """.data(using: .utf8)!
+        let stats = try! JSONDecoder().decode(Cooccurrence.Stats.self, from: json)
+        XCTAssertEqual(stats.baseRates["Dark"], 0.3)
+        XCTAssertEqual(stats.totalTracks, 42)
+        XCTAssertEqual(stats.conditional["Peak"]?["Dark"], 0.6)
     }
 }

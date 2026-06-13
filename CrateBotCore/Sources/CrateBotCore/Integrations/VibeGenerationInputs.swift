@@ -63,35 +63,6 @@ public struct VibeGenerationInputs: Sendable, Equatable {
         self.cooccurrence = cooccurrence
     }
 
-    // MARK: Equatable (UserTagPredictions is not Equatable — compare via projected fields)
-
-    public static func == (lhs: VibeGenerationInputs, rhs: VibeGenerationInputs) -> Bool {
-        return lhs.binaryConfidences == rhs.binaryConfidences
-            && lhs.groupProbabilities == rhs.groupProbabilities
-            && lhs.bpm == rhs.bpm
-            && lhs.key == rhs.key
-            && lhs.durationSeconds == rhs.durationSeconds
-            && lhs.title == rhs.title
-            && lhs.artist == rhs.artist
-            && lhs.stage2Timing == rhs.stage2Timing
-            && lhs.cooccurrence == rhs.cooccurrence
-            && Self.predictionsEqual(lhs.predictedTags, rhs.predictedTags)
-    }
-
-    private static func predictionsEqual(_ a: UserTagPredictions, _ b: UserTagPredictions) -> Bool {
-        return a.genre == b.genre
-            && a.timing == b.timing
-            && a.mood == b.mood
-            && a.bassType == b.bassType
-            && a.rhythm == b.rhythm
-            && a.style == b.style
-            && a.vibes == b.vibes
-            && a.instruments == b.instruments
-            && a.vocalType == b.vocalType
-            && a.acapella == b.acapella
-            && a.customTags == b.customTags
-    }
-
     // MARK: - Prompt payload
 
     /// Serializes the inputs to a deterministic JSON string for inclusion in the LLM prompt.
@@ -141,7 +112,10 @@ public struct VibeGenerationInputs: Sendable, Equatable {
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        // Force deterministic Double encoding (no exponent drift).
+        // Round-then-store as Double guarantees the wire form is exact (e.g. `0.877`
+        // instead of Float→Double-promoted `0.8770000338554382`). NaN/Inf are
+        // sanitized to 0.0 in round3, so .throw never fires in practice — we keep
+        // it on as a tripwire if anyone introduces an un-sanitized field later.
         encoder.nonConformingFloatEncodingStrategy = .throw
         guard let data = try? encoder.encode(payload),
               let string = String(data: data, encoding: .utf8) else {
@@ -153,21 +127,32 @@ public struct VibeGenerationInputs: Sendable, Equatable {
 
     // MARK: - Rounding helpers
 
-    private static func round3(_ value: Float) -> Float {
-        // Round to 3 decimal places by scaling, rounding, descaling.
-        let scaled = (value * 1000.0).rounded()
+    /// Round to 3 decimal places and return as `Double`.
+    ///
+    /// Returning `Double` (not `Float`) is structural: `JSONEncoder` promotes any
+    /// `Float` field to `Double` at encode time, and the promoted bits surface as
+    /// noisy trailing digits (e.g. `Float(0.877)` → `0.8770000338554382`). By
+    /// rounding into a `Double` here, the rounded value IS the exact stored value,
+    /// and the encoded form is the clean `0.877` we want for byte-identical prompts.
+    ///
+    /// NaN and infinite inputs are sanitized to 0.0 so a bad upstream value cannot
+    /// trip `nonConformingFloatEncodingStrategy = .throw` and silently swallow the
+    /// entire payload into `"{}"`.
+    private static func round3(_ value: Float) -> Double {
+        guard value.isFinite else { return 0.0 }
+        let scaled = (Double(value) * 1000.0).rounded()
         return scaled / 1000.0
     }
 
-    private static func rounded(_ dict: [String: Float]) -> [String: Float] {
-        var out: [String: Float] = [:]
+    private static func rounded(_ dict: [String: Float]) -> [String: Double] {
+        var out: [String: Double] = [:]
         out.reserveCapacity(dict.count)
         for (k, v) in dict { out[k] = round3(v) }
         return out
     }
 
-    private static func rounded(_ dict: [String: [String: Float]]) -> [String: [String: Float]] {
-        var out: [String: [String: Float]] = [:]
+    private static func rounded(_ dict: [String: [String: Float]]) -> [String: [String: Double]] {
+        var out: [String: [String: Double]] = [:]
         out.reserveCapacity(dict.count)
         for (k, v) in dict { out[k] = rounded(v) }
         return out
@@ -177,14 +162,17 @@ public struct VibeGenerationInputs: Sendable, Equatable {
     //
     // These mirror the public fields verbatim. Keeping them private + Encodable
     // means the prompt JSON schema is owned here and cannot drift from the type.
+    //
+    // All numeric fields are `Double` so the JSON wire form matches what we round
+    // to (Float promotion would re-introduce trailing precision noise).
 
     private struct Payload: Encodable {
         let artist: String?
-        let binaryConfidences: [String: Float]
-        let bpm: Float?
+        let binaryConfidences: [String: Double]
+        let bpm: Double?
         let cooccurrence: CooccurrencePayload?
-        let durationSeconds: Float
-        let groupProbabilities: [String: [String: Float]]
+        let durationSeconds: Double
+        let groupProbabilities: [String: [String: Double]]
         let key: String?
         let predictedTags: PredictionsPayload
         let stage2Timing: TimingPayload?
@@ -193,12 +181,13 @@ public struct VibeGenerationInputs: Sendable, Equatable {
 
     private struct CooccurrencePayload: Encodable {
         let coOccurringTags: [String]
+        /// `total_tracks` from the stats file (the whole corpus, NOT the matches for this row).
         let support: Int
         let timingLabel: String
     }
 
     private struct TimingPayload: Encodable {
-        let confidence: Float
+        let confidence: Double
         let label: String
     }
 

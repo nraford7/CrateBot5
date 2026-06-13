@@ -99,30 +99,31 @@ public struct CooccurrenceContext: Sendable, Equatable {
 
 public enum Cooccurrence {
     public struct Stats: Decodable, Sendable {
-        public let base_rates: [String: Double]
+        // Wire is snake_case (`base_rates`, `total_tracks`); CodingKeys maps to camelCase Swift properties.
+        public let baseRates: [String: Double]
         public let conditional: [String: [String: Double]]
-        public let total_tracks: Int
+        public let totalTracks: Int
     }
     public static func loadFromBundle() -> Stats? { /* JSON Data load */ }
     public static func context(
-        forTags: Set<String>,                       // currently unused for v1; kept in signature for future
+        // Note: chunk-2 review dropped a dead `forTags: Set<String>` parameter — re-add only when a consumer exists.
         timing: String,
         stats: Stats,
         topK: Int = 3,
         minSupport: Int = 3,
         minLift: Double = 1.2
     ) -> CooccurrenceContext? {
-        guard stats.total_tracks >= minSupport else { return nil }
+        guard stats.totalTracks >= minSupport else { return nil }
         guard let row = stats.conditional[timing], !row.isEmpty else { return nil }
         let scored = row.compactMap { (tag, p) -> (String, Double)? in
-            let base = stats.base_rates[tag] ?? 0
+            let base = stats.baseRates[tag] ?? 0
             guard base > 0 else { return nil }
             let lift = p / base
             return lift >= minLift ? (tag, lift) : nil
         }
         let top = scored.sorted { $0.1 > $1.1 }.prefix(topK).map { $0.0 }
         guard !top.isEmpty else { return nil }
-        return CooccurrenceContext(timingLabel: timing, coOccurringTags: Array(top), support: stats.total_tracks)
+        return CooccurrenceContext(timingLabel: timing, coOccurringTags: Array(top), support: stats.totalTracks)
     }
 }
 ```
