@@ -117,6 +117,33 @@ enum ID3Field: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+extension ID3Field {
+    /// Tolerant decoder: strips legacy frame-ID parenthetical suffixes
+    /// (e.g. "Album Artist (TPE2)" -> "Album Artist") before matching rawValue.
+    /// This migrates older persisted JSON blobs that embedded the frame ID.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        let stripped = raw.replacingOccurrences(
+            of: #"\s*\([A-Z0-9:]+\)\s*$"#,
+            with: "",
+            options: .regularExpression
+        ).trimmingCharacters(in: .whitespaces)
+        if let field = ID3Field(rawValue: stripped) {
+            self = field
+            return
+        }
+        if let field = ID3Field.allCases.first(where: { $0.rawValue.caseInsensitiveCompare(stripped) == .orderedSame }) {
+            self = field
+            return
+        }
+        throw DecodingError.dataCorruptedError(
+            in: container,
+            debugDescription: "Unrecognized ID3Field value: \(raw)"
+        )
+    }
+}
+
 /// Configuration for mapping ID3 fields to training categories
 struct TagMappingConfiguration: Equatable, Codable {
     var genreField: ID3Field = .genre
@@ -161,6 +188,10 @@ struct TagMappingConfiguration: Equatable, Codable {
         guard let data = UserDefaults.standard.data(forKey: userDefaultsKey),
               let config = try? JSONDecoder().decode(TagMappingConfiguration.self, from: data) else {
             return .default
+        }
+        // Re-save in current bare-rawValue format. Cheap; migrates legacy "(TPE2)" suffixes.
+        if let current = try? JSONEncoder().encode(config) {
+            UserDefaults.standard.set(current, forKey: userDefaultsKey)
         }
         return config
     }
