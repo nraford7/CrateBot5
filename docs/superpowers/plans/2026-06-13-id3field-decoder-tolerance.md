@@ -16,8 +16,11 @@
 
 **Files:**
 - Modify: `CrateBot/Views/TrainView.swift` (~L14-118 — `ID3Field` enum; ~L121-167 — `TagMappingConfiguration`)
-- Test: `CrateBotTests/` if it exists; otherwise add a new test target file. The test must run as part of `xcodebuild test` for the app scheme — verify with the assigned agent before assuming a target exists. If no test target exists, add a lightweight one or write Swift Testing-style assertions inside a small `#if DEBUG` debug helper that the agent verifies by direct invocation.
-- (Optional) Mirror unit-test in `CrateBotCore/Tests/` if a parallel `ID3Field` type exists there — verify first; do NOT duplicate behavior.
+- Test: **CrateBot has no Xcode test target** (only `CrateBotCoreTests` exists in SwiftPM, and `CrateBotCore` does not host this enum). Use a one-off `swift` script the agent runs to verify the decode logic on the actual persisted JSON. Path: `/tmp/verify_id3field_decoder.swift`. Script must:
+  1. Inline-copy the relevant `ID3Field` enum + the new tolerant decoder extension + the `TagMappingConfiguration` Codable struct (kept in sync with TrainView.swift — short and bounded).
+  2. Run the four assertions below against String inputs.
+  3. Print PASS/FAIL and a one-line summary; exit non-zero on any failure.
+  The agent runs the script via `swift /tmp/verify_id3field_decoder.swift` and pastes the output in the report as test evidence. Do NOT skip — this regression cost a training run.
 
 - [ ] **Step 1: Failing tests**
 
@@ -63,7 +66,8 @@ func testTagMappingLoadSavesBackAfterLegacyDecode() throws {
 ```swift
 extension ID3Field {
     public init(from decoder: Decoder) throws {
-        let raw = try decoder.singleValueContainer().decode(String.self)
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
         // Strip a legacy frame-ID parenthetical suffix: "Album Artist (TPE2)" -> "Album Artist"
         let stripped = raw.replacingOccurrences(
             of: #"\s*\([A-Z0-9:]+\)\s*$"#,
@@ -73,11 +77,11 @@ extension ID3Field {
         if let field = ID3Field(rawValue: stripped) {
             self = field; return
         }
-        // Defensive: try matching against displayName (rawValue), trimmed differently
+        // Defensive: case-insensitive match against rawValue
         if let field = ID3Field.allCases.first(where: { $0.rawValue.caseInsensitiveCompare(stripped) == .orderedSame }) {
             self = field; return
         }
-        throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(),
+        throw DecodingError.dataCorruptedError(in: container,
             debugDescription: "Unrecognized ID3Field value: \(raw)")
     }
 }
@@ -85,7 +89,7 @@ extension ID3Field {
 
 Default `Encodable` synthesis still writes the bare `rawValue` — exactly what we want for the round-trip.
 
-- [ ] **Step 4: Save-back on load.** Modify `TagMappingConfiguration.load()` so that after a successful decode, if the on-disk JSON didn't match the current encoded form, it re-saves immediately. Cheap, idempotent:
+- [ ] **Step 4: Save-back on load (unconditional, no byte-compare).** `JSONEncoder` emits keys in struct declaration order, which differs from the legacy blob's key order — a byte-equality migration check would re-save every launch anyway and is misleading. Simpler and correct: always re-save once on successful load. One UserDefaults write per launch, idempotent in practice (the decoded `config` round-trips deterministically through the bare rawValue):
 
 ```swift
 static func load() -> TagMappingConfiguration {
@@ -93,8 +97,8 @@ static func load() -> TagMappingConfiguration {
           let config = try? JSONDecoder().decode(TagMappingConfiguration.self, from: data) else {
         return .default
     }
-    // Migrate legacy persisted forms by re-saving in the current bare-rawValue format
-    if let current = try? JSONEncoder().encode(config), current != data {
+    // Re-save in current bare-rawValue format. Cheap; migrates legacy "(TPE2)" suffixes.
+    if let current = try? JSONEncoder().encode(config) {
         UserDefaults.standard.set(current, forKey: userDefaultsKey)
     }
     return config
