@@ -178,6 +178,19 @@ final class VibeGeneratorV2Tests: XCTestCase {
         XCTAssertEqual(r.long, "has {a brace} inside")
     }
 
+    func testExtractFirstJSONObjectHandlesEscapedQuotesInsideStrings() async throws {
+        // Escaped quotes inside a JSON string literal must not flip the parser
+        // out of string-mode mid-token. If they did, the stray `}` inside the
+        // string would close the outer object early and trim the value short.
+        let mock = MockClient(
+            reply: #"{"long":"she said \"close the brace\" and then }","short":"X"}"#
+        )
+        let gen = VibeGeneratorV2(client: mock)
+        let r = try await gen.generate(inputs: sampleInputs)
+        XCTAssertEqual(r.short, "X")
+        XCTAssertEqual(r.long, #"she said "close the brace" and then }"#)
+    }
+
     func testProseWrappedJSONIsExtracted() async throws {
         let reply = """
         Here's the analysis:
