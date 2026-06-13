@@ -662,6 +662,59 @@ final class TaggingEngineTests: XCTestCase {
         XCTAssertFalse(belowThreshold, "Threshold still applies alongside the separation margin")
     }
 
+    func testTimingPredictionSurfacedWhenJudgmentFires() async throws {
+        // Paired-models fixture (same as testJudgmentPassEmitsTimingTagAboveThreshold).
+        // The judgment pass must surface the argmax (label, calibrated confidence)
+        // alongside its emitted tags so downstream callers (VibeGeneratorV2) can
+        // reason about Stage 2's verdict without re-running inference.
+        let (dir, _) = try await makeJudgmentModelDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = try await loadEngine(from: dir)
+        let pass = await engine.judgmentPass(
+            binaryConfidences: ["Dark": 0.95, "Driving": 0.05],
+            groupProbabilities: ["BassType": ["Punchy": 0.475, "Walking": 0.525]],
+            bpm: 139, durationSeconds: 300)
+        XCTAssertTrue(pass.judgmentAvailable)
+        let prediction = try XCTUnwrap(pass.timingPrediction,
+            "Judgment fired — argmax (label, confidence) must surface")
+        XCTAssertEqual(prediction.label, "Peak")
+        XCTAssertGreaterThan(prediction.confidence, 0.5,
+            "Separable positive input must carry > 0.5 calibrated confidence")
+    }
+
+    func testTimingPredictionNilWhenJudgmentUnavailable() async throws {
+        // Engine loaded without judgment models — no Stage 2 verdict to surface.
+        let engine = try TaggingEngine()
+        let pass = await engine.judgmentPass(
+            binaryConfidences: ["Dark": 0.95],
+            groupProbabilities: [:],
+            bpm: nil, durationSeconds: nil)
+        XCTAssertFalse(pass.judgmentAvailable)
+        XCTAssertNil(pass.timingPrediction,
+            "No judgment pass → no honest Stage 2 prediction")
+    }
+
+    func testTaggingResultExposesTimingPredictionField() {
+        let prediction = TimingPrediction(label: "Peak", confidence: 0.83)
+        let result = TaggingResult(
+            essentiaTags: EssentiaTags(genres: [], moods: [], instruments: []),
+            embeddings: [],
+            genreActivations: [],
+            judgmentAvailable: true,
+            timingPrediction: prediction)
+        XCTAssertEqual(result.timingPrediction, prediction)
+        XCTAssertTrue(result.judgmentAvailable)
+    }
+
+    func testTaggingResultTimingPredictionDefaultsNil() {
+        // Backwards-compatible default: existing fixtures compile unchanged.
+        let result = TaggingResult(
+            essentiaTags: EssentiaTags(genres: [], moods: [], instruments: []),
+            embeddings: [],
+            genreActivations: [])
+        XCTAssertNil(result.timingPrediction)
+    }
+
     func testTaggingResultJudgmentAvailableDefaultsFalse() {
         let result = TaggingResult(
             essentiaTags: EssentiaTags(genres: [], moods: [], instruments: []),

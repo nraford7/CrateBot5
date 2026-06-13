@@ -20,6 +20,20 @@ public enum TaggingEngineError: Error, LocalizedError {
     }
 }
 
+/// Stage 2 (judgment) argmax verdict: the highest-confidence Timing label
+/// and its calibrated confidence. Surfaced on `TaggingResult` so downstream
+/// callers (e.g., VibeGeneratorV2) can reason about Stage 2's verdict
+/// without re-running inference. Nil when judgment did not run.
+public struct TimingPrediction: Sendable, Equatable {
+    public let label: String
+    public let confidence: Float
+
+    public init(label: String, confidence: Float) {
+        self.label = label
+        self.confidence = confidence
+    }
+}
+
 /// Result of analyzing a track with both user and Essentia classifiers
 public struct TaggingResult: Sendable {
     /// User-trained classifier predictions (nil if no model loaded)
@@ -41,18 +55,27 @@ public struct TaggingResult: Sendable {
     /// answer is "unavailable".
     public let judgmentAvailable: Bool
 
+    /// Stage 2 argmax verdict — the highest-confidence Timing label and its
+    /// calibrated confidence. Populated when judgment fired (regardless of
+    /// whether the label cleared its threshold and was emitted as a tag);
+    /// nil when `judgmentAvailable` is false. This is the raw Stage 2 signal
+    /// — callers can apply their own confidence gate downstream.
+    public let timingPrediction: TimingPrediction?
+
     public init(
         userPredictions: UserTagPredictions? = nil,
         essentiaTags: EssentiaTags,
         embeddings: [Float],
         genreActivations: [Float],
-        judgmentAvailable: Bool = false
+        judgmentAvailable: Bool = false,
+        timingPrediction: TimingPrediction? = nil
     ) {
         self.userPredictions = userPredictions
         self.essentiaTags = essentiaTags
         self.embeddings = embeddings
         self.genreActivations = genreActivations
         self.judgmentAvailable = judgmentAvailable
+        self.timingPrediction = timingPrediction
     }
 }
 
@@ -775,6 +798,7 @@ public actor TaggingEngine {
         // calibrated PRE-BOOST probabilities + multi-class distributions +
         // BPM + duration — exactly the rows JudgmentDataGenerator trained on.
         let judgmentAvailable: Bool
+        let timingPrediction: TimingPrediction?
         if !judgmentSnapshot.classifiers.isEmpty {
             for tagName in judgmentSnapshot.classifiers.keys {
                 trainedTagNames.insert(tagName.lowercased())
@@ -790,8 +814,10 @@ public actor TaggingEngine {
             )
             predictedTags.append(contentsOf: judgment.tags)
             judgmentAvailable = judgment.judgmentAvailable
+            timingPrediction = judgment.timingPrediction
         } else {
             judgmentAvailable = false
+            timingPrediction = nil
         }
 
         // Zero-shot CLAP predictions for tags without trained classifiers
@@ -827,7 +853,8 @@ public actor TaggingEngine {
             essentiaTags: essentiaTags,
             embeddings: embeddings,
             genreActivations: genreActivations,
-            judgmentAvailable: judgmentAvailable
+            judgmentAvailable: judgmentAvailable,
+            timingPrediction: timingPrediction
         )
     }
 
@@ -929,7 +956,7 @@ public actor TaggingEngine {
         groupProbabilities: [String: [String: Float]],
         bpm: Float?,
         durationSeconds: Float?
-    ) -> (tags: [String], judgmentAvailable: Bool) {
+    ) -> (tags: [String], judgmentAvailable: Bool, timingPrediction: TimingPrediction?) {
         judgmentPass(
             snapshot: JudgmentSnapshot(classifiers: judgmentClassifiers, schema: judgmentSchema),
             binaryConfidences: binaryConfidences,
@@ -942,15 +969,22 @@ public actor TaggingEngine {
     /// Snapshot-based judgment pass: `analyze` captures the snapshot before
     /// its first await so reentrant loadModel calls cannot swap the
     /// classifier/schema pairing between Stage 1 and Stage 2.
+    ///
+    /// In addition to the emitted tags (thresholded) and the availability
+    /// flag, the pass returns `timingPrediction` — the argmax (label,
+    /// calibrated confidence) across all judgment classifiers that
+    /// successfully ran. Nil when judgment did not run or every classifier
+    /// threw. The argmax is the raw Stage 2 signal: downstream callers can
+    /// apply their own gate (see VibeGeneratorV2's 0.5 mix-hint cutoff).
     func judgmentPass(
         snapshot: JudgmentSnapshot,
         binaryConfidences: [String: Float],
         groupProbabilities: [String: [String: Float]],
         bpm: Float?,
         durationSeconds: Float?
-    ) -> (tags: [String], judgmentAvailable: Bool) {
+    ) -> (tags: [String], judgmentAvailable: Bool, timingPrediction: TimingPrediction?) {
         guard !snapshot.classifiers.isEmpty, let schema = snapshot.schema else {
-            return ([], false)
+            return ([], false, nil)
         }
 
         let vector = JudgmentFeatureVector(
@@ -961,22 +995,26 @@ public actor TaggingEngine {
         )
         guard vector.columnNames == schema else {
             logger.error("Stage 2 schema mismatch: built \(vector.columnNames.count) columns but the judgment models expect \(schema.count) (metadata.judgmentColumnNames) — judgment skipped, relational tags unavailable")
-            return ([], false)
+            return ([], false, nil)
         }
 
         let namedFeatures = Dictionary(uniqueKeysWithValues: zip(vector.columnNames, vector.values))
         var emitted: [String] = []
+        var argmax: TimingPrediction?
         for (tagName, classifier) in snapshot.classifiers.sorted(by: { $0.key < $1.key }) {
             do {
                 let (_, confidence) = try classifier.predictWithConfidence(namedFeatures: namedFeatures)
                 if confidence >= effectiveThreshold(forTag: tagName) {
                     emitted.append(tagName)
                 }
+                if argmax == nil || confidence > argmax!.confidence {
+                    argmax = TimingPrediction(label: tagName, confidence: confidence)
+                }
             } catch {
                 logger.error("Judgment classifier '\(tagName)' failed: \(error.localizedDescription)")
             }
         }
-        return (emitted, true)
+        return (emitted, true, argmax)
     }
 
     /// Inference-time BPM: the ID3 TBPM frame, mirroring Phase B's
