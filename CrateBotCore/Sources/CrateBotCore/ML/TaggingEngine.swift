@@ -893,6 +893,19 @@ public actor TaggingEngine {
             predictedTags.append(contentsOf: fallbackPredictions)
         }
 
+        // Acapella sanity gate: a track is only an acapella when it carries
+        // vocals AND no instrumentation. If Essentia detected any instruments
+        // (vocal classifiers excluded), drop "Acapella" from the predicted
+        // set so it cannot win the Genre slot. This is a precision floor — a
+        // misfire here is more visible to the user than a missed acapella.
+        let essentiaInstrumentSignals = essentiaTags.instruments.filter { name in
+            let lower = name.lowercased()
+            return !lower.contains("voice") && !lower.contains("vocal") && !lower.contains("acapella")
+        }
+        if !essentiaInstrumentSignals.isEmpty {
+            predictedTags.removeAll { $0.lowercased() == "acapella" }
+        }
+
         // Categorize predicted tags using model metadata
         let userPredictions: UserTagPredictions? = predictedTags.isEmpty ? nil : categorizePredictions(predictedTags)
 
