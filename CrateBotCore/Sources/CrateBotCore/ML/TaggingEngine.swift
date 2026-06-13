@@ -69,13 +69,34 @@ public struct TaggingResult: Sendable {
     /// (see VibeGeneratorV2's 0.5 mix-hint cutoff).
     public let timingPrediction: TimingPrediction?
 
+    /// Per-tag Stage 1 binary classifier confidences (post-sigmoid, 0...1),
+    /// raw — pre-booster, pre-threshold. Empty when no binary classifiers
+    /// loaded. Surfaces so downstream consumers (vibe generator) can ground
+    /// descriptions in audio-derived signal rather than thresholded labels.
+    public let binaryConfidences: [String: Float]
+
+    /// Per-group multi-class probabilities (BassType, VocalType, etc).
+    /// Empty when no multi-class classifiers loaded.
+    public let groupProbabilities: [String: [String: Float]]
+
+    /// BPM read from the source file (TBPM frame or analyzer). Nil when the
+    /// frame is absent or unreadable.
+    public let bpm: Float?
+
+    /// Track duration in seconds; 0 when the source duration is unavailable.
+    public let durationSeconds: Float
+
     public init(
         userPredictions: UserTagPredictions? = nil,
         essentiaTags: EssentiaTags,
         embeddings: [Float],
         genreActivations: [Float],
         judgmentAvailable: Bool = false,
-        timingPrediction: TimingPrediction? = nil
+        timingPrediction: TimingPrediction? = nil,
+        binaryConfidences: [String: Float] = [:],
+        groupProbabilities: [String: [String: Float]] = [:],
+        bpm: Float? = nil,
+        durationSeconds: Float = 0
     ) {
         self.userPredictions = userPredictions
         self.essentiaTags = essentiaTags
@@ -83,6 +104,10 @@ public struct TaggingResult: Sendable {
         self.genreActivations = genreActivations
         self.judgmentAvailable = judgmentAvailable
         self.timingPrediction = timingPrediction
+        self.binaryConfidences = binaryConfidences
+        self.groupProbabilities = groupProbabilities
+        self.bpm = bpm
+        self.durationSeconds = durationSeconds
     }
 }
 
@@ -216,6 +241,12 @@ public actor TaggingEngine {
 
     /// Loaded model metadata (for feature dimension detection)
     private var loadedMetadata: ModelMetadata?
+
+    /// The Stage 1 model version string from loaded metadata. Used as the
+    /// cache-invalidation half of the vibe cache key (the other half is the
+    /// track path) — a Stage 1 model bump means stale vibes are no longer
+    /// returned by `VibeCache`.
+    public var stage1ModelVersion: String? { loadedMetadata?.stage1ModelVersion }
 
     /// Number of top predictions to keep for each category
     public var topPredictionCount: Int = 5
@@ -801,6 +832,12 @@ public actor TaggingEngine {
             }
         }
 
+        // Hoisted from the judgment branch so the vibe generator can read
+        // BPM/duration even when Stage 2 does not fire. `judgmentPass` takes
+        // `Float?` for duration; the `TaggingResult` field coerces nil → 0.
+        let bpm = await readBPM(from: url)
+        let durationOptional = readDurationSeconds(from: url)
+
         // Pass 4 (judgment): Stage 2 owns Timing tags. Inputs are the pass-1
         // calibrated PRE-BOOST probabilities + multi-class distributions +
         // BPM + duration — exactly the rows JudgmentDataGenerator trained on.
@@ -810,14 +847,12 @@ public actor TaggingEngine {
             for tagName in judgmentSnapshot.classifiers.keys {
                 trainedTagNames.insert(tagName.lowercased())
             }
-            let bpm = await readBPM(from: url)
-            let duration = readDurationSeconds(from: url)
             let judgment = judgmentPass(
                 snapshot: judgmentSnapshot,
                 binaryConfidences: rawProbabilities,
                 groupProbabilities: groupProbabilities,
                 bpm: bpm,
-                durationSeconds: duration
+                durationSeconds: durationOptional
             )
             predictedTags.append(contentsOf: judgment.tags)
             judgmentAvailable = judgment.judgmentAvailable
@@ -861,7 +896,11 @@ public actor TaggingEngine {
             embeddings: embeddings,
             genreActivations: genreActivations,
             judgmentAvailable: judgmentAvailable,
-            timingPrediction: timingPrediction
+            timingPrediction: timingPrediction,
+            binaryConfidences: rawProbabilities,
+            groupProbabilities: groupProbabilities,
+            bpm: bpm,
+            durationSeconds: durationOptional ?? 0
         )
     }
 

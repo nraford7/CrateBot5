@@ -35,6 +35,13 @@ public enum TagMapping {
     /// Subtitle frame - stores detailed vibe description
     public static let vibeDescription = "TIT3"
 
+    /// iTunes Grouping frame (GRP1) - stores the LLM mix-context hint.
+    /// Spec called for TXXX:CRATEBOT_MIXHINT, but ID3TagEditor does not expose
+    /// the TXXX user-defined-text frame. GRP1 is the closest semantic match
+    /// in the supported set: visible in iTunes/Music and most DJ tools, and
+    /// not consumed by any other CrateBot write path.
+    public static let mixHint = "GRP1"
+
     /// File owner frame - stores scene tag (TOWN frame in ID3v2.3+)
     /// Note: Using this frame for scene as TXXX is not supported by ID3TagEditor.
     public static let scene = "TOWN"
@@ -299,6 +306,9 @@ public struct TagsToWrite: Sendable, Equatable {
     /// Detailed vibe description (to subtitle frame)
     public var vibeDescription: String?
 
+    /// DJ mix-context hint (to iTunes Grouping frame GRP1)
+    public var mixHint: String?
+
     /// Scene tag for track classification
     public var scene: String?
 
@@ -332,6 +342,7 @@ public struct TagsToWrite: Sendable, Equatable {
         comments: String? = nil,
         vibeShort: String? = nil,
         vibeDescription: String? = nil,
+        mixHint: String? = nil,
         scene: String? = nil,
         hook: String? = nil,
         essentiaGenres: String? = nil,
@@ -347,6 +358,7 @@ public struct TagsToWrite: Sendable, Equatable {
         self.comments = comments
         self.vibeShort = vibeShort
         self.vibeDescription = vibeDescription
+        self.mixHint = mixHint
         self.scene = scene
         self.hook = hook
         self.essentiaGenres = essentiaGenres
@@ -365,6 +377,7 @@ public struct TagsToWrite: Sendable, Equatable {
         comments == nil &&
         vibeShort == nil &&
         vibeDescription == nil &&
+        mixHint == nil &&
         scene == nil &&
         hook == nil &&
         essentiaGenres == nil &&

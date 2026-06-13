@@ -707,6 +707,24 @@ struct TaggingView: View {
         let id3Manager = ID3Manager()
         let overwrite = appState.taggingPreferences.overwrite
 
+        // AI-description (VibeGeneratorV2) setup. Hoisted out of the per-track
+        // loop so the cache + cooccurrence stats load once, not 50 times.
+        // The whole block is gated by the opt-in toggle AND the keychain check;
+        // when off, the rest of the pass behaves exactly as before.
+        let aiDescriptionsEnabled =
+            appState.taggingPreferences.aiDescriptions.enabled
+            && KeychainManager.shared.exists(key: .anthropicAPIKey)
+        let vibeCache: VibeCache? = aiDescriptionsEnabled ? VibeCache() : nil
+        let vibeGenerator: VibeGeneratorV2? = aiDescriptionsEnabled
+            ? VibeGeneratorV2(client: AnthropicVibeChatClient(client: AnthropicClient()))
+            : nil
+        let cooccurrenceStats: Cooccurrence.Stats? = aiDescriptionsEnabled
+            ? Cooccurrence.loadFromBundle()
+            : nil
+        let stage1Version = aiDescriptionsEnabled
+            ? (await engine.stage1ModelVersion ?? "unknown")
+            : "unused"
+
         for (index, file) in appState.queuedFiles.enumerated() {
             if Task.isCancelled { break }
 
@@ -805,6 +823,53 @@ struct TaggingView: View {
                 if appState.taggingPreferences.subGenre.enabled, let subGenre = essentia.topSubGenre {
                     tagsToWrite.subGenre = subGenre
                     writtenTags.essentiaSubGenre = subGenre
+                }
+
+                // AI descriptions (VibeGeneratorV2). Cache-first; on miss call
+                // the LLM; on success populate all three vibe fields atomically.
+                // On error log + continue with all three fields nil — never
+                // write a partial vibe and never block the rest of the tag pass.
+                if aiDescriptionsEnabled, let generator = vibeGenerator, let cache = vibeCache {
+                    let trackPath = file.url.path
+                    if let cached = await cache.get(trackPath: trackPath, stage1ModelVersion: stage1Version) {
+                        tagsToWrite.vibeShort = cached.short
+                        tagsToWrite.vibeDescription = cached.long
+                        tagsToWrite.mixHint = cached.mixHint
+                    } else {
+                        let cooccurrence: CooccurrenceContext?
+                        if let stats = cooccurrenceStats, let timing = result.timingPrediction?.label {
+                            cooccurrence = Cooccurrence.context(timing: timing, stats: stats)
+                        } else {
+                            cooccurrence = nil
+                        }
+                        let userPreds = result.userPredictions
+                            ?? UserTagPredictions(genre: nil, timing: nil, mood: nil, descriptive: [])
+                        let inputs = VibeGenerationInputs(
+                            binaryConfidences: result.binaryConfidences,
+                            groupProbabilities: result.groupProbabilities,
+                            predictedTags: userPreds,
+                            bpm: result.bpm,
+                            key: nil,
+                            durationSeconds: result.durationSeconds,
+                            title: nil,
+                            artist: nil,
+                            stage2Timing: result.timingPrediction,
+                            cooccurrence: cooccurrence
+                        )
+                        do {
+                            let generated = try await generator.generate(inputs: inputs)
+                            tagsToWrite.vibeShort = generated.short
+                            tagsToWrite.vibeDescription = generated.long
+                            tagsToWrite.mixHint = generated.mixHint
+                            await cache.set(
+                                generated,
+                                trackPath: trackPath,
+                                stage1ModelVersion: stage1Version
+                            )
+                        } catch {
+                            logger.warning("Vibe generation failed for \(file.url.lastPathComponent): \(error.localizedDescription) — vibe fields left empty")
+                        }
+                    }
                 }
 
                 try await id3Manager.writeTags(tagsToWrite, to: file.url)

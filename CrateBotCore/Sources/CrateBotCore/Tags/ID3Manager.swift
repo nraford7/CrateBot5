@@ -345,6 +345,17 @@ public actor ID3Manager {
                     builder = builder.subtitle(frame: ID3FrameWithStringContent(content: existingSubtitle))
                 }
 
+                // Handle mix hint - write to iTunes Grouping frame (GRP1).
+                // Spec called for TXXX:CRATEBOT_MIXHINT but ID3TagEditor does
+                // not expose TXXX; GRP1 is the closest semantic match in the
+                // supported set and is visible in iTunes/Music and DJ tools.
+                let existingGrouping = reader.iTunesGrouping()
+                if let mixHint = tags.mixHint, tags.overwrite || existingGrouping == nil {
+                    builder = builder.iTunesGrouping(frame: ID3FrameWithStringContent(content: mixHint))
+                } else if let existingGrouping {
+                    builder = builder.iTunesGrouping(frame: ID3FrameWithStringContent(content: existingGrouping))
+                }
+
                 // Handle scene - write to file owner frame (TOWN)
                 let existingScene = reader.fileOwner()
                 if let scene = tags.scene, tags.overwrite || existingScene == nil {
@@ -437,6 +448,9 @@ public actor ID3Manager {
                 }
                 if let vibeDescription = tags.vibeDescription {
                     builder = builder.subtitle(frame: ID3FrameWithStringContent(content: vibeDescription))
+                }
+                if let mixHint = tags.mixHint {
+                    builder = builder.iTunesGrouping(frame: ID3FrameWithStringContent(content: mixHint))
                 }
                 if let scene = tags.scene {
                     builder = builder.fileOwner(frame: ID3FrameWithStringContent(content: scene))
