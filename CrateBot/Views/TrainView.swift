@@ -276,7 +276,7 @@ final class TrainingViewModel: ObservableObject {
 
     // Dependencies
     let coordinator = TrainingCoordinator()
-    let minSamplesPerTag = 50
+    let minSamplesPerTag = 25
 
     // Singleton for persistence across tab switches
     static let shared = TrainingViewModel()
