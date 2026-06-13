@@ -211,11 +211,26 @@ def load_environment():
     with open(app_support / "embedding_cache.json") as f:
         cache = json.load(f)
 
-    # Read ground-truth tags directly from ID3 via mutagen
-    # ID3 field mapping (matches TrainingDataCollector's default TagFieldMapping)
-    # Genre -> TCON, Timing -> TALB (album), Mood -> TIT1 (contentGroup), Descriptive -> COMM
+    # Read ground-truth tags directly from ID3 via mutagen.
+    # Field mapping comes from the app's lexicon.json (the runtime source of
+    # truth the training pipeline writes), with the prior hardcoded defaults
+    # as a fallback. Reading from hardcoded TALB/TIT1 silently produced
+    # garbage ground truth when the user mapped Timing to TPE2 / Mood to TALB.
     from mutagen.id3 import ID3, ID3NoHeaderError
     from mutagen.mp3 import MP3
+
+    DEFAULT_FRAMES = {"genre": "TCON", "timing": "TALB", "mood": "TIT1", "descriptive": "COMM"}
+    frames = dict(DEFAULT_FRAMES)
+    lexicon_path = os.path.expanduser("~/Library/Application Support/cratebot/lexicon.json")
+    try:
+        with open(lexicon_path) as lf:
+            lex = json.load(lf)
+        for k in frames:
+            v = (lex.get(k) or {}).get("id3_frame")
+            if v: frames[k] = v
+        print(f"  Eval ID3 mapping (from lexicon.json): {frames}")
+    except Exception as e:
+        print(f"  Lexicon.json not loadable ({e}); falling back to hardcoded defaults {frames}")
 
     def read_track_metadata(path):
         """Returns (tags, bpm, duration). BPM from TBPM (matching
@@ -225,21 +240,24 @@ def load_environment():
         try:
             audio = MP3(path, ID3=ID3)
             tags = set()
-            # Genre (TCON)
-            if 'TCON' in audio.tags:
-                for v in audio.tags['TCON'].text:
+            # Genre
+            f = frames["genre"]
+            if f in audio.tags:
+                for v in audio.tags[f].text:
                     tags.update(t.strip() for t in str(v).split(',') if t.strip())
-            # Timing (TALB - album field)
-            if 'TALB' in audio.tags:
-                for v in audio.tags['TALB'].text:
+            # Timing (single value, no comma split — values like "Build" "Peak" are atomic)
+            f = frames["timing"]
+            if f in audio.tags:
+                for v in audio.tags[f].text:
                     if str(v).strip(): tags.add(str(v).strip())
-            # Mood (TIT1 - content group)
-            if 'TIT1' in audio.tags:
-                for v in audio.tags['TIT1'].text:
+            # Mood (single value, no comma split)
+            f = frames["mood"]
+            if f in audio.tags:
+                for v in audio.tags[f].text:
                     if str(v).strip(): tags.add(str(v).strip())
-            # Descriptive (COMM - comments)
+            # Descriptive — COMM lookup by key prefix because frames are like 'COMM::eng'
             for k in audio.tags.keys():
-                if k.startswith('COMM'):
+                if k.startswith(frames["descriptive"]):
                     for v in audio.tags[k].text:
                         tags.update(t.strip() for t in str(v).split(',') if t.strip())
             # Normalize to title case (match TagNormalizer)
