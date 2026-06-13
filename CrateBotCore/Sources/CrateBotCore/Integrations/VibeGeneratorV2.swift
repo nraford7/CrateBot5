@@ -180,21 +180,31 @@ public actor VibeGeneratorV2 {
         inputs: VibeGenerationInputs,
         includeMixHint: Bool
     ) -> (system: String, user: String) {
-        let mixHintSchema = includeMixHint ? #", "mix_hint": "<one short DJ mix-context hint>""# : ""
+        let mixHintSchema = includeMixHint ? #", "mix_hint": "<single sentence DJ instruction>""# : ""
         let mixHintLine = includeMixHint
-            ? "Include `mix_hint` describing how this track sits in a DJ set given the timing context."
+            ? "Include `mix_hint`: ONE sentence, max 14 words, ACTIONABLE DJ guidance — when in the night to play it, what to mix into it from, what to play after. Reference the Stage 2 Timing label when present. Example: \"Drop after 1am into the peak; follow with a deeper roller around 3am.\""
             : "Do NOT include a `mix_hint` field."
 
         let system = """
-        You are a DJ and music curator. Given a JSON analysis of one electronic music \
-        track, respond with JSON only — no prose, no markdown fences, no preamble.
+        You are a veteran DJ tagging a record crate. Given a JSON analysis of one \
+        electronic music track, respond with JSON only — no prose, no markdown fences, \
+        no preamble.
+
+        The three fields serve DIFFERENT purposes — never repeat content across them.
 
         Output schema:
-        {"short": "<2-4 word vibe label>", "long": "<1-2 sentence prose description>"\(mixHintSchema)}
+        {"short": "<3-5 WORD VIBE TAG>", "long": "<single sentence vibe context>"\(mixHintSchema)}
 
-        Rules:
-        - `short`: 2-4 words, evocative, captures the feel.
-        - `long`: 1-2 sentences describing the track's feel grounded in the analysis.
+        Hard rules:
+        - `short`: 3-5 words, ALL CAPS, evocative, NO articles, NO punctuation. \
+          Mix a concrete vibe descriptor with a POETIC or unexpected word that helps the \
+          DJ remember the track in a glance. \
+          Example: "LATE NIGHT GROOVE CATHEDRAL", "PEAK HOUR ROLLER NEON", \
+          "WAREHOUSE SUSTAIN HUSH", "MIDNIGHT BREAKER PRAYER".
+        - `long`: ONE sentence about where this track sits in a SET — the energy arc, \
+          the room it owns, the moment in the night. Max 14 words. \
+          Begin with a noun or adjective (NEVER "This is", "A ", "An ", "Track ", "Song "). \
+          Example: "Late-night warehouse roller for the deep hour after the room has settled in."
         - \(mixHintLine)
         - Respond with the JSON object only. No leading prose. No code fences.
         """
@@ -203,7 +213,7 @@ public actor VibeGeneratorV2 {
         Track analysis:
         \(inputs.promptPayload())
 
-        Describe this track's feel.
+        Write the three fields.
         """
 
         return (system, user)

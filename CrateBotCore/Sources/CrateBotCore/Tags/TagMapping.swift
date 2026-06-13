@@ -32,15 +32,14 @@ public enum TagMapping {
     /// Composer frame - stores short vibe description
     public static let vibeShort = "TCOM"
 
-    /// Subtitle frame - stores detailed vibe description
+    /// Subtitle frame (TIT3) — stores the long AI description.
+    /// Shows up as "Description" in Music.app and most DJ tools.
     public static let vibeDescription = "TIT3"
 
-    /// iTunes Grouping frame (GRP1) - stores the LLM mix-context hint.
-    /// Spec called for TXXX:CRATEBOT_MIXHINT, but ID3TagEditor does not expose
-    /// the TXXX user-defined-text frame. GRP1 is the closest semantic match
-    /// in the supported set: visible in iTunes/Music and most DJ tools, and
-    /// not consumed by any other CrateBot write path.
-    public static let mixHint = "GRP1"
+    /// iTunes Movement Name frame (MVNM) — stores the DJ mix-context hint
+    /// ("how to play it" — where this sits in a set given the Timing label).
+    /// Visible as "Movement Name" in Music.app and DJ tools.
+    public static let mixHint = "MVNM"
 
     /// File owner frame - stores scene tag (TOWN frame in ID3v2.3+)
     /// Note: Using this frame for scene as TXXX is not supported by ID3TagEditor.

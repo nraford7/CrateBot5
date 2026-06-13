@@ -337,7 +337,8 @@ public actor ID3Manager {
                     builder = builder.composer(frame: ID3FrameWithStringContent(content: existingComposer))
                 }
 
-                // Handle vibe description - write to subtitle frame (TIT3)
+                // Handle vibe description - write to subtitle frame (TIT3),
+                // which DJ tools and Music.app surface as "Description".
                 let existingSubtitle = reader.subtitle()
                 if let vibeDescription = tags.vibeDescription, tags.overwrite || existingSubtitle == nil {
                     builder = builder.subtitle(frame: ID3FrameWithStringContent(content: vibeDescription))
@@ -345,15 +346,15 @@ public actor ID3Manager {
                     builder = builder.subtitle(frame: ID3FrameWithStringContent(content: existingSubtitle))
                 }
 
-                // Handle mix hint - write to iTunes Grouping frame (GRP1).
-                // Spec called for TXXX:CRATEBOT_MIXHINT but ID3TagEditor does
-                // not expose TXXX; GRP1 is the closest semantic match in the
-                // supported set and is visible in iTunes/Music and DJ tools.
-                let existingGrouping = reader.iTunesGrouping()
-                if let mixHint = tags.mixHint, tags.overwrite || existingGrouping == nil {
-                    builder = builder.iTunesGrouping(frame: ID3FrameWithStringContent(content: mixHint))
-                } else if let existingGrouping {
-                    builder = builder.iTunesGrouping(frame: ID3FrameWithStringContent(content: existingGrouping))
+                // Handle mix hint - write to iTunes Movement Name (MVNM),
+                // visible as "Movement Name" in Music.app and DJ tools.
+                // Carries the "how to play it" guidance, distinct from the
+                // long prose description on TIT3 above.
+                let existingMovement = reader.iTunesMovementName()
+                if let mixHint = tags.mixHint, tags.overwrite || existingMovement == nil {
+                    builder = builder.iTunesMovementName(frame: ID3FrameWithStringContent(content: mixHint))
+                } else if let existingMovement {
+                    builder = builder.iTunesMovementName(frame: ID3FrameWithStringContent(content: existingMovement))
                 }
 
                 // Handle scene - write to file owner frame (TOWN)
@@ -450,7 +451,7 @@ public actor ID3Manager {
                     builder = builder.subtitle(frame: ID3FrameWithStringContent(content: vibeDescription))
                 }
                 if let mixHint = tags.mixHint {
-                    builder = builder.iTunesGrouping(frame: ID3FrameWithStringContent(content: mixHint))
+                    builder = builder.iTunesMovementName(frame: ID3FrameWithStringContent(content: mixHint))
                 }
                 if let scene = tags.scene {
                     builder = builder.fileOwner(frame: ID3FrameWithStringContent(content: scene))
