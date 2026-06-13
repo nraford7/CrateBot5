@@ -171,6 +171,21 @@ func testChainOfThoughtPreambleIsRejected() async throws {
     // Specifically: VibeGeneratorError.parsingFailed
 }
 
+func testProseWrappedJSONIsExtracted() async throws {
+    // Claude often emits explanatory prose around the JSON despite system-prompt instructions.
+    let reply = """
+    Here's the analysis:
+    ```json
+    {"short":"Late Night Groove","long":"sustained, low-lit","mix_hint":"sits between Peak and Release"}
+    ```
+    Let me know if you'd like adjustments.
+    """
+    let mock = MockClient(reply: reply)
+    let gen = VibeGeneratorV2(client: mock)
+    let r = try await gen.generate(inputs: sampleInputsWithMixHintAllowed)
+    XCTAssertEqual(r.short, "Late Night Groove")
+}
+
 func testMixHintOmittedWhenInputsHaveNoCooccurrence() async throws {
     // Inputs.cooccurrence == nil
     // Mock returns {"short":"X","long":"Y"} (no mix_hint key)
@@ -223,12 +238,17 @@ public actor VibeGeneratorV2 {
             temperature: 0.7,
             model: AnthropicClient.defaultModel
         )
-        // Strict JSON parse, no fallback to raw text. Strip leading code fences if present.
-        let trimmed = Self.stripFences(raw)
-        guard let data = trimmed.data(using: .utf8),
+        // Strict JSON parse, no fallback to raw text.
+        // 1. Strip leading/trailing markdown code fences if present.
+        // 2. Extract the first balanced `{...}` substring — Claude often wraps the JSON in
+        //    explanatory prose ("Here's the analysis:\n```json\n{...}\n```\nLet me know...").
+        //    The system prompt also instructs "respond with JSON only, no prose, no fences" so
+        //    this extraction is a safety net, not the contract.
+        let extracted = Self.extractFirstJSONObject(from: Self.stripFences(raw))
+        guard let data = extracted?.data(using: .utf8),
               let decoded = try? JSONDecoder().decode(WireResponse.self, from: data),
               !decoded.short.isEmpty, !decoded.long.isEmpty else {
-            throw VibeGeneratorError.parsingFailed(String(trimmed.prefix(500)))
+            throw VibeGeneratorError.parsingFailed(String((extracted ?? raw).prefix(500)))
         }
         return VibeGenerationResult(
             short: decoded.short, long: decoded.long,
@@ -242,7 +262,7 @@ public actor VibeGeneratorV2 {
 }
 ```
 
-The existing `AnthropicClient.complete(prompt:system:maxTokens:)` doesn't accept temperature/model parameters today — add them with sensible defaults so existing callers (other tests) compile unchanged, OR wrap the existing call in a small adapter that conforms to `VibeChatClient`. Pick the smaller surface change after reading the existing signature; document the choice.
+The existing `AnthropicClient.complete(prompt:system:model:maxTokens:)` (verified L255-260) already accepts `model` — only `temperature` is missing. Wrap the existing call in a small adapter that conforms to `VibeChatClient` and passes temperature via a new internal request-building path (the underlying `MessageRequest` supports it), rather than widening the public `complete(...)` signature. Smaller surface change; no impact on other callers.
 
 - [ ] **Step 3: PASS, commit** — `feat: VibeGeneratorV2 strict-JSON Stage1-grounded vibe + description + mix hint`.
 
@@ -255,7 +275,7 @@ The existing `AnthropicClient.complete(prompt:system:maxTokens:)` doesn't accept
 ### Task 4.1: TaggingPreferences.aiDescriptions field
 
 **Files:**
-- Modify: `CrateBot/App/AppState.swift` (TaggingPreferences ~L467, init(from:) ~L505-516, encode(to:) ~L530-540)
+- Modify: `CrateBot/App/AppState.swift` (TaggingPreferences ~L467; manual `init(from:)` starts ~L493 with legacy fallback at L506-515; `encode(to:)` ~L525 with field writes at L533-534)
 - Test: `CrateBotCore/Tests/CrateBotCoreTests/` — write a tiny round-trip test for the Codable migration even though TaggingPreferences lives in the app target (the type can be made internal-testable via a copy or refactored into Core later; for now do a pragmatic check inside an app `#if DEBUG` helper invoked by the assigned agent and pasted as evidence). If app gains a test target later, the formal XCTest goes there.
 
 - [ ] **Step 1: Implement** `aiDescriptions: FieldPreference(enabled: false, targetField: "TCOM")` with the manual `decodeIfPresent` + explicit `encode` lines per spec.
