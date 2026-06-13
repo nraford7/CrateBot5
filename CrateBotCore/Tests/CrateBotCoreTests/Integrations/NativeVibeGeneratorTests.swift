@@ -1,6 +1,10 @@
 import XCTest
 @testable import CrateBotCore
 
+// These tests intentionally exercise the deprecated NativeVibeGenerator surface
+// (superseded by VibeGeneratorV2). Mark the whole class deprecated so the
+// build is silent rather than spamming a warning per test method.
+@available(*, deprecated)
 final class NativeVibeGeneratorTests: XCTestCase {
 
     // MARK: - VibeContext Tests

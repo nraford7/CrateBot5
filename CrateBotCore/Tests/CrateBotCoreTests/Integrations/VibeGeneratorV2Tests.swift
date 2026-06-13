@@ -131,7 +131,11 @@ final class VibeGeneratorV2Tests: XCTestCase {
         XCTAssertEqual(r.mixHint, "sits between Peak and Release")
     }
 
-    func testChainOfThoughtPreambleIsRejected() async {
+    func testNoJSONInResponseIsRejected() async {
+        // Reply contains no `{` at all — the brace extractor returns nil and
+        // the generator must throw `parsingFailed`. This is the actual contract
+        // exercised here; the prior name ("ChainOfThoughtPreambleIsRejected")
+        // mis-described the input.
         let mock = MockClient(reply: "LOOKING AT THIS TRACK ANALYSIS: this is peak\nVIBE: Peak Roller")
         let gen = VibeGeneratorV2(client: mock)
         do {
@@ -145,6 +149,33 @@ final class VibeGeneratorV2Tests: XCTestCase {
         } catch {
             XCTFail("Expected VibeGeneratorError.parsingFailed, got \(error)")
         }
+    }
+
+    func testValidJSONAfterCoTPreambleIsAccepted() async throws {
+        // Real chain-of-thought preamble followed by valid JSON: the safety
+        // net extracts the first balanced `{...}` regardless of leading prose.
+        let reply = """
+        LOOKING AT THIS TRACK ANALYSIS: peak-time, hypnotic, sub-bass driven.
+        {"short":"X","long":"Y"}
+        """
+        let mock = MockClient(reply: reply)
+        let gen = VibeGeneratorV2(client: mock)
+        let r = try await gen.generate(inputs: sampleInputs)
+        XCTAssertEqual(r.short, "X")
+        XCTAssertEqual(r.long, "Y")
+    }
+
+    func testExtractFirstJSONObjectHandlesBracesInsideStringLiterals() async throws {
+        // Braces inside JSON string literals must not confuse the depth counter.
+        // Without the string-aware brace tracking, `{a brace}` would close the
+        // outer object early and the decode would fail.
+        let mock = MockClient(
+            reply: #"{"long":"has {a brace} inside","short":"X"}"#
+        )
+        let gen = VibeGeneratorV2(client: mock)
+        let r = try await gen.generate(inputs: sampleInputs)
+        XCTAssertEqual(r.short, "X")
+        XCTAssertEqual(r.long, "has {a brace} inside")
     }
 
     func testProseWrappedJSONIsExtracted() async throws {

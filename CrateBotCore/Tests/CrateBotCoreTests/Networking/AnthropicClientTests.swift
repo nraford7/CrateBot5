@@ -52,7 +52,33 @@ final class AnthropicClientTests: XCTestCase {
 
         // System is optional and should not be present when nil
         XCTAssertNil(json["system"])
+        // Temperature is optional and should not be present when nil
+        XCTAssertNil(json["temperature"])
         XCTAssertEqual(json["max_tokens"] as? Int, 512)
+    }
+
+    func testMessageRequestEncodesTemperatureOnTheWire() throws {
+        // Guards the VibeGeneratorV2 contract: temperature 0.7 must land on the
+        // wire under the Anthropic `temperature` key. If MessageRequest ever
+        // drops the field, this test fails — the silent-default regression
+        // the chunk 3 review caught cannot recur.
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+
+        let request = MessageRequest(
+            model: "claude-sonnet-4-20250514",
+            maxTokens: 600,
+            system: "sys",
+            messages: [Message(role: "user", content: "Hi")],
+            temperature: 0.7
+        )
+
+        let data = try encoder.encode(request)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNotNil(json["temperature"], "temperature must be present when set")
+        let temperature = try XCTUnwrap(json["temperature"] as? Double)
+        XCTAssertEqual(temperature, 0.7, accuracy: 0.0001)
     }
 
     // MARK: - Response Decoding Tests

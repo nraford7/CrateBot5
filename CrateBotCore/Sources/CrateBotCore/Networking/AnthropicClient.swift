@@ -20,17 +20,22 @@ public struct MessageRequest: Codable, Sendable {
     public let maxTokens: Int
     public let system: String?
     public let messages: [Message]
+    /// Sampling temperature. Optional so existing requests omit the key entirely
+    /// and the server applies its default. When set, encodes as `"temperature"`.
+    public let temperature: Double?
 
     public init(
         model: String,
         maxTokens: Int,
         system: String? = nil,
-        messages: [Message]
+        messages: [Message],
+        temperature: Double? = nil
     ) {
         self.model = model
         self.maxTokens = maxTokens
         self.system = system
         self.messages = messages
+        self.temperature = temperature
     }
 }
 

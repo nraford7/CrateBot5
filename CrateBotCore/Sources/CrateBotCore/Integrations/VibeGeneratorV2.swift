@@ -63,18 +63,10 @@ public protocol VibeChatClient: Sendable {
 
 /// Production `VibeChatClient` that wraps `AnthropicClient`.
 ///
-/// `AnthropicClient.complete(prompt:system:model:maxTokens:)` does not accept
-/// `temperature`, but the underlying Messages API request type (`MessageRequest`)
-/// is Codable + Sendable. The plan calls for routing through a request-building
-/// path that includes temperature without widening `AnthropicClient.complete`'s
-/// public signature. Since `MessageRequest` does not yet expose `temperature`,
-/// we forward through `AnthropicClient.sendMessage` (the same path `complete`
-/// uses) and accept that the temperature is conveyed via the request body
-/// when the underlying type gains the field. For now this preserves the
-/// protocol contract: the adapter signature accepts temperature; the wire
-/// behavior is whatever `AnthropicClient` does today (default server-side).
-/// When `MessageRequest` gains `temperature: Double?`, only this adapter
-/// changes — call sites and tests remain untouched.
+/// Threads `temperature` into `MessageRequest` so it lands on the wire as the
+/// Anthropic `temperature` field. Dispatches via `AnthropicClient.sendMessage`
+/// (the same path used by `AnthropicClient.complete`) without widening the
+/// public `complete(...)` signature on `AnthropicClient`.
 public struct AnthropicVibeChatClient: VibeChatClient {
     private let client: AnthropicClient
 
@@ -89,15 +81,12 @@ public struct AnthropicVibeChatClient: VibeChatClient {
         temperature: Double,
         model: String
     ) async throws -> String {
-        // Build the request through the existing path and dispatch via sendMessage.
-        // Temperature is accepted by the adapter so the call site stays stable;
-        // it will be threaded into MessageRequest when that type exposes the field.
-        _ = temperature
         let request = MessageRequest(
             model: model,
             maxTokens: maxTokens,
             system: system,
-            messages: [Message(role: "user", content: prompt)]
+            messages: [Message(role: "user", content: prompt)],
+            temperature: temperature
         )
         let response = try await client.sendMessage(request)
         return response.text
