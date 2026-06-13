@@ -103,6 +103,17 @@ struct TaggingSettingsSheet: View {
                         .help(hasAnthropicKey
                               ? "Generates short vibe, prose description, and DJ mix-context hint per track via Anthropic API. ~$0.01/track at current Sonnet 4 pricing."
                               : "Set the Anthropic API key in Preferences first.")
+                        if !hasAnthropicKey {
+                            HStack(spacing: 4) {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 10))
+                                Text("Set Anthropic API key in Settings (gear icon) to enable.")
+                                    .font(Theme.Fonts.body(11))
+                            }
+                            .foregroundColor(Theme.Colors.textTertiary)
+                            .padding(.leading, Theme.Spacing.lg)
+                            .padding(.top, -Theme.Spacing.xs)
+                        }
 
                         tagFieldRow(
                             label: "Hooks",

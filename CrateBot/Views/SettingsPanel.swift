@@ -15,6 +15,7 @@ struct SettingsPanel: View {
                     strictnessSection
                     taggingOptionsSection
                     fallbackMappingsSection
+                    connectionsSection
                     musicFoldersSection
                     modelSection
                     aboutSection
@@ -37,7 +38,7 @@ struct SettingsPanel: View {
                 }
             }
         }
-        .frame(minWidth: 550, minHeight: 500)
+        .frame(minWidth: 550, idealWidth: 640, maxWidth: 760, minHeight: 500, idealHeight: 720)
     }
 
     // MARK: - Strictness Section
@@ -138,7 +139,18 @@ struct SettingsPanel: View {
                 .disabled(!hasAnthropicKey)
                 .help(hasAnthropicKey
                       ? "Generates short vibe, prose description, and DJ mix-context hint per track via Anthropic API. ~$0.01/track at current Sonnet 4 pricing."
-                      : "Set the Anthropic API key in Preferences first.")
+                      : "Set the Anthropic API key in Connections (below) to enable.")
+                if !hasAnthropicKey {
+                    HStack(spacing: 4) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 10))
+                        Text("Set Anthropic API key in Connections (below) to enable.")
+                            .font(Theme.Fonts.body(11))
+                    }
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .padding(.leading, Theme.Spacing.lg)
+                    .padding(.top, -Theme.Spacing.xs)
+                }
 
                 fieldToggleRow(
                     label: "Hooks",
@@ -235,6 +247,73 @@ struct SettingsPanel: View {
         .sheet(isPresented: $showFallbackEditor) {
             FallbackMappingsEditor()
                 .environment(appState)
+        }
+    }
+
+    // MARK: - Connections Section
+
+    @State private var anthropicKeyDraft: String = ""
+    @State private var anthropicKeySaveError: String?
+
+    private var connectionsSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            sectionHeader("Connections")
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                Text("Anthropic API Key")
+                    .font(Theme.Fonts.body(13))
+                    .foregroundColor(Theme.Colors.textPrimary)
+
+                let hasKey = KeychainManager.shared.exists(key: .anthropicAPIKey)
+
+                HStack(spacing: Theme.Spacing.sm) {
+                    SecureField(hasKey ? "Stored — enter a new value to replace" : "sk-ant-...", text: $anthropicKeyDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(Theme.Fonts.mono(12))
+
+                    Button("Save") {
+                        anthropicKeySaveError = nil
+                        do {
+                            try appState.setAnthropicAPIKey(anthropicKeyDraft)
+                            anthropicKeyDraft = ""
+                        } catch {
+                            anthropicKeySaveError = error.localizedDescription
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(anthropicKeyDraft.isEmpty)
+
+                    if hasKey {
+                        Button("Remove") {
+                            anthropicKeySaveError = nil
+                            do {
+                                try appState.setAnthropicAPIKey(nil)
+                            } catch {
+                                anthropicKeySaveError = error.localizedDescription
+                            }
+                        }
+                    }
+                }
+
+                if hasKey {
+                    Text("Key stored in macOS Keychain.")
+                        .font(Theme.Fonts.body(12))
+                        .foregroundColor(Theme.Colors.textTertiary)
+                } else {
+                    Text("Required for the AI Descriptions toggle. Stored only in your local Keychain; never transmitted except to the Anthropic API.")
+                        .font(Theme.Fonts.body(12))
+                        .foregroundColor(Theme.Colors.textTertiary)
+                }
+
+                if let error = anthropicKeySaveError {
+                    Text(error)
+                        .font(Theme.Fonts.body(12))
+                        .foregroundColor(Theme.Colors.statusError)
+                }
+            }
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.bgSurface)
+            .cornerRadius(Theme.Radius.md)
         }
     }
 
