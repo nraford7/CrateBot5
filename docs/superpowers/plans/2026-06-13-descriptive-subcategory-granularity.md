@@ -18,12 +18,13 @@
 
 ### Task 1.1: Effective-category resolver + collector + trainer threading
 
-**Files (anchors approximate):**
-- Modify: `CrateBotCore/Sources/CrateBotCore/ML/DescriptiveTagMapping.swift` (~L83 — add static helper)
+**Files (anchors verified by plan review):**
+- Modify: `CrateBotCore/Sources/CrateBotCore/ML/DescriptiveTagMapping.swift` (add static helper after L97)
 - Modify: `CrateBotCore/Sources/CrateBotCore/ML/TrainingDataCollector.swift` (~L1062 — descriptive tag insertion)
-- Modify: `CrateBotCore/Sources/CrateBotCore/ML/ModelTrainer.swift` (~L274-284 — `tagToCategory` build)
-- Modify: `CrateBotCore/Sources/CrateBotCore/ExperimentRunner.swift` (~L251-258 — `deriveTagCategories`)
-- Test: `CrateBotCore/Tests/CrateBotCoreTests/ML/DescriptiveTagMappingTests.swift`, `BinaryTrainingDataGeneratorTests.swift`, `TrainingDataCollectorTests.swift`
+- Modify: `CrateBotCore/Sources/CrateBotCore/ML/ModelTrainer.swift` (~L274-285 — `tagToCategory` build)
+- Modify: `CrateBotCore/Sources/CrateBotCore/ML/ExperimentRunner.swift` (~L246-261 — `deriveTagCategories`)
+- **Audit (no change expected, but VERIFY)**: `CrateBotCore/Sources/CrateBotCore/ML/TrainingCoordinator.swift` at L587-592 (training-path tag→category build feeding `isJudgmentTag`) and L1209-1212 (`groupTagsByCategory`). These read `options.tagsByCategory` which is now sub-category-keyed. Verify: (i) the stage registry still classifies BassType/Rhythm/etc. as **perception** stage (not judgment) — they're descriptive sub-categories, perception only; (ii) `groupTagsByCategory`'s output grouping still produces a sensible structure when keys are sub-categories instead of "Descriptive". If either misbehaves, fix HERE not later.
+- Test: `CrateBotCore/Tests/CrateBotCoreTests/ML/DescriptiveTagMappingTests.swift`, `BinaryTrainingDataGeneratorTests.swift`, `TrainingDataCollectorTests.swift`, plus a `TrainingCoordinatorTests` check that `isJudgmentTag` still returns false for descriptive sub-category tags.
 
 - [ ] **Step 1: Failing tests**
 
@@ -76,7 +77,12 @@ public static func effectiveCategory(for tag: String, topLevel: String) -> Strin
   - `ModelTrainer.trainModelsWithReport` (where `tagToCategory` is built from `categorizedTags`): wrap each tag insert with `effectiveCategory(for: tag, topLevel: category)`. Use sorted keys + first-wins per the existing convention.
   - `ExperimentRunner.deriveTagCategories`: same pattern.
 
-- [ ] **Step 5: Run full suite — 455 → 458 (3 new), 0 failures expected.** If any existing test relied on "Descriptive" as the descriptive negative-eligibility category, rewrite it to assert the new sub-category granularity (do not weaken to keep it green).
+- [ ] **Step 4b: Add the two additional tests the reviewer flagged:**
+
+  - `TrainingDataCollectorTests`: a track with a single `"Walking"` descriptive tag produces `tagsByCategory["BassType"]` containing "Walking" and does NOT produce a "Descriptive" key for that tag. A custom tag (e.g. "Groovy") still lands under "Descriptive".
+  - `TrainingCoordinatorTests`: `isJudgmentTag("Walking")` returns false (BassType is perception, not judgment) when the registry is built from sub-category-keyed `options.tagsByCategory`.
+
+- [ ] **Step 5: Run full suite — 455 → 460 (5 new), 0 failures expected.** If any existing test relied on "Descriptive" as the descriptive negative-eligibility category, rewrite it to assert the new sub-category granularity (do not weaken to keep it green).
 
 - [ ] **Step 6: Commit** — `feat: category-complete filtering at descriptive sub-category granularity` + Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 
