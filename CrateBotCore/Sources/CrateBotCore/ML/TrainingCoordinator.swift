@@ -364,8 +364,15 @@ public actor TrainingCoordinator {
             // skip reporting) happens inside trainTwoPhase.
             let discoveredTags = await dataCollector.discoverTags(from: collectionResult.tracks)
             let minSamples = options.configuration.minSamplesPerTag
+            // Normalize the user's selection through TagNormalizer so it
+            // matches the normalized form already applied to every track tag
+            // at ingest time. Without this, CamelCase labels like "PartyBreaks"
+            // (selection) silently fail to match "Partybreaks" (stored).
+            let normalizedSelected: Set<String>? = options.selectedTags.map {
+                Set($0.map { TagNormalizer.normalize($0) })
+            }
             let viableTagCount = discoveredTags.filter { tag, count in
-                (options.selectedTags?.contains(tag) ?? true) && count >= minSamples
+                (normalizedSelected?.contains(tag) ?? true) && count >= minSamples
             }.count
 
             guard viableTagCount > 0 else {
@@ -602,8 +609,16 @@ public actor TrainingCoordinator {
             var skippedTagDetails: [SkippedTag] = []
             let minSamples = options.configuration.minSamplesPerTag
 
+            // Normalize the user's selection through TagNormalizer so it
+            // matches the normalized form on stored track tags. CamelCase
+            // labels (PartyBreaks) and slash-spaced labels ("Soulful / Musical")
+            // are silently rewritten during ingest; without this mapping the
+            // selection filter would never match them.
+            let normalizedSelected: Set<String>? = options.selectedTags.map {
+                Set($0.map { TagNormalizer.normalize($0) })
+            }
             for (tag, count) in discoveredTags {
-                guard options.selectedTags?.contains(tag) ?? true else { continue }
+                guard normalizedSelected?.contains(tag) ?? true else { continue }
                 if count >= minSamples {
                     viableTags.append(tag)
                 } else {
@@ -805,12 +820,18 @@ public actor TrainingCoordinator {
 
             // Category-complete negative filtering: negatives are restricted
             // to tracks assessed for the tag's category (absence = unknown).
+            // The categorizedTags dict carries the user's per-category selection
+            // in its raw UI form; normalize it so the lookup in ModelTrainer
+            // matches the normalized tags actually stored on tracks.
+            let normalizedCategorized: [String: Set<String>] = options.tagsByCategory.mapValues { tags in
+                Set(tags.map { TagNormalizer.normalize($0) })
+            }
             let (trainingResults, skippedDuringTraining) = try await modelTrainer.trainModelsWithReport(
                 from: tracks,
                 tags: binaryTags,
                 outputDirectory: outputDirectory,
                 config: trainingConfig,
-                categorizedTags: options.tagsByCategory
+                categorizedTags: normalizedCategorized
             ) { [weak self] progress in
                 guard let self = self else { return }
                 let multiClassWeight = 0.2  // Multi-class gets 20% of progress
@@ -868,7 +889,7 @@ public actor TrainingCoordinator {
                 tagGroups: tagGroupInfos,
                 trainingFileCount: tracks.count,
                 accuracy: stage1AvgAccuracy,
-                categorizedTags: options.tagsByCategory,
+                categorizedTags: normalizedCategorized,
                 featureDimension: featureDimension,
                 stage1ModelVersion: stage1ModelVersion
             )
