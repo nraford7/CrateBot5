@@ -473,6 +473,7 @@ struct TaggingPreferences: Codable {
     var likeness = FieldPreference(enabled: true, targetField: "TIT1")
     var vibesShort = FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_VIBE_SHORT")
     var vibesLong = FieldPreference(enabled: false, targetField: "COMM")
+    var aiDescriptions = FieldPreference(enabled: false, targetField: "TCOM")
     var hooks = FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_HOOK")
     var overwrite = true
     var strictness: TaggingStrictness = .average
@@ -484,7 +485,7 @@ struct TaggingPreferences: Codable {
 
     // Legacy support for migration
     private enum CodingKeys: String, CodingKey {
-        case genre, subGenre, album, mood, comments, likeness, vibesShort, vibesLong, hooks, overwrite, strictness
+        case genre, subGenre, album, mood, comments, likeness, vibesShort, vibesLong, aiDescriptions, hooks, overwrite, strictness
         case vibes // Legacy key
     }
 
@@ -501,6 +502,7 @@ struct TaggingPreferences: Codable {
         hooks = try container.decodeIfPresent(FieldPreference.self, forKey: .hooks) ?? FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_HOOK")
         overwrite = try container.decodeIfPresent(Bool.self, forKey: .overwrite) ?? true
         strictness = try container.decodeIfPresent(TaggingStrictness.self, forKey: .strictness) ?? .average
+        aiDescriptions = try container.decodeIfPresent(FieldPreference.self, forKey: .aiDescriptions) ?? FieldPreference(enabled: false, targetField: "TCOM")
 
         // Try new keys first, fall back to legacy vibes structure
         if let short = try? container.decodeIfPresent(FieldPreference.self, forKey: .vibesShort),
@@ -532,6 +534,7 @@ struct TaggingPreferences: Codable {
         try container.encode(likeness, forKey: .likeness)
         try container.encode(vibesShort, forKey: .vibesShort)
         try container.encode(vibesLong, forKey: .vibesLong)
+        try container.encode(aiDescriptions, forKey: .aiDescriptions)
         try container.encode(hooks, forKey: .hooks)
         try container.encode(overwrite, forKey: .overwrite)
         try container.encode(strictness, forKey: .strictness)
