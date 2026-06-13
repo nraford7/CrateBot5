@@ -21,9 +21,13 @@ public enum TaggingEngineError: Error, LocalizedError {
 }
 
 /// Stage 2 (judgment) argmax verdict: the highest-confidence Timing label
-/// and its calibrated confidence. Surfaced on `TaggingResult` so downstream
-/// callers (e.g., VibeGeneratorV2) can reason about Stage 2's verdict
-/// without re-running inference. Nil when judgment did not run.
+/// and its raw post-sigmoid Core ML probability. Surfaced on `TaggingResult`
+/// so downstream callers (e.g., VibeGeneratorV2) can reason about Stage 2's
+/// verdict without re-running inference. Nil when judgment did not run.
+/// NOTE: Stage 2 outputs are NOT separately calibrated — only Stage 1 runs
+/// through a `ConfidenceCalibrator`. Stage 2 was trained on Stage 1's
+/// already-calibrated outputs, so its raw post-sigmoid value is the
+/// honest signal. Do not apply a second calibration downstream.
 public struct TimingPrediction: Sendable, Equatable {
     public let label: String
     public let confidence: Float
@@ -56,10 +60,13 @@ public struct TaggingResult: Sendable {
     public let judgmentAvailable: Bool
 
     /// Stage 2 argmax verdict — the highest-confidence Timing label and its
-    /// calibrated confidence. Populated when judgment fired (regardless of
-    /// whether the label cleared its threshold and was emitted as a tag);
-    /// nil when `judgmentAvailable` is false. This is the raw Stage 2 signal
-    /// — callers can apply their own confidence gate downstream.
+    /// raw post-sigmoid Core ML probability (Stage 2 is not separately
+    /// calibrated; it was trained on Stage 1's calibrated outputs, so the
+    /// raw post-sigmoid value IS the honest signal — do not double-calibrate).
+    /// Populated when judgment fired (regardless of whether the label cleared
+    /// its threshold and was emitted as a tag); nil when `judgmentAvailable`
+    /// is false. Callers can apply their own confidence gate downstream
+    /// (see VibeGeneratorV2's 0.5 mix-hint cutoff).
     public let timingPrediction: TimingPrediction?
 
     public init(
@@ -971,11 +978,14 @@ public actor TaggingEngine {
     /// classifier/schema pairing between Stage 1 and Stage 2.
     ///
     /// In addition to the emitted tags (thresholded) and the availability
-    /// flag, the pass returns `timingPrediction` — the argmax (label,
-    /// calibrated confidence) across all judgment classifiers that
-    /// successfully ran. Nil when judgment did not run or every classifier
-    /// threw. The argmax is the raw Stage 2 signal: downstream callers can
-    /// apply their own gate (see VibeGeneratorV2's 0.5 mix-hint cutoff).
+    /// flag, the pass returns `timingPrediction` — the argmax (label, raw
+    /// post-sigmoid Core ML probability) across all judgment classifiers
+    /// that successfully ran. Nil when judgment did not run or every
+    /// classifier threw. Stage 2 is NOT separately calibrated (it was
+    /// trained on Stage 1's calibrated outputs), so the raw post-sigmoid
+    /// value is the honest signal — downstream callers can apply their
+    /// own gate (see VibeGeneratorV2's 0.5 mix-hint cutoff) without
+    /// double-calibrating.
     func judgmentPass(
         snapshot: JudgmentSnapshot,
         binaryConfidences: [String: Float],
@@ -1007,6 +1017,10 @@ public actor TaggingEngine {
                 if confidence >= effectiveThreshold(forTag: tagName) {
                     emitted.append(tagName)
                 }
+                // Tie-break: strict `>` combined with the sorted iteration above means
+                // exact-confidence ties resolve to the alphabetically-first tag name
+                // (the incumbent wins). Deterministic; documented so future maintainers
+                // don't reorder iteration without thinking about argmax stability.
                 if argmax == nil || confidence > argmax!.confidence {
                     argmax = TimingPrediction(label: tagName, confidence: confidence)
                 }

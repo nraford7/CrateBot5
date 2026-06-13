@@ -664,9 +664,10 @@ final class TaggingEngineTests: XCTestCase {
 
     func testTimingPredictionSurfacedWhenJudgmentFires() async throws {
         // Paired-models fixture (same as testJudgmentPassEmitsTimingTagAboveThreshold).
-        // The judgment pass must surface the argmax (label, calibrated confidence)
-        // alongside its emitted tags so downstream callers (VibeGeneratorV2) can
-        // reason about Stage 2's verdict without re-running inference.
+        // The judgment pass must surface the argmax (label, raw post-sigmoid
+        // probability — Stage 2 is not separately calibrated) alongside its
+        // emitted tags so downstream callers (VibeGeneratorV2) can reason
+        // about Stage 2's verdict without re-running inference.
         let (dir, _) = try await makeJudgmentModelDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
         let engine = try await loadEngine(from: dir)
@@ -679,7 +680,7 @@ final class TaggingEngineTests: XCTestCase {
             "Judgment fired — argmax (label, confidence) must surface")
         XCTAssertEqual(prediction.label, "Peak")
         XCTAssertGreaterThan(prediction.confidence, 0.5,
-            "Separable positive input must carry > 0.5 calibrated confidence")
+            "Separable positive input must carry > 0.5 raw post-sigmoid probability")
     }
 
     func testTimingPredictionNilWhenJudgmentUnavailable() async throws {
