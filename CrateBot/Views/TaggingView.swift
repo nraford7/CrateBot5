@@ -825,13 +825,19 @@ struct TaggingView: View {
                     writtenTags.essentiaSubGenre = subGenre
                 }
 
-                // AI descriptions (VibeGeneratorV2). Cache-first; on miss call
-                // the LLM; on success populate all three vibe fields atomically.
+                // AI descriptions (VibeGeneratorV2). Cache-first when a stable
+                // Stage 1 model version is available; on miss call the LLM;
+                // on success populate all three vibe fields atomically.
                 // On error log + continue with all three fields nil — never
                 // write a partial vibe and never block the rest of the tag pass.
-                if aiDescriptionsEnabled, let generator = vibeGenerator, let cache = vibeCache {
+                if aiDescriptionsEnabled, let generator = vibeGenerator {
                     let trackPath = file.url.path
-                    if let cached = await cache.get(trackPath: trackPath, stage1ModelVersion: stage1Version) {
+                    // Skip the cache when stage1ModelVersion is unknown — bucketing
+                    // distinct loaded models under a sentinel string would leak
+                    // stale vibes across model swaps. The LLM call still runs.
+                    let cacheUsable = vibeCache != nil && !stage1Version.isEmpty && stage1Version != "unknown"
+                    if cacheUsable, let cache = vibeCache,
+                       let cached = await cache.get(trackPath: trackPath, stage1ModelVersion: stage1Version) {
                         tagsToWrite.vibeShort = cached.short
                         tagsToWrite.vibeDescription = cached.long
                         tagsToWrite.mixHint = cached.mixHint
@@ -844,6 +850,9 @@ struct TaggingView: View {
                         }
                         let userPreds = result.userPredictions
                             ?? UserTagPredictions(genre: nil, timing: nil, mood: nil, descriptive: [])
+                        // Read title/artist for grounding inputs. Cheap because the
+                        // ID3 read is local; spec lists both as generator inputs.
+                        let extracted = try? id3Manager.readTags(from: file.url)
                         let inputs = VibeGenerationInputs(
                             binaryConfidences: result.binaryConfidences,
                             groupProbabilities: result.groupProbabilities,
@@ -851,8 +860,8 @@ struct TaggingView: View {
                             bpm: result.bpm,
                             key: nil,
                             durationSeconds: result.durationSeconds,
-                            title: nil,
-                            artist: nil,
+                            title: extracted?.title,
+                            artist: extracted?.artist,
                             stage2Timing: result.timingPrediction,
                             cooccurrence: cooccurrence
                         )
@@ -861,11 +870,13 @@ struct TaggingView: View {
                             tagsToWrite.vibeShort = generated.short
                             tagsToWrite.vibeDescription = generated.long
                             tagsToWrite.mixHint = generated.mixHint
-                            await cache.set(
-                                generated,
-                                trackPath: trackPath,
-                                stage1ModelVersion: stage1Version
-                            )
+                            if cacheUsable, let cache = vibeCache {
+                                await cache.set(
+                                    generated,
+                                    trackPath: trackPath,
+                                    stage1ModelVersion: stage1Version
+                                )
+                            }
                         } catch {
                             logger.warning("Vibe generation failed for \(file.url.lastPathComponent): \(error.localizedDescription) — vibe fields left empty")
                         }

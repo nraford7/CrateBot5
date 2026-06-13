@@ -245,8 +245,14 @@ public actor TaggingEngine {
     /// The Stage 1 model version string from loaded metadata. Used as the
     /// cache-invalidation half of the vibe cache key (the other half is the
     /// track path) — a Stage 1 model bump means stale vibes are no longer
-    /// returned by `VibeCache`.
-    public var stage1ModelVersion: String? { loadedMetadata?.stage1ModelVersion }
+    /// returned by `VibeCache`. Returns nil for empty strings so callers
+    /// cannot accidentally bucket distinct models under `""`.
+    public var stage1ModelVersion: String? {
+        guard let version = loadedMetadata?.stage1ModelVersion, !version.isEmpty else {
+            return nil
+        }
+        return version
+    }
 
     /// Number of top predictions to keep for each category
     public var topPredictionCount: Int = 5
