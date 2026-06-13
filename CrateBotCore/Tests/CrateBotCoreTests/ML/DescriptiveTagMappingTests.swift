@@ -73,4 +73,22 @@ final class DescriptiveTagMappingTests: XCTestCase {
         XCTAssertEqual(ordered[4], .instruments)
         XCTAssertEqual(ordered[5], .vocalType)
     }
+
+    /// Effective category folds descriptive sub-category into the category
+    /// logic: known descriptive tags resolve to their sub-category (BassType,
+    /// Rhythm, etc.) so category-complete filtering bites at sub-category
+    /// granularity; unknown descriptive tags stay under "Descriptive";
+    /// non-descriptive top-levels pass through unchanged.
+    func testEffectiveCategoryResolvesDescriptiveSubCategories() {
+        XCTAssertEqual(DescriptiveTagMapping.effectiveCategory(for: "Walking", topLevel: "Descriptive"), "BassType")
+        XCTAssertEqual(DescriptiveTagMapping.effectiveCategory(for: "Funky",   topLevel: "Descriptive"), "Vibes")
+        XCTAssertEqual(DescriptiveTagMapping.effectiveCategory(for: "Broken",  topLevel: "Descriptive"), "Rhythm")
+        XCTAssertEqual(DescriptiveTagMapping.effectiveCategory(for: "House",   topLevel: "Genre"), "Genre")
+        XCTAssertEqual(DescriptiveTagMapping.effectiveCategory(for: "Peak",    topLevel: "Timing"), "Timing")
+        // Custom descriptive tag (not in mapping) stays under top-level "Descriptive"
+        XCTAssertEqual(DescriptiveTagMapping.effectiveCategory(for: "Groovy",  topLevel: "Descriptive"), "Descriptive")
+        // Known descriptive tag passed under a non-Descriptive top-level keeps the top-level
+        // (top-level wins when caller already knows the category isn't Descriptive).
+        XCTAssertEqual(DescriptiveTagMapping.effectiveCategory(for: "Walking", topLevel: "Genre"), "Genre")
+    }
 }

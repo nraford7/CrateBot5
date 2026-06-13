@@ -136,6 +136,28 @@ final class BinaryTrainingDataGeneratorTests: XCTestCase {
         XCTAssertNil(gen.generateTrainingData(for: "Peak", category: "Timing", from: tracks))
     }
 
+    /// Sub-category-granular category-complete filtering: when "BassType" is
+    /// the target category, a track tagged only with Vibes (no BassType tag) is
+    /// "unknown" for the BassType axis and must be EXCLUDED from negatives —
+    /// not silently relabeled as a trusted negative. Hardens the deferred-lever
+    /// in docs/.../2026-06-12-two-stage-tagging-design.md component 3.
+    func testSubCategoryCompletenessExcludesTracksWithoutBassType() {
+        let withBass    = TaggedTrack(id: "a", tags: ["Walking"],       features: [0.0],
+                                      tagsByCategory: ["BassType": ["Walking"]])
+        let votedNoBass = TaggedTrack(id: "b", tags: ["Punchy"],        features: [0.0],
+                                      tagsByCategory: ["BassType": ["Punchy"]])
+        let onlyVibe   = TaggedTrack(id: "c", tags: ["Dark", "Funky"], features: [0.0],
+                                      tagsByCategory: ["Vibes": ["Dark", "Funky"]])
+
+        let gen = BinaryTrainingDataGenerator(minPositiveExamples: 1)
+        let result = gen.generateTrainingData(for: "Walking", category: "BassType", from: [withBass, votedNoBass, onlyVibe])
+
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.positive.map(\.id), ["a"])
+        XCTAssertEqual(result?.negative.map(\.id), ["b"])
+        XCTAssertEqual(result?.excludedCount, 1)  // c excluded as unknown for BassType
+    }
+
     func testGeneratorWithDefaultMinSamplesRejectsSmallDataset() {
         let generator = BinaryTrainingDataGenerator()
 

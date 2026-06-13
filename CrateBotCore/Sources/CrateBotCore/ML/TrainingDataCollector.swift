@@ -1059,7 +1059,11 @@ public actor TrainingDataCollector {
             }
             for tag in individualTags where !tag.isEmpty {
                 tagSet.insert(tag)
-                byCategory["Descriptive", default: []].insert(tag)
+                // Route descriptive tags through the effective-category resolver so
+                // category-complete negative filtering bites at sub-category granularity
+                // (BassType, Rhythm, Vibes, ...). Custom tags fall back to "Descriptive".
+                let effective = DescriptiveTagMapping.effectiveCategory(for: tag, topLevel: "Descriptive")
+                byCategory[effective, default: []].insert(tag)
             }
         }
 

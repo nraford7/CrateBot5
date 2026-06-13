@@ -416,4 +416,33 @@ final class TrainingCoordinatorTests: XCTestCase {
         let state = await coordinator.state
         XCTAssertEqual(state, .idle)
     }
+
+    // MARK: - Sub-category granularity audit (Task 1.1)
+
+    /// Audit invariant for the descriptive sub-category lever: after a track's
+    /// tagsByCategory is keyed by sub-category ("BassType", "Rhythm", "Vibes",
+    /// ...) instead of "Descriptive", the TagStageRegistry must still classify
+    /// those sub-categories as perception (Stage 1), NOT judgment (Stage 2).
+    /// Otherwise the training-path isJudgmentTag check at TrainingCoordinator
+    /// L587-597 would silently divert BassType/Rhythm tags out of Stage 1
+    /// binary training — a regression.
+    func testTagStageRegistryClassifiesDescriptiveSubCategoriesAsPerception() {
+        let registry = TagStageRegistry()
+        for sub in DescriptiveSubCategory.allCases {
+            XCTAssertEqual(
+                registry.stage(forCategory: sub.rawValue),
+                .perception,
+                "Descriptive sub-category \(sub.rawValue) must be perception, not judgment"
+            )
+        }
+        // Timing remains the sole judgment category.
+        XCTAssertEqual(registry.stage(forCategory: "Timing"), .judgment)
+        XCTAssertEqual(registry.categories(in: .judgment), ["Timing"])
+        // Sanity: judgment categories list does not accidentally include any sub-category.
+        let judgment = Set(registry.categories(in: .judgment))
+        for sub in DescriptiveSubCategory.allCases {
+            XCTAssertFalse(judgment.contains(sub.rawValue),
+                "Judgment category set must not contain descriptive sub-category \(sub.rawValue)")
+        }
+    }
 }

@@ -274,12 +274,17 @@ public actor ModelTrainer {
         // Build tag -> category lookup (lowercased, matching coordinator metadata grouping).
         // Sorted categories + first-wins so a tag appearing in multiple categories resolves
         // deterministically (alphabetical category priority), not by dictionary order.
+        // Descriptive tags are folded into their sub-category (BassType, Rhythm, Vibes, ...)
+        // via DescriptiveTagMapping.effectiveCategory so category-complete negative filtering
+        // bites at sub-category granularity — the deferred lever from the two-stage spec.
         var tagToCategory: [String: String] = [:]
         for category in categorizedTags.keys.sorted() {
             for categoryTag in categorizedTags[category] ?? [] {
                 let key = categoryTag.lowercased()
                 if tagToCategory[key] == nil {
-                    tagToCategory[key] = category
+                    tagToCategory[key] = DescriptiveTagMapping.effectiveCategory(
+                        for: categoryTag, topLevel: category
+                    )
                 }
             }
         }

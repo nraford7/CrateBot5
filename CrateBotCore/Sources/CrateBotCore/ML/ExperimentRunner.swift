@@ -242,7 +242,11 @@ public actor ExperimentRunner {
     }
 
     /// Build a tag -> category lookup (lowercased keys, matching ModelTrainer)
-    /// from the per-track category breakdown.
+    /// from the per-track category breakdown. Descriptive tags are folded into
+    /// their sub-category (BassType, Rhythm, Vibes, ...) via
+    /// DescriptiveTagMapping.effectiveCategory so category-complete negative
+    /// filtering bites at sub-category granularity — matches ModelTrainer and
+    /// the post-collector sub-category-keyed per-track tagsByCategory.
     static func deriveTagCategories(from tracks: [TaggedTrack]) -> [String: String] {
         var tagToCategory: [String: String] = [:]
         for track in tracks {
@@ -251,10 +255,13 @@ public actor ExperimentRunner {
             for category in track.tagsByCategory.keys.sorted() {
                 for tag in track.tagsByCategory[category] ?? [] {
                     let key = tag.lowercased()
-                    if let existing = tagToCategory[key], existing <= category {
+                    let resolved = DescriptiveTagMapping.effectiveCategory(
+                        for: tag, topLevel: category
+                    )
+                    if let existing = tagToCategory[key], existing <= resolved {
                         continue
                     }
-                    tagToCategory[key] = category
+                    tagToCategory[key] = resolved
                 }
             }
         }

@@ -96,6 +96,20 @@ public struct DescriptiveTagMapping: Sendable {
         return mapping[tag]
     }
 
+    /// Resolve the effective category for a tag: sub-category for known
+    /// descriptive tags, top-level otherwise. Used by the collector and
+    /// trainer so category-complete filtering applies at descriptive
+    /// sub-category granularity (BassType, Rhythm, Vibes, ...) instead of
+    /// the broad top-level "Descriptive" bucket. Caller's `topLevel` wins
+    /// for non-descriptive categories and for custom descriptive tags
+    /// (those absent from `mapping`).
+    public static func effectiveCategory(for tag: String, topLevel: String) -> String {
+        if topLevel == "Descriptive", let sub = subCategory(for: tag) {
+            return sub.rawValue
+        }
+        return topLevel
+    }
+
     /// Get all tags for a given sub-category
     public static func tags(for subCategory: DescriptiveSubCategory) -> [String] {
         return reverseMapping[subCategory] ?? []

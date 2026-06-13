@@ -278,10 +278,63 @@ final class TrainingDataCollectorTests: XCTestCase {
         XCTAssertEqual(track.tagsByCategory["Genre"], ["House"])
         XCTAssertEqual(track.tagsByCategory["Timing"], ["Peak"])
         XCTAssertEqual(track.tagsByCategory["Mood"], ["Energetic"])
-        XCTAssertEqual(track.tagsByCategory["Descriptive"], ["Vinyl", "Classic"])
+        // Descriptive tags now route through DescriptiveTagMapping.effectiveCategory:
+        // "Classic" is a known descriptive sub-category tag (Style); "Vinyl" is custom
+        // (no mapping) and falls back to the top-level "Descriptive" bucket.
+        XCTAssertEqual(track.tagsByCategory["Style"], ["Classic"])
+        XCTAssertEqual(track.tagsByCategory["Descriptive"], ["Vinyl"])
 
         // Flat tag set must contain the union of all categories
         XCTAssertTrue(track.tags.isSuperset(of: ["House", "Peak", "Energetic", "Vinyl", "Classic"]))
+    }
+
+    /// A descriptive tag with a known sub-category routes through
+    /// DescriptiveTagMapping.effectiveCategory into its sub-category key
+    /// ("Walking" -> "BassType") and does NOT appear under the top-level
+    /// "Descriptive" bucket. Custom descriptive tags (no mapping) still land
+    /// under "Descriptive" — the user's mapping is the source of truth.
+    func testCollectorRoutesDescriptiveTagsThroughEffectiveCategory() async throws {
+        guard let exampleURL = Bundle.module.url(forResource: "example", withExtension: "mp3") else {
+            throw XCTSkip("Example MP3 file not found in test bundle")
+        }
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CrateBotTests_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: tempDir, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o755]
+        )
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let mp3URL = tempDir.appendingPathComponent("subcat.mp3")
+        try FileManager.default.copyItem(at: exampleURL, to: mp3URL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: mp3URL.path)
+
+        // Known descriptive tags: Walking -> BassType, Funky -> Vibes, Broken -> Rhythm.
+        // Unknown tag "Groovy" should fall back to "Descriptive".
+        let id3Manager = ID3Manager()
+        try await id3Manager.writeTags(
+            TagsToWrite(comments: "Walking, Funky, Broken, Groovy"),
+            to: mp3URL
+        )
+
+        let collector = TrainingDataCollector(id3Manager: id3Manager)
+        let result = await collector.collectTrainingData(from: [tempDir])
+
+        XCTAssertEqual(result.tracks.count, 1, "Expected exactly one collected track")
+        guard let track = result.tracks.first else { return }
+
+        XCTAssertEqual(track.tagsByCategory["BassType"], ["Walking"],
+            "Walking must land under BassType sub-category, not Descriptive")
+        XCTAssertEqual(track.tagsByCategory["Vibes"], ["Funky"])
+        XCTAssertEqual(track.tagsByCategory["Rhythm"], ["Broken"])
+        XCTAssertEqual(track.tagsByCategory["Descriptive"], ["Groovy"],
+            "Custom descriptive tag with no mapping must fall back to Descriptive")
+
+        // No known descriptive tag should leak into the top-level Descriptive bucket
+        XCTAssertFalse(track.tagsByCategory["Descriptive"]?.contains("Walking") ?? false)
+        XCTAssertFalse(track.tagsByCategory["Descriptive"]?.contains("Funky") ?? false)
+        XCTAssertFalse(track.tagsByCategory["Descriptive"]?.contains("Broken") ?? false)
     }
 
     /// tagsByCategory must survive the cached-features rebuild path: when
