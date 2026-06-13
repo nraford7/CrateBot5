@@ -36,7 +36,7 @@ Replace the legacy generator with a Stage 1–grounded description generator wir
 | Outputs | Short vibe (TCOM) + prose description (TIT3) + mix hint (TXXX:CRATEBOT_MIXHINT) |
 | Diversity | Trust the model. Temperature 0.7. Diversify by feeding richer input gradient, not phrase ledgers or style rotation (deferred to v2 if template lock returns) |
 | Run/overwrite | Opt-in toggle in Tagging Options panel; when on, overwrite legacy TCOM/TIT3 content |
-| Model | Claude Sonnet 4.5 (current default in `AnthropicClient.swift:159`) |
+| Model | Claude Sonnet 4 — the current default `"claude-sonnet-4-20250514"` in `AnthropicClient.swift:159`. (Bumping to Sonnet 4.5 is a separate one-line change; this spec leaves the default alone.) |
 
 ## Components
 
@@ -49,8 +49,8 @@ Pure data carrier — what the generator sees per track. Built by the tag-pass o
 - `predictedTags: UserTagPredictions` — what the user sees written to the file (Genre/Timing/Mood/Descriptive).
 - `bpm: Float?`, `key: String?`, `durationSeconds: Float`.
 - `title: String?`, `artist: String?` — from ID3 TIT2/TPE1 when available.
-- `stage2Timing: (label: String, confidence: Float)?` — the Stage 2 Timing prediction.
-- `cooccurrence: CooccurrenceContext?` — top-K predecessor + successor tag groups by empirical co-occurrence from the user's library, with support counts. Nil if Stage 2 confidence is below threshold or co-occurrence stats unavailable.
+- `stage2Timing: (label: String, confidence: Float)?` — the Stage 2 Timing prediction. **This is new data that does not exist on `TaggingResult` today** — `UserTagPredictions.timing` is `String?` only. Surfacing the Stage 2 confidence is a precondition for the mix hint and belongs to **Chunk 1** of the implementation: extend `TaggingResult` (or add a sibling field) so the orchestrator can read the predicted Timing label and its calibrated confidence.
+- `cooccurrence: CooccurrenceContext?` — empirical tag co-occurrence with this track's predicted tags. Built from `tag_cooccurrence.json` (existing, used by the booster). **Important framing correction:** the stats file holds **symmetric pairwise co-occurrence + base rates**, NOT track-order predecessor/successor data. The mix hint is therefore phrased as "tags that *share the floor* with this profile in the user's library" — not "tracks that follow or precede". That's honest against the data and still useful set-context guidance. Nil if Stage 2 Timing confidence is below threshold (default 0.5) or co-occurrence support is too thin (default total < 3 contributing tracks).
 
 ### 2. `VibeGeneratorV2` (replaces `NativeVibeGenerator`)
 
@@ -67,9 +67,10 @@ Replaces `NativeVibeGenerator` — old type renamed and stays as a deprecated sh
 
 A small function `Cooccurrence.context(forTags: Set<String>, timing: String, stats: CooccurrenceStats) -> CooccurrenceContext?` that:
 
-- Loads `tag_cooccurrence.json` (already produced by `generate_tag_cooccurrence.py`, already used by the booster).
-- For the given Timing label, returns the top-K (default 3) tag groups that empirically precede or follow it in the user's library, with a `support` count (number of training tracks contributing). 
+- Loads `tag_cooccurrence.json` (already produced by `generate_tag_cooccurrence.py`, already used by the booster). Schema is `{base_rates, conditional}` — symmetric `P(other | tag)` distributions plus tag base rates.
+- For the given Timing label, returns the top-K (default 3) tags whose `P(tag | timing_label)` is highest (and significantly above `base_rate(tag)` to avoid trivial frequency artifacts), with a `support` count derived from the underlying counts.
 - Returns `nil` if total support is below a threshold (default 3) — the silent-better-than-wrong rule from success criteria.
+- The output describes *what the floor looks like* around this Timing label in Noah's library, not what comes before/after — the data does not support sequence claims.
 
 ### 4. Tagging pipeline integration (modify `TaggingView`)
 
@@ -81,11 +82,14 @@ In `CrateBot/Views/TaggingView.swift` around `try await id3Manager.writeTags(...
 
 ### 5. Settings UI (modify `TaggingSettingsSheet` / `SettingsPanel`)
 
+**Codable migration note:** `TaggingPreferences` already has a careful manual `init(from:)` with legacy-key fallback. The new `aiDescriptions` field must follow the same pattern — `decodeIfPresent` with a default-disabled value, and an explicit `encode` line — not synthesized Codable. Otherwise existing saved preferences fail to load.
+
+
 Add a new section "AI descriptions" with:
 
 - Toggle bound to `aiDescriptions.enabled`.
 - One line of explanatory text: "Generates short vibe, prose description, and mix-context hint per track using Anthropic API."
-- Estimated cost ("~$0.005/track at current pricing") and a "Configure API key" link if `KeychainManager.shared.exists(key: .anthropicAPIKey)` is false.
+- Estimated cost ("~$0.01/track at current Sonnet 4 pricing") and a "Configure API key" link if `KeychainManager.shared.exists(key: .anthropicAPIKey)` is false. (Reality-checked: with ~30 binary confidences + multi-class group probs + predicted tags + title/artist/co-occurrence context, real input runs ~800–1200 tokens; at $3/$15 per Mtok that's ~$0.006–$0.009. Quote `$0.01` as a conservative-rounded user-facing number.)
 
 ### 6. ID3 write path (modify `ID3Manager` + `TagsToWrite`)
 
@@ -101,6 +105,9 @@ Keyed by `(trackPath, modelName, model_version)`. SQLite or simple JSON file at 
 - Style rotation across multiple voices.
 - Hook generation (TXXX:WORK already lightly populated; separate concern).
 - Batch UI to retroactively regenerate legacy CrateBot4 content on the full library (the opt-in toggle handles it organically as tracks get re-tagged).
+- Mining true track-order predecessor/successor data from set history (would need DJ-set logs CrateBot doesn't have).
+- Vibe-cache eviction policy: v1 keeps everything; revisit if the file grows past ~10 MB.
+- Bumping the AnthropicClient default model to Sonnet 4.5: one-line change tracked separately.
 
 ## Error handling
 
