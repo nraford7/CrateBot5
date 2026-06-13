@@ -93,6 +93,17 @@ struct TaggingSettingsSheet: View {
                             targetField: $appState.taggingPreferences.vibesLong.targetField
                         )
 
+                        let hasAnthropicKey = KeychainManager.shared.exists(key: .anthropicAPIKey)
+                        tagFieldRow(
+                            label: "AI Descriptions",
+                            enabled: $appState.taggingPreferences.aiDescriptions.enabled,
+                            targetField: $appState.taggingPreferences.aiDescriptions.targetField
+                        )
+                        .disabled(!hasAnthropicKey)
+                        .help(hasAnthropicKey
+                              ? "Generates short vibe, prose description, and DJ mix-context hint per track via Anthropic API. ~$0.01/track at current Sonnet 4 pricing."
+                              : "Set the Anthropic API key in Preferences first.")
+
                         tagFieldRow(
                             label: "Hooks",
                             enabled: $appState.taggingPreferences.hooks.enabled,
