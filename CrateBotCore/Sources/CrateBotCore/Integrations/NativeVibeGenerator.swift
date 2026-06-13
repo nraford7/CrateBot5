@@ -96,6 +96,7 @@ public struct NativeVibeResult: Sendable {
 // MARK: - Native Vibe Generator
 
 /// Actor for generating AI-powered vibe tags directly via Anthropic API
+@available(*, deprecated, message: "Use VibeGeneratorV2")
 public actor NativeVibeGenerator {
     private let client: AnthropicClient
     private var cache: [String: NativeVibeResult] = [:]
