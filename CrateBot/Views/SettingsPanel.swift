@@ -9,7 +9,23 @@ struct SettingsPanel: View {
     var body: some View {
         @Bindable var appState = appState
 
-        NavigationStack {
+        // No NavigationStack: on macOS it reserves leading space for navigation
+        // chrome that doesn't render in a sheet, clipping the first ~10px of
+        // each section header. A flat VStack with a manual title bar and a
+        // bottom toolbar gives the same visual without the clip.
+        VStack(spacing: 0) {
+            HStack {
+                Text("Settings")
+                    .font(Theme.Fonts.heading(20))
+                    .foregroundColor(Theme.Colors.textPrimary)
+                Spacer()
+            }
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.md)
+            .background(Theme.Colors.bgWindow)
+
+            Divider()
+
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
                     strictnessSection
@@ -23,22 +39,27 @@ struct SettingsPanel: View {
                 .padding(Theme.Spacing.lg)
             }
             .background(Theme.Colors.bgWindow)
-            .navigationTitle("Settings")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        appState.taggingPreferences.save()
-                        Task {
-                            await appState.saveFallbackMappings()
-                            await appState.syncTaggingPreferences()
-                        }
-                        dismiss()
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Done") {
+                    appState.taggingPreferences.save()
+                    Task {
+                        await appState.saveFallbackMappings()
+                        await appState.syncTaggingPreferences()
                     }
-                    .buttonStyle(PrimaryButtonStyle())
+                    dismiss()
                 }
+                .buttonStyle(PrimaryButtonStyle())
             }
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.md)
+            .background(Theme.Colors.bgWindow)
         }
         .frame(minWidth: 550, idealWidth: 640, maxWidth: 760, minHeight: 500, idealHeight: 720)
+        .background(Theme.Colors.bgWindow)
     }
 
     // MARK: - Strictness Section
