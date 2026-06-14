@@ -207,8 +207,10 @@ final class VibeGeneratorV2Tests: XCTestCase {
         XCTAssertEqual(r.mixHint, "sits between Peak and Release")
     }
 
-    func testMixHintOmittedWhenInputsHaveNoCooccurrence() async throws {
-        // cooccurrence == nil → mix-hint gate closed.
+    func testMixHintNilWhenModelOmitsIt() async throws {
+        // Model returns no mix_hint key → result.mixHint is nil. The generator no
+        // longer gates on Stage 2 confidence; it always asks for mix_hint and
+        // accepts whatever the model returns.
         let mock = MockClient(reply: #"{"short":"X","long":"Y"}"#)
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputs)
@@ -217,15 +219,15 @@ final class VibeGeneratorV2Tests: XCTestCase {
         XCTAssertNil(r.mixHint)
     }
 
-    func testMixHintGateBelowStage2Confidence() async throws {
-        // confidence < 0.5 → gate closed even though cooccurrence present.
-        // Generator should also drop mix_hint from the result even if model returns one.
-        let mock = MockClient(reply: #"{"short":"X","long":"Y","mix_hint":"unwanted"}"#)
+    func testMixHintReturnedRegardlessOfStage2Confidence() async throws {
+        // Low Stage 2 confidence used to gate mix_hint off. The gate is gone —
+        // mix_hint is now always passed through when the model returns one.
+        let mock = MockClient(reply: #"{"short":"X","long":"Y","mix_hint":"Drop at 2am"}"#)
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputsLowConfidence)
         XCTAssertEqual(r.short, "X")
         XCTAssertEqual(r.long, "Y")
-        XCTAssertNil(r.mixHint, "Mix hint should be dropped when Stage 2 confidence ≤ 0.5")
+        XCTAssertEqual(r.mixHint, "Drop at 2am", "Mix hint should pass through regardless of Stage 2 confidence")
     }
 
     func testTemperatureAndModelMatchSpec() async {

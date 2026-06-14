@@ -329,29 +329,35 @@ public actor ID3Manager {
                     )
                 }
 
-                // Handle vibe short - write to composer frame (TCOM)
+                // AI-generated vibe fields ALWAYS overwrite when a fresh value is
+                // present. The user's `overwrite` flag governs manually-set tags
+                // (artist/album/etc.) — when the user re-runs vibe generation, they
+                // want the new output, not the previous one preserved.
+                //
+                // When the new value is nil (e.g. generation skipped or failed), the
+                // existing frame is preserved so the column doesn't suddenly blank.
+
+                // vibe short → composer frame (TCOM, "Composer" column)
                 let existingComposer = reader.composer()
-                if let vibeShort = tags.vibeShort, tags.overwrite || existingComposer == nil {
+                if let vibeShort = tags.vibeShort {
                     builder = builder.composer(frame: ID3FrameWithStringContent(content: vibeShort))
                 } else if let existingComposer {
                     builder = builder.composer(frame: ID3FrameWithStringContent(content: existingComposer))
                 }
 
-                // Handle vibe description - write to subtitle frame (TIT3),
-                // which DJ tools and Music.app surface as "Description".
+                // vibe description → subtitle frame (TIT3, "Description" column)
                 let existingSubtitle = reader.subtitle()
-                if let vibeDescription = tags.vibeDescription, tags.overwrite || existingSubtitle == nil {
+                if let vibeDescription = tags.vibeDescription {
                     builder = builder.subtitle(frame: ID3FrameWithStringContent(content: vibeDescription))
                 } else if let existingSubtitle {
                     builder = builder.subtitle(frame: ID3FrameWithStringContent(content: existingSubtitle))
                 }
 
-                // Handle mix hint - write to iTunes Movement Name (MVNM),
-                // visible as "Movement Name" in Music.app and DJ tools.
-                // Carries the "how to play it" guidance, distinct from the
-                // long prose description on TIT3 above.
+                // mix hint → iTunes Movement Name (MVNM, "Movement Name" column).
+                // Carries the "how to play it" guidance, distinct from the sensory
+                // description on TIT3 above.
                 let existingMovement = reader.iTunesMovementName()
-                if let mixHint = tags.mixHint, tags.overwrite || existingMovement == nil {
+                if let mixHint = tags.mixHint {
                     builder = builder.iTunesMovementName(frame: ID3FrameWithStringContent(content: mixHint))
                 } else if let existingMovement {
                     builder = builder.iTunesMovementName(frame: ID3FrameWithStringContent(content: existingMovement))

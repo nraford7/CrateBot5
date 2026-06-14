@@ -109,13 +109,11 @@ public actor VibeGeneratorV2 {
 
     /// Generate a `VibeGenerationResult` from the given inputs.
     ///
-    /// Mix-hint gate: included in the prompt only when Stage 2 timing confidence
-    /// exceeds 0.5 **and** a `CooccurrenceContext` is present. When the gate is
-    /// closed, the result's `mixHint` is forced to `nil` even if the model
-    /// returned a value.
+    /// All three fields are always requested. The prompt instructs the model to
+    /// reference the Stage 2 Timing label when present and infer the slot from
+    /// BPM + Genre when it is not.
     public func generate(inputs: VibeGenerationInputs) async throws -> VibeGenerationResult {
-        let mixHintAllowed = (inputs.stage2Timing?.confidence ?? 0) > 0.5 && inputs.cooccurrence != nil
-        let (system, prompt) = Self.composePrompts(inputs: inputs, includeMixHint: mixHintAllowed)
+        let (system, prompt) = Self.composePrompts(inputs: inputs, includeMixHint: true)
 
         let raw: String
         do {
@@ -154,7 +152,7 @@ public actor VibeGeneratorV2 {
         return VibeGenerationResult(
             short: decoded.short,
             long: decoded.long,
-            mixHint: mixHintAllowed ? decoded.mix_hint : nil
+            mixHint: decoded.mix_hint
         )
     }
 
@@ -185,54 +183,64 @@ public actor VibeGeneratorV2 {
             ? ""
             : " FORBIDDEN words in `short` for THIS track (do not use, do not pluralize, do not rhyme on): \(shortForbidden.joined(separator: ", "))."
 
-        let mixHintSchema = includeMixHint ? #", "mix_hint": "<verb-first tactical instruction>""# : ""
-        let mixHintLine = includeMixHint
-            ? "Include `mix_hint`: ONE sentence, max 14 words. FIRST WORD MUST BE one of: Drop, Slot, Bridge, Open, Cut, Follow, Save, Pair. Then name when in the set, what to bridge from, what to follow with. Reference the Stage 2 Timing label when present. FORBIDDEN words in `mix_hint`: vibe, atmosphere, feel, mood, dark, warm, deep, dreamy, soulful, dirty, hypnotic, lush, raw, woozy, hazy, ethereal, gritty, drift, glow, shimmer, pulse, thud, hum. The mix_hint must NEVER read as a description of the track — it is an ORDER to the DJ. Example: \"Slot at 2am; bridge from rolling tech-house into the warehouse peak.\""
-            : "Do NOT include a `mix_hint` field."
-
-        let exampleBlock = includeMixHint
-            ? "{\"short\": \"WAREHOUSE PRAYER HUSH\", \"long\": \"Cavernous low-end thuds against a frayed soprano sample reaching for the ceiling.\", \"mix_hint\": \"Slot at 2am; bridge from rolling tech-house into the warehouse peak.\"}"
-            : "{\"short\": \"WAREHOUSE PRAYER HUSH\", \"long\": \"Cavernous low-end thuds against a frayed soprano sample reaching for the ceiling.\"}"
-
         let system = """
         You are a veteran DJ tagging a record crate. Given a JSON analysis of one \
         electronic music track, respond with JSON only — no prose, no markdown fences, \
         no preamble.
 
-        The fields are NOT three flavors of the same description. They are three \
-        DIFFERENT kinds of sentence:
-          • `short` — a poetic NICKNAME the DJ can remember in a glance. NEVER repeats \
-            the title, artist, genre, mood, or any tag — it distills the track in \
-            fresh language.
-          • `long` — a SENSORY snapshot of what the track SOUNDS like, as if reviewing \
-            the record blind. Noun-first. No DJ verbs. No time-of-night.
-          • `mix_hint` — a TACTICAL ORDER to the DJ. Verb-first. Says when to play it \
-            and what to play around it. No sensory adjectives.
+        The three fields are NOT three flavors of the same description. They are three \
+        DIFFERENT kinds of sentence. Read each role carefully:
 
-        If `long` and `mix_hint` could swap fields without changing meaning, you have failed.
+          • `short` — a poetic NICKNAME the DJ can remember in a glance. EXACTLY 4 \
+            ALL-CAPS words. Distills the track in FRESH words that DO NOT appear in the \
+            track title, artist, genre, mood, or any predicted tag. Never repeats words \
+            you used in `long` or `mix_hint`.
+
+          • `long` — describes WHAT THE TRACK SOUNDS LIKE. The instruments you hear, the \
+            texture, the rhythm, the production feel. Like a reviewer hearing the record \
+            blind. NEVER mentions when to play it, the set, the night, the room, or any \
+            DJ action. If a phrase could appear in a DJ instruction sheet, it does not \
+            belong here.
+
+          • `mix_hint` — describes HOW TO PLAY THE TRACK. NEVER describes the sound or \
+            instruments. NEVER repeats what `long` already said. It is an ORDER to the \
+            DJ: when in the set to drop it, what to mix INTO it from, what to follow it \
+            with. If a phrase could appear in a music review, it does not belong here.
+
+        Self-check before responding: cover the `long` field — can you reconstruct it \
+        from the `mix_hint`? If yes, REWRITE both. They must read as different KINDS \
+        of sentence, not different phrasings of the same sentence.
 
         Output schema:
-        {"short": "<3-5 CAPS WORD NICKNAME>", "long": "<sensory sentence>"\(mixHintSchema)}
-
-        Reference example for a DIFFERENT track (DO NOT copy these specific words):
-        \(exampleBlock)
+        {"short": "<EXACTLY 4 CAPS WORDS>", "long": "<one sentence about what it sounds like>", "mix_hint": "<one sentence about how to play it>"}
 
         Hard rules:
-        - `short`: 3-5 words, ALL CAPS, evocative, NO articles, NO punctuation. \
-          A distillation in FRESH words — never echo the track title, artist, genre, \
-          mood, or any predicted tag.\(shortForbiddenLine) \
-          Pair a concrete vibe descriptor with a POETIC or unexpected word. \
-          Good shape: "LATE NIGHT GROOVE CATHEDRAL", "MIDNIGHT BREAKER PRAYER", \
-          "WAREHOUSE SUSTAIN HUSH".
-        - `long`: ONE SENSORY sentence — what you HEAR. The texture, the instruments \
-          that anchor it, what it does to the body. Max 14 words. \
-          Begin with a noun or adjective (NEVER "This is", "A ", "An ", "Track ", "Song ", \
-          "Opener", "Anthem", "Banger"). \
-          FORBIDDEN words in `long`: set, mix, drop, play, DJ, night, peak, room, slot, \
-          club, dancefloor, hour, opener, anthem, opening, prime, after, before, into, \
-          follow, builds, owns, lifts, banger — those are placement words and belong \
-          in `mix_hint`, not here.
-        - \(mixHintLine)
+        - `short`: EXACTLY 4 words, ALL CAPS, no articles, no punctuation, no numbers. \
+          Every word must be FRESH — not in the track title, artist, genre, mood, tags, \
+          `long`, or `mix_hint`.\(shortForbiddenLine) \
+          Pair concrete sensation with a poetic or unexpected word. \
+          Structure templates (use as scaffolding, NOT word source): \
+          [TIME-OF-DAY] [TEXTURE-NOUN] [BODY-VERB] [PLACE-NOUN], or \
+          [WEATHER-NOUN] [INSTRUMENT-NOUN] [EMOTION-VERB] [ARCHITECTURE-NOUN].
+
+        - `long`: ONE sentence about SOUND ONLY. Max 16 words. Begin with a noun or \
+          adjective. \
+          FORBIDDEN in `long` (these are placement/DJ words and belong in `mix_hint`): \
+          set, mix, drop, play, DJ, night, peak, room, slot, club, dancefloor, hour, \
+          opener, anthem, opening, prime, after, before, into, follow, builds, owns, \
+          lifts, banger, early, late, warm-up, peak-time, opener, closer.
+
+        - `mix_hint`: ONE sentence about TIMING AND PLACEMENT ONLY. Max 14 words. \
+          FIRST WORD MUST BE one of: Drop, Slot, Bridge, Open, Cut, Follow, Save, \
+          Pair, Hold, Stack. Then say WHEN (specific hour or set position), what to \
+          mix FROM, what to follow WITH. Reference the Stage 2 Timing label if \
+          provided; otherwise infer the slot from BPM and Genre. \
+          FORBIDDEN in `mix_hint` (these are sound-description words and belong in \
+          `long`): vibe, atmosphere, feel, mood, dark, warm, deep, dreamy, soulful, \
+          dirty, hypnotic, lush, raw, woozy, hazy, ethereal, gritty, drift, glow, \
+          shimmer, pulse, thud, hum, cavernous, swirling, swung, walking, broken, \
+          rolling — none of these describe DJ action.
+
         - Respond with the JSON object only. No leading prose. No code fences.
         """
 
