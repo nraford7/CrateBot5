@@ -1,98 +1,44 @@
 import Foundation
-import Security
 import os.log
 
-/// Secure storage for sensitive credentials using macOS Keychain
+/// Storage for the Anthropic API key.
+///
+/// Previously used the macOS keychain, which prompted for the login password
+/// on every Debug rebuild because the new binary's code signature didn't match
+/// the ACL of the previously-saved entry. The keychain was buying no real
+/// security on a single-user Mac — anyone with the account can read either
+/// store — so the key now lives in UserDefaults. Persists across rebuilds
+/// silently.
 public final class KeychainManager: Sendable {
     public static let shared = KeychainManager()
 
     private let logger = Logger(subsystem: "com.cratebot", category: "KeychainManager")
+    private let defaultsKeyPrefix = "com.cratebot.credentials."
 
-    // Keychain service identifier
-    private let service = "com.cratebot.credentials"
-
-    // Known key names
     public enum Key: String, Sendable {
         case anthropicAPIKey = "anthropic_api_key"
     }
 
     private init() {}
 
-    /// Save a string value to the Keychain
     public func save(_ value: String, for key: Key) throws {
-        guard let data = value.data(using: .utf8) else {
-            throw KeychainError.encodingFailed
-        }
-
-        // Delete existing item first (if any)
-        try? delete(key: key)
-
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key.rawValue,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-            kSecUseDataProtectionKeychain as String: true
-        ]
-
-        let status = SecItemAdd(query as CFDictionary, nil)
-
-        guard status == errSecSuccess else {
-            logger.error("Failed to save to Keychain: \(status)")
-            throw KeychainError.saveFailed(status)
-        }
-
-        logger.info("Saved \(key.rawValue) to Keychain")
+        UserDefaults.standard.set(value, forKey: defaultsKeyPrefix + key.rawValue)
+        logger.info("Saved \(key.rawValue) to UserDefaults")
     }
 
-    /// Retrieve a string value from the Keychain
     public func retrieve(key: Key) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key.rawValue,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseDataProtectionKeychain as String: true
-        ]
-
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        guard status == errSecSuccess,
-              let data = result as? Data,
-              let string = String(data: data, encoding: .utf8) else {
-            return nil
-        }
-
-        return string
+        UserDefaults.standard.string(forKey: defaultsKeyPrefix + key.rawValue)
     }
 
-    /// Delete a value from the Keychain
     public func delete(key: Key) throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key.rawValue,
-            kSecUseDataProtectionKeychain as String: true
-        ]
-
-        let status = SecItemDelete(query as CFDictionary)
-
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            logger.error("Failed to delete from Keychain: \(status)")
-            throw KeychainError.deleteFailed(status)
-        }
+        UserDefaults.standard.removeObject(forKey: defaultsKeyPrefix + key.rawValue)
     }
 
-    /// Check if a key exists in the Keychain
     public func exists(key: Key) -> Bool {
         retrieve(key: key) != nil
     }
 }
 
-/// Errors that can occur during Keychain operations
 public enum KeychainError: Error, LocalizedError {
     case encodingFailed
     case saveFailed(OSStatus)
@@ -101,11 +47,11 @@ public enum KeychainError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .encodingFailed:
-            return "Failed to encode value for Keychain"
+            return "Failed to encode credential"
         case .saveFailed(let status):
-            return "Failed to save to Keychain (status: \(status))"
+            return "Failed to save credential (status: \(status))"
         case .deleteFailed(let status):
-            return "Failed to delete from Keychain (status: \(status))"
+            return "Failed to delete credential (status: \(status))"
         }
     }
 }
