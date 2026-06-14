@@ -305,7 +305,7 @@ public struct TagsToWrite: Sendable, Equatable {
     /// Detailed vibe description (to subtitle frame)
     public var vibeDescription: String?
 
-    /// DJ mix-context hint (to iTunes Grouping frame GRP1)
+    /// DJ mix-context hint (to iTunes Movement Name frame MVNM)
     public var mixHint: String?
 
     /// Scene tag for track classification

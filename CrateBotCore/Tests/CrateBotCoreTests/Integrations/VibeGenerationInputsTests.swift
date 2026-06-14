@@ -26,6 +26,7 @@ final class VibeGenerationInputsTests: XCTestCase {
         key: String? = "Am",
         title: String? = "Test Track",
         artist: String? = "Test Artist",
+        album: String? = "Test Album",
         stage2Timing: TimingPrediction? = TimingPrediction(label: "Peak", confidence: 0.81),
         cooccurrence: CooccurrenceContext? = CooccurrenceContext(
             timingLabel: "Peak",
@@ -45,6 +46,7 @@ final class VibeGenerationInputsTests: XCTestCase {
             durationSeconds: 360.5,
             title: title,
             artist: artist,
+            album: album,
             stage2Timing: stage2Timing,
             cooccurrence: cooccurrence
         )
@@ -63,6 +65,7 @@ final class VibeGenerationInputsTests: XCTestCase {
         XCTAssertEqual(inputs.durationSeconds, 360.5)
         XCTAssertEqual(inputs.title, "Test Track")
         XCTAssertEqual(inputs.artist, "Test Artist")
+        XCTAssertEqual(inputs.album, "Test Album")
         XCTAssertEqual(inputs.stage2Timing?.label, "Peak")
         XCTAssertEqual(inputs.stage2Timing?.confidence, 0.81)
         XCTAssertEqual(inputs.cooccurrence?.coOccurringTags, ["Dark", "Hypnotic"])
@@ -88,6 +91,7 @@ final class VibeGenerationInputsTests: XCTestCase {
             durationSeconds: 300,
             title: nil,
             artist: nil,
+            album: nil,
             stage2Timing: nil,
             cooccurrence: nil
         )
@@ -100,6 +104,7 @@ final class VibeGenerationInputsTests: XCTestCase {
             durationSeconds: 300,
             title: nil,
             artist: nil,
+            album: nil,
             stage2Timing: nil,
             cooccurrence: nil
         )
@@ -144,6 +149,7 @@ final class VibeGenerationInputsTests: XCTestCase {
             durationSeconds: 300,
             title: nil,
             artist: nil,
+            album: nil,
             stage2Timing: TimingPrediction(label: "Peak", confidence: Float.nan),
             cooccurrence: nil
         )
@@ -171,6 +177,7 @@ final class VibeGenerationInputsTests: XCTestCase {
             durationSeconds: 0,
             title: nil,
             artist: nil,
+            album: nil,
             stage2Timing: nil,
             cooccurrence: nil
         )
@@ -222,5 +229,11 @@ final class VibeGenerationInputsTests: XCTestCase {
         let payload = inputs.promptPayload()
         XCTAssertTrue(payload.contains("cooccurrence"))
         XCTAssertTrue(payload.contains("coOccurringTags"))
+    }
+
+    func testPromptPayloadIncludesAlbumWhenPresent() {
+        let inputs = makeInputs(album: "Night Glass")
+        let payload = inputs.promptPayload()
+        XCTAssertTrue(payload.contains("\"album\":\"Night Glass\""))
     }
 }

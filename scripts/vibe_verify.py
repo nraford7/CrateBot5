@@ -10,7 +10,7 @@ toggle on.
 Frames read:
 - TCOM (vibe short)
 - TIT3 (vibe description / prose)
-- GRP1 (mix hint — substitute for spec's TXXX:CRATEBOT_MIXHINT)
+- MVNM (movement / DJ-use mix hint)
 
 Run:
     python3 scripts/vibe_verify.py /path/to/tagged/mp3s [--limit N]
@@ -49,10 +49,26 @@ COT_PATTERNS = [
     re.compile(r"^\s*REASONING", re.IGNORECASE),
 ]
 
-# Vocabulary the mix hint should reference when Stage 2 fired confidently.
-# (The script can only see what's written, not the Stage 2 confidence —
-# so this is a presence check, not a strict gate.)
-TIMING_VOCAB = {"peak", "build", "sustain", "release", "intro", "outro", "drop", "breakdown"}
+SHORT_RE = re.compile(r"^[A-Z]+(?: [A-Z]+){3,4}$")
+ARTICLES = {"A", "AN", "THE"}
+DJ_CUES = {
+    "drop", "slot", "bridge", "open", "cut", "follow", "save", "pair", "hold",
+    "stack", "after", "before", "between", "from", "into", "when", "build",
+    "lift", "shift", "release", "reset", "transition", "segue", "opener",
+    "closer", "warmup", "energy", "toughness", "drums", "break", "breakdown",
+}
+LONG_DJ_WORDS = {
+    "dj", "mix", "drop", "play", "set", "slot", "opener", "closer",
+    "warmup", "transition", "segue", "blend", "cue", "follow",
+}
+STOPWORDS = {
+    "the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "by",
+    "for", "with", "from", "into", "after", "before", "between", "when",
+    "then", "than", "that", "this", "these", "those", "is", "are", "was",
+    "were", "be", "been", "being", "it", "its", "as", "but", "not", "no",
+    "so", "if", "you", "your", "their", "there", "here", "over", "under",
+    "through", "track", "field", "music", "record",
+}
 
 
 def read_frame(tag: ID3, frame_id: str) -> str | None:
@@ -69,6 +85,14 @@ def read_frame(tag: ID3, frame_id: str) -> str | None:
 
 def ngrams(words: list[str], n: int = 4):
     return [" ".join(words[i : i + n]).lower() for i in range(0, len(words) - n + 1)]
+
+
+def words(text: str) -> list[str]:
+    return re.findall(r"[A-Za-z0-9']+", text.lower())
+
+
+def significant(text: str) -> set[str]:
+    return {w for w in words(text) if len(w) >= 3 and w not in STOPWORDS}
 
 
 def sliding_window_repeats(descriptions: list[str], window: int = 30, n: int = 4, max_repeats: int = 2):
@@ -116,8 +140,11 @@ def main() -> int:
     no_short: list[Path] = []
     no_long: list[Path] = []
     no_mix: list[Path] = []
-    mix_with_timing: list[tuple[Path, str]] = []
-    mix_without_timing: list[tuple[Path, str]] = []
+    bad_short: list[tuple[Path, str]] = []
+    long_with_dj_words: list[tuple[Path, str, str]] = []
+    mix_with_cue: list[tuple[Path, str]] = []
+    mix_without_cue: list[tuple[Path, str]] = []
+    mix_repeats_description: list[tuple[Path, str, str]] = []
     total_with_short = 0
 
     for path in mp3s:
@@ -131,16 +158,23 @@ def main() -> int:
 
         short = read_frame(tag, "TCOM")
         long_desc = read_frame(tag, "TIT3")
-        mix = read_frame(tag, "GRP1")
+        mix = read_frame(tag, "MVNM")
 
         if args.verbose:
             print(f"{path.name}")
             print(f"  TCOM: {short!r}")
             print(f"  TIT3: {long_desc!r}")
-            print(f"  GRP1: {mix!r}")
+            print(f"  MVNM: {mix!r}")
 
         if short:
             total_with_short += 1
+            short_words = short.split()
+            if (
+                not SHORT_RE.fullmatch(short)
+                or any(w in ARTICLES for w in short_words)
+                or any(len(w) > 12 for w in short_words)
+            ):
+                bad_short.append((path, short))
             for pat in COT_PATTERNS:
                 if pat.search(short):
                     cot_violations.append((path, short))
@@ -151,16 +185,25 @@ def main() -> int:
         if long_desc:
             descriptions.append(long_desc)
             description_paths.append(path)
+            long_tokens = set(words(long_desc))
+            for token in sorted(long_tokens & LONG_DJ_WORDS):
+                long_with_dj_words.append((path, long_desc, token))
+                break
         else:
             no_long.append(path)
 
         if mix:
             mix_hints.append((path, mix))
-            mix_lower = mix.lower()
-            if any(v in mix_lower for v in TIMING_VOCAB):
-                mix_with_timing.append((path, mix))
+            mix_tokens = set(words(mix))
+            if (mix_tokens & DJ_CUES) or re.search(r"\b\d{1,2}(:\d{2})?\s*(am|pm)\b", mix.lower()):
+                mix_with_cue.append((path, mix))
             else:
-                mix_without_timing.append((path, mix))
+                mix_without_cue.append((path, mix))
+            if short and long_desc:
+                completed = significant(short) | significant(long_desc)
+                overlap = significant(mix) & completed
+                if overlap:
+                    mix_repeats_description.append((path, mix, ", ".join(sorted(overlap)[:5])))
         else:
             no_mix.append(path)
 
@@ -170,7 +213,7 @@ def main() -> int:
     print("=" * 72)
     print(f"TCOM written: {total_with_short}/{len(mp3s)}  (missing: {len(no_short)})")
     print(f"TIT3 written: {len(descriptions)}/{len(mp3s)}  (missing: {len(no_long)})")
-    print(f"GRP1 written: {len(mix_hints)}/{len(mp3s)}  (missing: {len(no_mix)})")
+    print(f"MVNM written: {len(mix_hints)}/{len(mp3s)}  (missing: {len(no_mix)})")
 
     print()
     print("=" * 72)
@@ -182,6 +225,17 @@ def main() -> int:
             print(f"  {path.name}: {text!r}")
         if len(cot_violations) > 10:
             print(f"  ... and {len(cot_violations) - 10} more")
+    else:
+        print("PASS")
+
+    print()
+    print("=" * 72)
+    print("CRITERION 1B — TCOM is 4-5 all-caps words")
+    print("=" * 72)
+    if bad_short:
+        print(f"FAIL ({len(bad_short)} tracks):")
+        for path, text in bad_short[:10]:
+            print(f"  {path.name}: {text!r}")
     else:
         print("PASS")
 
@@ -203,26 +257,45 @@ def main() -> int:
 
     print()
     print("=" * 72)
-    print("CRITERION 3 — Mix-hint references Timing vocab when present")
+    print("CRITERION 2B — TIT3 avoids DJ-use wording")
     print("=" * 72)
-    print("(Script-side soft check — Stage 2 confidence is not retrievable from disk)")
-    print(f"GRP1 present with timing vocab:    {len(mix_with_timing)}")
-    print(f"GRP1 present without timing vocab: {len(mix_without_timing)}")
-    if mix_without_timing:
-        print("Sample of GRP1 without timing vocab (may be fine if Stage 2 didn't fire):")
-        for path, text in mix_without_timing[:5]:
+    if long_with_dj_words:
+        print(f"FAIL ({len(long_with_dj_words)} tracks):")
+        for path, text, token in long_with_dj_words[:10]:
+            print(f"  {path.name}: {token!r} in {text!r}")
+    else:
+        print("PASS")
+
+    print()
+    print("=" * 72)
+    print("CRITERION 3 — MVNM reads like DJ movement guidance")
+    print("=" * 72)
+    print(f"MVNM present with DJ-use cue:    {len(mix_with_cue)}")
+    print(f"MVNM present without DJ-use cue: {len(mix_without_cue)}")
+    if mix_without_cue:
+        print("Sample of MVNM without DJ-use cue:")
+        for path, text in mix_without_cue[:5]:
             print(f"  {path.name}: {text!r}")
+    if mix_repeats_description:
+        print(f"MVNM repeats completed description words ({len(mix_repeats_description)} tracks):")
+        for path, text, overlap in mix_repeats_description[:5]:
+            print(f"  {path.name}: {overlap} in {text!r}")
 
     print()
     print("=" * 72)
     print("SUMMARY")
     print("=" * 72)
     crit1_pass = not cot_violations
+    crit1b_pass = not bad_short
     crit2_pass = not offenders
+    crit2b_pass = not long_with_dj_words
+    crit3_pass = not mix_without_cue and not mix_repeats_description
     print(f"Criterion 1 (no CoT preambles):  {'PASS' if crit1_pass else 'FAIL'}")
+    print(f"Criterion 1B (short format):     {'PASS' if crit1b_pass else 'FAIL'}")
     print(f"Criterion 2 (diverse phrasing):  {'PASS' if crit2_pass else 'FAIL'}")
-    print(f"Criterion 3 (mix-hint vocab):    INFO (manual judgement)")
-    return 0 if (crit1_pass and crit2_pass) else 1
+    print(f"Criterion 2B (long separation):  {'PASS' if crit2b_pass else 'FAIL'}")
+    print(f"Criterion 3 (movement field):    {'PASS' if crit3_pass else 'FAIL'}")
+    return 0 if (crit1_pass and crit1b_pass and crit2_pass and crit2b_pass and crit3_pass) else 1
 
 
 if __name__ == "__main__":

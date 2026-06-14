@@ -4,6 +4,12 @@
 
 **Goal:** Replace the unwired legacy `NativeVibeGenerator` with `VibeGeneratorV2` — Stage 1–grounded, three-output (TCOM/TIT3/TXXX:CRATEBOT_MIXHINT), opt-in toggle in Tagging Options. Per spec `2026-06-13-vibe-generator-v2-design.md`.
 
+> Superseded note, 2026-06-14: current implementation writes TCOM/TIT3/MVNM,
+> generates `short`+`long` first and Movement second, includes album in
+> `VibeGenerationInputs`, validates semantic separation, and keys the cache by
+> Stage 1 version + Anthropic model + generator prompt version. Older TXXX,
+> GRP1, and gated-mix-hint notes below are historical plan context.
+
 **Tech Stack:** Swift / SwiftPM, Anthropic Sonnet 4, XCTest. Baseline 459/0.
 
 ---

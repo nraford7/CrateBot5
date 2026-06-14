@@ -159,7 +159,7 @@ struct SettingsPanel: View {
                 )
                 .disabled(!hasAnthropicKey)
                 .help(hasAnthropicKey
-                      ? "Generates short vibe, prose description, and DJ mix-context hint per track via Anthropic API. ~$0.01/track at current Sonnet 4 pricing."
+                      ? "Generates short vibe, prose description, and DJ mix-context hint per track via Anthropic API. ~$0.01-$0.02/track at current Sonnet 4 pricing."
                       : "Set the Anthropic API key in Connections (below) to enable.")
                 if !hasAnthropicKey {
                     HStack(spacing: 4) {

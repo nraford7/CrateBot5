@@ -15,10 +15,10 @@ verification script, capture cost-per-track, push the result memory.
    runs fresh each track). The 50-track run will still work; just won't
    benefit from a second pass.
 3. **Pick the 50 tracks** — sample from across the library, not a single
-   bucket. A few Peak, Build, Sustain, Release. A few with empty Stage 2
-   (to exercise the no-mix-hint path).
+   bucket. A few Peak, Build, Sustain, Release, plus some edge cases with
+   sparse/odd tags.
 4. **Have a duplicate or copy of the directory** — the tag pass writes
-   to TCOM / TIT3 / GRP1 in place; if you want a before/after compare,
+   to TCOM / TIT3 / MVNM in place; if you want a before/after compare,
    stage the originals first.
 
 ## Run
@@ -31,14 +31,16 @@ verification script, capture cost-per-track, push the result memory.
    ```
 2. Tagging Options → enable "AI Descriptions". Tooltip should read
    "Generates short vibe, prose description, and DJ mix-context hint
-   per track via Anthropic API. ~$0.01/track at current Sonnet 4 pricing."
+   per track via Anthropic API. ~$0.01-$0.02/track at current Sonnet 4 pricing."
 3. Queue your 50 tracks, hit Tag. Watch for per-track warning logs in
    Console.app under subsystem `com.cratebot` if anything fails — the
    per-track integration logs `"Vibe generation failed for X: ..."` and
    the rest of the tag pass continues.
-4. When the pass ends, all three frames are written when the LLM succeeded
-   and `nil` when it failed — never partial. Re-running the same tracks
-   under the same Stage 1 model hits the cache and skips the LLM.
+4. When the pass ends, all three frames are written when both LLM passes
+   succeeded and validation passed; when generation fails, existing AI frames
+   are preserved and no partial new vibe is written. Re-running the same tracks
+   under the same Stage 1 model/model/prompt-version hits the cache and skips
+   the LLM.
 
 ## Verify
 
@@ -49,18 +51,18 @@ python3 scripts/vibe_verify.py /path/to/tagged/dir --limit 50
 ```
 
 It reports:
-- **Frame coverage** — TCOM / TIT3 / GRP1 written count.
+- **Frame coverage** — TCOM / TIT3 / MVNM written count.
 - **Criterion 1** — any TCOM matching CoT preamble patterns (`LOOKING AT`,
   `PROCESS:`, bare `{`, etc.) is a regression. The strict-JSON parser in
   `VibeGeneratorV2` should make this impossible; this is the tripwire.
+- **Criterion 1B** — TCOM is 4-5 all-caps words with no articles.
 - **Criterion 2** — sliding 30-track window over all TIT3 descriptions;
   flags any 4-word phrase that appears more than twice in a single window.
-- **Criterion 3** — soft check: counts GRP1 with vs without Timing
-  vocabulary (Peak/Build/Sustain/Release/etc). Stage 2 confidence is not
-  retrievable from disk, so the script can't strictly gate this; just
-  surfaces the ratio for your eyes.
+- **Criterion 2B** — TIT3 avoids DJ-use wording.
+- **Criterion 3** — MVNM contains DJ movement/placement cues and does not
+  repeat meaningful words from TCOM/TIT3.
 
-Exit code 0 means criteria 1+2 passed.
+Exit code 0 means all script-side criteria passed.
 
 ## Capture
 
@@ -89,11 +91,10 @@ because the eval was lying, not the model. Apply the same posture here:
 - **Generic descriptions?** Probably title/artist nil from ID3 read or
   binaryConfidences empty. Verify by adding a `print()` to
   `VibeGenerationInputs.promptPayload()` and tagging one track.
-- **Mix hint missing on every track?** Either Stage 2 confidence is below
-  0.5 for the sample, or `tag_cooccurrence.json` has empty
-  `conditional[<TimingLabel>]`. Regenerate with
-  `python3 scripts/generate_tag_cooccurrence.py` after the next training
-  run.
+- **Movement missing on every track?** The second LLM pass is failing parse or
+  validation. Check `VibeGeneratorV2` warnings for `parsingFailed` /
+  `validationFailed`, then inspect whether MVNM is visible in the target DJ
+  tool.
 - **CoT preamble in TCOM?** The strict-JSON parser failed. Capture the
   raw response (log already truncates at 500 chars) and check
   `VibeGeneratorV2.extractFirstJSONObject`.
@@ -102,7 +103,7 @@ because the eval was lying, not the model. Apply the same posture here:
 
 Chunk 5 closes when:
 - 50 tracks tagged with the toggle on.
-- `vibe_verify.py` exits 0 (criteria 1+2 pass).
+- `vibe_verify.py` exits 0.
 - Cost-per-track captured in the memory file.
 - A line in the memory says "looks good" or names a regression to fix.
 - Push memory update (memory is shared but the project_state-style

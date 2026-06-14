@@ -7,6 +7,7 @@ import os.log
 public enum VibeGeneratorError: Error, LocalizedError, Sendable {
     case apiKeyNotConfigured
     case parsingFailed(String)
+    case validationFailed(String)
     case generationFailed(String)
 
     public var errorDescription: String? {
@@ -15,6 +16,8 @@ public enum VibeGeneratorError: Error, LocalizedError, Sendable {
             return "Anthropic API key is not configured"
         case .parsingFailed(let detail):
             return "Failed to parse vibe response: \(detail)"
+        case .validationFailed(let detail):
+            return "Vibe response failed validation: \(detail)"
         case .generationFailed(let message):
             return "Vibe generation failed: \(message)"
         }
@@ -25,10 +28,9 @@ public enum VibeGeneratorError: Error, LocalizedError, Sendable {
 
 /// Strict three-output result of vibe generation.
 ///
-/// - `short`: 2–4 word vibe label (e.g. "Late Night Groove"). TCOM target.
-/// - `long`: 1–2 sentence prose description. TIT3 target.
-/// - `mixHint`: Optional DJ mix-context hint. TXXX:CRATEBOT_MIXHINT target. Always
-///   `nil` when the mix-hint gate is closed, even if the model returned a value.
+/// - `short`: 4–5 word all-caps symbolic handle. TCOM target.
+/// - `long`: Additive sensory/atmospheric description. TIT3 target.
+/// - `mixHint`: DJ movement/placement guidance. MVNM target.
 public struct VibeGenerationResult: Sendable, Equatable, Codable {
     public let short: String
     public let long: String
@@ -100,6 +102,10 @@ public struct AnthropicVibeChatClient: VibeChatClient {
 /// throw — no fallback to raw text and no chain-of-thought preamble
 /// ever lands in TCOM.
 public actor VibeGeneratorV2 {
+    /// Bump whenever prompt semantics or validation rules change so stale cached
+    /// generations cannot survive a behavior change.
+    public static let cacheVersion = "vibe-generator-v3-symbolic-atmosphere-movement-2026-06-14"
+
     private let client: VibeChatClient
     private let logger = Logger(subsystem: "com.cratebot", category: "VibeGeneratorV2")
 
@@ -109,18 +115,49 @@ public actor VibeGeneratorV2 {
 
     /// Generate a `VibeGenerationResult` from the given inputs.
     ///
-    /// All three fields are always requested. The prompt instructs the model to
-    /// reference the Stage 2 Timing label when present and infer the slot from
-    /// BPM + Genre when it is not.
+    /// Short + long are generated and validated first. Movement (`mixHint`) is
+    /// generated in a second pass that sees the completed fields, so its role is
+    /// DJ placement/use rather than another description.
     public func generate(inputs: VibeGenerationInputs) async throws -> VibeGenerationResult {
-        let (system, prompt) = Self.composePrompts(inputs: inputs, includeMixHint: true)
+        let (descriptionSystem, descriptionPrompt) = Self.composeDescriptionPrompts(inputs: inputs)
+        let descriptionRaw = try await complete(
+            prompt: descriptionPrompt,
+            system: descriptionSystem,
+            maxTokens: 600
+        )
+        let description = try Self.decodeJSONObject(ShortLongWireResponse.self, from: descriptionRaw)
+        let short = Self.normalizeSpaces(description.short)
+        let long = Self.normalizeSpaces(description.long)
+        try Self.validateShort(short, inputs: inputs, long: long)
+        try Self.validateLong(long, inputs: inputs, short: short)
 
-        let raw: String
+        let (movementSystem, movementPrompt) = Self.composeMovementPrompts(
+            inputs: inputs,
+            short: short,
+            long: long
+        )
+        let movementRaw = try await complete(
+            prompt: movementPrompt,
+            system: movementSystem,
+            maxTokens: 300
+        )
+        let movement = try Self.decodeJSONObject(MovementWireResponse.self, from: movementRaw)
+        let mixHint = Self.normalizeSpaces(movement.mix_hint)
+        try Self.validateMovement(mixHint, inputs: inputs, short: short, long: long)
+
+        return VibeGenerationResult(
+            short: short,
+            long: long,
+            mixHint: mixHint
+        )
+    }
+
+    private func complete(prompt: String, system: String, maxTokens: Int) async throws -> String {
         do {
-            raw = try await client.complete(
+            return try await client.complete(
                 prompt: prompt,
                 system: system,
-                maxTokens: 600,
+                maxTokens: maxTokens,
                 temperature: 0.7,
                 model: AnthropicClient.defaultModel
             )
@@ -134,113 +171,68 @@ public actor VibeGeneratorV2 {
         } catch {
             throw VibeGeneratorError.generationFailed(error.localizedDescription)
         }
-
-        // Strict JSON parse: fences off, extract first balanced `{...}`, decode strict.
-        let stripped = Self.stripFences(raw)
-        let extracted = Self.extractFirstJSONObject(from: stripped)
-
-        guard let json = extracted,
-              let data = json.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode(WireResponse.self, from: data),
-              !decoded.short.isEmpty,
-              !decoded.long.isEmpty else {
-            let snippet = String((extracted ?? raw).prefix(500))
-            logger.error("Vibe parse failed; raw snippet=\(snippet, privacy: .public)")
-            throw VibeGeneratorError.parsingFailed(snippet)
-        }
-
-        return VibeGenerationResult(
-            short: decoded.short,
-            long: decoded.long,
-            mixHint: decoded.mix_hint
-        )
     }
 
     // MARK: - Wire types
 
     // swiftlint:disable identifier_name
-    private struct WireResponse: Decodable {
+    private struct ShortLongWireResponse: Decodable {
         let short: String
         let long: String
-        let mix_hint: String?
+    }
+
+    private struct MovementWireResponse: Decodable {
+        let mix_hint: String
     }
     // swiftlint:enable identifier_name
 
+    private struct CompletedDescriptionsPayload: Encodable {
+        let long: String
+        let short: String
+    }
+
     // MARK: - Prompt composition
 
-    /// Compose system + user prompts for one generation call.
+    /// Compose the first-pass prompt for `short` + `long`.
     ///
-    /// System prompt enforces JSON-only output. User prompt embeds the deterministic
-    /// `inputs.promptPayload()` and a single one-line instruction. Mix-hint instructions
-    /// are present only when `includeMixHint` is true so the model is never asked for
-    /// a field it should not produce.
-    internal static func composePrompts(
-        inputs: VibeGenerationInputs,
-        includeMixHint: Bool
+    /// The movement hint is deliberately omitted here. It is generated in a
+    /// second pass after these two fields exist.
+    internal static func composeDescriptionPrompts(
+        inputs: VibeGenerationInputs
     ) -> (system: String, user: String) {
-        let shortForbidden = Self.forbiddenShortTokens(inputs: inputs)
-        let shortForbiddenLine = shortForbidden.isEmpty
+        let forbidden = Self.forbiddenSourceTokens(inputs: inputs)
+        let forbiddenLine = forbidden.isEmpty
             ? ""
-            : " FORBIDDEN words in `short` for THIS track (do not use, do not pluralize, do not rhyme on): \(shortForbidden.joined(separator: ", "))."
+            : " FORBIDDEN source words for THIS track: \(forbidden.joined(separator: ", "))."
 
         let system = """
         You are a veteran DJ tagging a record crate. Given a JSON analysis of one \
         electronic music track, respond with JSON only — no prose, no markdown fences, \
         no preamble.
 
-        The three fields are NOT three flavors of the same description. They are three \
-        DIFFERENT kinds of sentence. Read each role carefully:
+        Write exactly two fields:
 
-          • `short` — a poetic NICKNAME the DJ can remember in a glance. EXACTLY 4 \
-            ALL-CAPS words. Distills the track in FRESH words that DO NOT appear in the \
-            track title, artist, genre, mood, or any predicted tag. Never repeats words \
-            you used in `long` or `mix_hint`.
+          • `short` — a 4 or 5 word ALL-CAPS symbolic handle. It is the compressed \
+            memory hook for the whole tag stack: salient, interesting, different, \
+            glanceable. It must NOT repeat artist, album, title, genre, mood, timing, \
+            instruments, style, rhythm, vocal/bass labels, custom tags, or words from \
+            `long`. Use fresh symbolic words, not taxonomy words.
 
-          • `long` — describes WHAT THE TRACK SOUNDS LIKE. The instruments you hear, the \
-            texture, the rhythm, the production feel. Like a reviewer hearing the record \
-            blind. NEVER mentions when to play it, the set, the night, the room, or any \
-            DJ action. If a phrase could appear in a DJ instruction sheet, it does not \
-            belong here.
-
-          • `mix_hint` — describes HOW TO PLAY THE TRACK. NEVER describes the sound or \
-            instruments. NEVER repeats what `long` already said. It is an ORDER to the \
-            DJ: when in the set to drop it, what to mix INTO it from, what to follow it \
-            with. If a phrase could appear in a music review, it does not belong here.
-
-        Self-check before responding: cover the `long` field — can you reconstruct it \
-        from the `mix_hint`? If yes, REWRITE both. They must read as different KINDS \
-        of sentence, not different phrasings of the same sentence.
+          • `long` — additive sensory atmosphere. It describes the feeling, scene, \
+            energy, texture, weather, pressure, color, smell, taste, and moment the \
+            track creates. It must NOT restate the artist, album, title, genre, mood, \
+            timing, instruments, style, rhythm, vocal/bass labels, custom tags, or \
+            `short`. It must NOT say how a DJ should play it.
 
         Output schema:
-        {"short": "<EXACTLY 4 CAPS WORDS>", "long": "<one sentence about what it sounds like>", "mix_hint": "<one sentence about how to play it>"}
+        {"short": "<4 OR 5 ALL-CAPS WORDS>", "long": "<one compact evocative description>"}
 
         Hard rules:
-        - `short`: EXACTLY 4 words, ALL CAPS, no articles, no punctuation, no numbers. \
-          Every word must be FRESH — not in the track title, artist, genre, mood, tags, \
-          `long`, or `mix_hint`.\(shortForbiddenLine) \
-          Pair concrete sensation with a poetic or unexpected word. \
-          Structure templates (use as scaffolding, NOT word source): \
-          [TIME-OF-DAY] [TEXTURE-NOUN] [BODY-VERB] [PLACE-NOUN], or \
-          [WEATHER-NOUN] [INSTRUMENT-NOUN] [EMOTION-VERB] [ARCHITECTURE-NOUN].
-
-        - `long`: ONE sentence about SOUND ONLY. Max 16 words. Begin with a noun or \
-          adjective. \
-          FORBIDDEN in `long` (these are placement/DJ words and belong in `mix_hint`): \
-          set, mix, drop, play, DJ, night, peak, room, slot, club, dancefloor, hour, \
-          opener, anthem, opening, prime, after, before, into, follow, builds, owns, \
-          lifts, banger, early, late, warm-up, peak-time, opener, closer.
-
-        - `mix_hint`: ONE sentence about TIMING AND PLACEMENT ONLY. Max 14 words. \
-          FIRST WORD MUST BE one of: Drop, Slot, Bridge, Open, Cut, Follow, Save, \
-          Pair, Hold, Stack. Then say WHEN (specific hour or set position), what to \
-          mix FROM, what to follow WITH. Reference the Stage 2 Timing label if \
-          provided; otherwise infer the slot from BPM and Genre. \
-          FORBIDDEN in `mix_hint` (these are sound-description words and belong in \
-          `long`): vibe, atmosphere, feel, mood, dark, warm, deep, dreamy, soulful, \
-          dirty, hypnotic, lush, raw, woozy, hazy, ethereal, gritty, drift, glow, \
-          shimmer, pulse, thud, hum, cavernous, swirling, swung, walking, broken, \
-          rolling — none of these describe DJ action.
-
+        - `short`: 4 or 5 words, ALL CAPS, no punctuation, no numbers, no articles. \
+          Use short concrete/symbolic words. Do not use any source word or `long` word.\(forbiddenLine)
+        - `long`: 6 to 32 words. Evocative and sensory, not a tag summary, not a \
+          music-review inventory, and not DJ instructions. No "this track is" phrasing. \
+          Do not use any source word or `short` word.\(forbiddenLine)
         - Respond with the JSON object only. No leading prose. No code fences.
         """
 
@@ -248,34 +240,88 @@ public actor VibeGeneratorV2 {
         Track analysis:
         \(inputs.promptPayload())
 
-        Write the three fields.
+        Write `short` and `long`.
         """
 
         return (system, user)
     }
 
-    /// Build the per-track forbidden-token list for `short`.
+    /// Compose the second-pass prompt for movement/mix placement.
+    internal static func composeMovementPrompts(
+        inputs: VibeGenerationInputs,
+        short: String,
+        long: String
+    ) -> (system: String, user: String) {
+        let forbidden = Self.forbiddenSourceTokens(inputs: inputs)
+        let completed = Self.completedDescriptionsPayload(short: short, long: long)
+        let forbiddenLine = forbidden.isEmpty
+            ? ""
+            : " Also avoid these source words: \(forbidden.joined(separator: ", "))."
+
+        let system = """
+        You are writing the Movement Name / DJ-use field for one electronic track. \
+        Respond with JSON only — no prose, no markdown fences, no preamble.
+
+        The `short` and `long` fields are already written. Read them, then write \
+        `mix_hint` as a different kind of information: how a DJ should use the track \
+        relative to other records and moments.
+
+        `mix_hint` is short-form DJ placement language: timing, slot, transition job, \
+        what to put it after, what it can set up, what kind of energy shift it creates. \
+        Good shapes include: "2AM pressure lift after rough drums", "Bridge from \
+        dirty drop into brighter lift", "Save for toughness after a beautiful reset".
+
+        It must NOT describe the track's vibe, atmosphere, scene, sound, instruments, \
+        texture, or sensory image. It must NOT reuse meaningful words from `short` or \
+        `long`.\(forbiddenLine)
+
+        Output schema:
+        {"mix_hint": "<short DJ-use phrase>"}
+
+        Hard rules:
+        - `mix_hint`: 4 to 22 words. Fragment is fine. No "this is", "this track", \
+          "as a DJ", filler, explanation, or review prose.
+        - Say when/how to use it: a time, set position, transition role, what to come \
+          after, what to move into, or what energy job it performs.
+        - Do not simply repeat Timing, Genre, Mood, or descriptive tags. Translate \
+          those into a useful DJ action.
+        - Respond with the JSON object only.
+        """
+
+        let user = """
+        Track analysis:
+        \(inputs.promptPayload())
+
+        Completed fields:
+        \(completed)
+
+        Write `mix_hint`.
+        """
+
+        return (system, user)
+    }
+
+    /// Build the per-track forbidden-token list used by prompts and validators.
     ///
-    /// Pulls every word from title, artist, genre, mood, vibes, style, instruments,
-    /// rhythm, bassType, vocalType, and customTags, then strips punctuation, lowercases,
-    /// drops common stop-words, drops single characters, and dedupes. The result is
-    /// injected into the `short` rule so the model sees the literal tokens it must
-    /// avoid for this specific track — much harder to ignore than abstract categories.
-    internal static func forbiddenShortTokens(inputs: VibeGenerationInputs) -> [String] {
+    /// Pulls words from metadata and every predicted tag category, including album
+    /// and timing, so generated prose has to add information instead of restating
+    /// the existing tag stack.
+    internal static func forbiddenSourceTokens(inputs: VibeGenerationInputs) -> [String] {
         let stopWords: Set<String> = [
             "the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "by",
-            "for", "with", "is", "it", "as", "feat", "ft", "vs", "remix", "mix",
-            "edit", "version", "original", "extended", "club", "radio",
-            "instrumental", "vocal", "dub"
+            "for", "with", "is", "it", "as", "feat", "ft", "vs"
         ]
         var sources: [String] = []
-        if let t = inputs.title { sources.append(t) }
-        if let a = inputs.artist { sources.append(a) }
+        if let title = inputs.title { sources.append(title) }
+        if let artist = inputs.artist { sources.append(artist) }
+        if let album = inputs.album { sources.append(album) }
         let tags = inputs.predictedTags
-        if let g = tags.genre { sources.append(g) }
-        if let m = tags.mood { sources.append(m) }
-        if let b = tags.bassType { sources.append(b) }
-        if let v = tags.vocalType { sources.append(v) }
+        if let genre = tags.genre { sources.append(genre) }
+        if let timing = tags.timing { sources.append(timing) }
+        if let mood = tags.mood { sources.append(mood) }
+        if let bassType = tags.bassType { sources.append(bassType) }
+        if let vocalType = tags.vocalType { sources.append(vocalType) }
+        if tags.acapella == true { sources.append("Acapella") }
         sources.append(contentsOf: tags.vibes)
         sources.append(contentsOf: tags.style)
         sources.append(contentsOf: tags.instruments)
@@ -285,11 +331,7 @@ public actor VibeGeneratorV2 {
         var seen: Set<String> = []
         var out: [String] = []
         for raw in sources {
-            let cleaned = raw.unicodeScalars
-                .map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }
-            let parts = String(cleaned).split(separator: " ")
-            for part in parts {
-                let token = part.lowercased()
+            for token in lexicalTokens(in: raw) {
                 guard token.count >= 2, !stopWords.contains(token), seen.insert(token).inserted else { continue }
                 out.append(token)
             }
@@ -297,7 +339,191 @@ public actor VibeGeneratorV2 {
         return out
     }
 
+    private static func completedDescriptionsPayload(short: String, long: String) -> String {
+        let payload = CompletedDescriptionsPayload(long: long, short: short)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(payload),
+              let string = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return string
+    }
+
+    // MARK: - Validation
+
+    private static let articles: Set<String> = ["a", "an", "the"]
+
+    private static let semanticStopWords: Set<String> = [
+        "the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "by",
+        "for", "with", "from", "into", "after", "before", "between", "when",
+        "then", "than", "that", "this", "these", "those", "is", "are", "was",
+        "were", "be", "been", "being", "it", "its", "as", "but", "not", "no",
+        "so", "if", "you", "your", "their", "there", "here", "over", "under",
+        "through", "across", "against", "inside", "outside", "near", "toward",
+        "track", "field", "music", "record"
+    ]
+
+    private static let longInstructionTokens: Set<String> = [
+        "dj", "mix", "drop", "play", "set", "slot", "opener", "closer",
+        "warmup", "warm-up", "transition", "segue", "blend", "cue", "follow",
+        "prime", "peak-time"
+    ]
+
+    private static let movementCueTokens: Set<String> = [
+        "drop", "slot", "bridge", "open", "cut", "follow", "save", "pair",
+        "hold", "stack", "after", "before", "between", "from", "into", "when",
+        "build", "lift", "shift", "release", "reset", "transition", "segue",
+        "opener", "closer", "warmup", "warm-up", "energy", "toughness",
+        "pressure", "drums", "break", "breakdown"
+    ]
+
+    internal static func validateShort(
+        _ short: String,
+        inputs: VibeGenerationInputs,
+        long: String
+    ) throws {
+        guard !short.isEmpty else {
+            throw VibeGeneratorError.validationFailed("short is empty")
+        }
+        let words = short.split(separator: " ").map(String.init)
+        guard (4...5).contains(words.count) else {
+            throw VibeGeneratorError.validationFailed("short must be 4 or 5 words: \(short)")
+        }
+        guard short == short.uppercased() else {
+            throw VibeGeneratorError.validationFailed("short must be all caps: \(short)")
+        }
+        for scalar in short.unicodeScalars {
+            if scalar == " " { continue }
+            guard CharacterSet.uppercaseLetters.contains(scalar) else {
+                throw VibeGeneratorError.validationFailed("short contains punctuation, numbers, or non-capitals: \(short)")
+            }
+        }
+        for word in words {
+            let lower = word.lowercased()
+            if articles.contains(lower) {
+                throw VibeGeneratorError.validationFailed("short contains article '\(word)'")
+            }
+            if word.count > 12 {
+                throw VibeGeneratorError.validationFailed("short word is too long: \(word)")
+            }
+        }
+
+        try rejectSourceRepeats(in: short, inputs: inputs, field: "short")
+        let overlap = significantTokens(in: short).intersection(significantTokens(in: long))
+        if let token = overlap.sorted().first {
+            throw VibeGeneratorError.validationFailed("short repeats long token '\(token)'")
+        }
+    }
+
+    internal static func validateLong(
+        _ long: String,
+        inputs: VibeGenerationInputs,
+        short: String
+    ) throws {
+        guard !long.isEmpty else {
+            throw VibeGeneratorError.validationFailed("long is empty")
+        }
+        let words = lexicalTokens(in: long)
+        guard (6...32).contains(words.count) else {
+            throw VibeGeneratorError.validationFailed("long must be 6 to 32 words: \(long)")
+        }
+        let lower = long.lowercased()
+        let badPrefixes = ["this track", "this is", "it is", "it's", "a track", "the track"]
+        if badPrefixes.contains(where: { lower.hasPrefix($0) }) {
+            throw VibeGeneratorError.validationFailed("long uses summary/prose filler: \(long)")
+        }
+        let instructionOverlap = Set(words).intersection(longInstructionTokens)
+        if let token = instructionOverlap.sorted().first {
+            throw VibeGeneratorError.validationFailed("long contains DJ-use token '\(token)'")
+        }
+
+        try rejectSourceRepeats(in: long, inputs: inputs, field: "long")
+        let overlap = significantTokens(in: long).intersection(significantTokens(in: short))
+        if let token = overlap.sorted().first {
+            throw VibeGeneratorError.validationFailed("long repeats short token '\(token)'")
+        }
+    }
+
+    internal static func validateMovement(
+        _ movement: String,
+        inputs: VibeGenerationInputs,
+        short: String,
+        long: String
+    ) throws {
+        guard !movement.isEmpty else {
+            throw VibeGeneratorError.validationFailed("mix_hint is empty")
+        }
+        let words = lexicalTokens(in: movement)
+        guard (4...22).contains(words.count) else {
+            throw VibeGeneratorError.validationFailed("mix_hint must be 4 to 22 words: \(movement)")
+        }
+        let lower = movement.lowercased()
+        let fillerPhrases = ["this track", "this is", "it is", "it's", "as a dj", "you know", " ah "]
+        if fillerPhrases.contains(where: { lower.contains($0) || lower.hasPrefix($0.trimmingCharacters(in: .whitespaces)) }) {
+            throw VibeGeneratorError.validationFailed("mix_hint uses filler/prose phrasing: \(movement)")
+        }
+
+        let cueOverlap = Set(words).intersection(movementCueTokens)
+        let hasClockTime = lower.range(
+            of: #"\b\d{1,2}(:\d{2})?\s*(am|pm)\b"#,
+            options: .regularExpression
+        ) != nil
+        guard !cueOverlap.isEmpty || hasClockTime else {
+            throw VibeGeneratorError.validationFailed("mix_hint lacks DJ timing/placement cue: \(movement)")
+        }
+
+        try rejectSourceRepeats(in: movement, inputs: inputs, field: "mix_hint")
+        let completedTokens = significantTokens(in: short).union(significantTokens(in: long))
+        let overlap = significantTokens(in: movement).intersection(completedTokens)
+        if let token = overlap.sorted().first {
+            throw VibeGeneratorError.validationFailed("mix_hint repeats completed description token '\(token)'")
+        }
+    }
+
+    private static func rejectSourceRepeats(
+        in text: String,
+        inputs: VibeGenerationInputs,
+        field: String
+    ) throws {
+        let forbidden = Set(forbiddenSourceTokens(inputs: inputs))
+        let overlap = significantTokens(in: text).intersection(forbidden)
+        if let token = overlap.sorted().first {
+            throw VibeGeneratorError.validationFailed("\(field) repeats source/tag token '\(token)'")
+        }
+    }
+
+    internal static func normalizeSpaces(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+    }
+
+    internal static func lexicalTokens(in text: String) -> [String] {
+        let cleaned = text.unicodeScalars
+            .map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }
+        return String(cleaned)
+            .split(separator: " ")
+            .map { $0.lowercased() }
+    }
+
+    private static func significantTokens(in text: String) -> Set<String> {
+        Set(lexicalTokens(in: text).filter { $0.count >= 3 && !semanticStopWords.contains($0) })
+    }
+
     // MARK: - Parsing helpers
+
+    private static func decodeJSONObject<T: Decodable>(_ type: T.Type, from raw: String) throws -> T {
+        let stripped = Self.stripFences(raw)
+        let extracted = Self.extractFirstJSONObject(from: stripped)
+        guard let json = extracted,
+              let data = json.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(type, from: data) else {
+            let snippet = String((extracted ?? raw).prefix(500))
+            throw VibeGeneratorError.parsingFailed(snippet)
+        }
+        return decoded
+    }
 
     /// Remove a single leading/trailing pair of markdown code fences, if present.
     ///

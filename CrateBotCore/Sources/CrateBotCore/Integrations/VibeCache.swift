@@ -4,10 +4,9 @@ import os.log
 
 /// Persistent cache for `VibeGeneratorV2` results.
 ///
-/// Keyed by `SHA256(trackPath | stage1ModelVersion)` so a re-tag of the same
-/// file under the same Stage 1 model is free, and any change to either input
-/// invalidates the entry. Pricing context: each generation costs ~$0.01, so
-/// the cache pays for itself the first time the user re-tags anything.
+/// Keyed by `SHA256(trackPath | stage1ModelVersion | modelName | generatorVersion)`
+/// so a re-tag of the same file under the same Stage 1 model/prompt contract is
+/// free, and any model or prompt-semantic change invalidates the entry.
 ///
 /// Storage: JSON file at `Application Support/CrateBot/vibe_cache.json`
 /// (matching `EmbeddingCache`/`ModelManager`). Single dict on disk; loaded
@@ -48,8 +47,18 @@ public actor VibeCache {
 
     // MARK: - Public API
 
-    public func get(trackPath: String, stage1ModelVersion: String) -> VibeGenerationResult? {
-        let k = Self.key(trackPath: trackPath, stage1ModelVersion: stage1ModelVersion)
+    public func get(
+        trackPath: String,
+        stage1ModelVersion: String,
+        modelName: String = AnthropicClient.defaultModel,
+        generatorVersion: String = VibeGeneratorV2.cacheVersion
+    ) -> VibeGenerationResult? {
+        let k = Self.key(
+            trackPath: trackPath,
+            stage1ModelVersion: stage1ModelVersion,
+            modelName: modelName,
+            generatorVersion: generatorVersion
+        )
         if let hit = cache[k] {
             hits += 1
             return hit
@@ -61,9 +70,16 @@ public actor VibeCache {
     public func set(
         _ result: VibeGenerationResult,
         trackPath: String,
-        stage1ModelVersion: String
+        stage1ModelVersion: String,
+        modelName: String = AnthropicClient.defaultModel,
+        generatorVersion: String = VibeGeneratorV2.cacheVersion
     ) async {
-        let k = Self.key(trackPath: trackPath, stage1ModelVersion: stage1ModelVersion)
+        let k = Self.key(
+            trackPath: trackPath,
+            stage1ModelVersion: stage1ModelVersion,
+            modelName: modelName,
+            generatorVersion: generatorVersion
+        )
         cache[k] = result
         save()
     }
@@ -77,9 +93,15 @@ public actor VibeCache {
 
     // MARK: - Key derivation
 
-    /// Returns the hex SHA256 of `"{trackPath}|{stage1ModelVersion}"`.
-    private static func key(trackPath: String, stage1ModelVersion: String) -> String {
-        let composite = "\(trackPath)|\(stage1ModelVersion)"
+    /// Returns the hex SHA256 of
+    /// `"{trackPath}|{stage1ModelVersion}|{modelName}|{generatorVersion}"`.
+    private static func key(
+        trackPath: String,
+        stage1ModelVersion: String,
+        modelName: String,
+        generatorVersion: String
+    ) -> String {
+        let composite = "\(trackPath)|\(stage1ModelVersion)|\(modelName)|\(generatorVersion)"
         let digest = SHA256.hash(data: Data(composite.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }

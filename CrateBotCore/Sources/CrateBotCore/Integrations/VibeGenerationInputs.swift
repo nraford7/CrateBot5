@@ -29,6 +29,7 @@ public struct VibeGenerationInputs: Sendable, Equatable {
     public let durationSeconds: Float
     public let title: String?
     public let artist: String?
+    public let album: String?
 
     // MARK: Stage 2 / cross-tag context
 
@@ -48,6 +49,7 @@ public struct VibeGenerationInputs: Sendable, Equatable {
         durationSeconds: Float,
         title: String?,
         artist: String?,
+        album: String?,
         stage2Timing: TimingPrediction?,
         cooccurrence: CooccurrenceContext?
     ) {
@@ -59,6 +61,7 @@ public struct VibeGenerationInputs: Sendable, Equatable {
         self.durationSeconds = durationSeconds
         self.title = title
         self.artist = artist
+        self.album = album
         self.stage2Timing = stage2Timing
         self.cooccurrence = cooccurrence
     }
@@ -79,6 +82,7 @@ public struct VibeGenerationInputs: Sendable, Equatable {
         // we hand-encode through a `Codable` shape and let `JSONEncoder.sortedKeys` do the
         // sort.
         let payload = Payload(
+            album: album,
             artist: artist,
             binaryConfidences: Self.rounded(binaryConfidences),
             bpm: bpm.map(Self.round3),
@@ -167,6 +171,7 @@ public struct VibeGenerationInputs: Sendable, Equatable {
     // to (Float promotion would re-introduce trailing precision noise).
 
     private struct Payload: Encodable {
+        let album: String?
         let artist: String?
         let binaryConfidences: [String: Double]
         let bpm: Double?

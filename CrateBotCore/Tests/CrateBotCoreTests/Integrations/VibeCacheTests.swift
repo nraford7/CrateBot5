@@ -53,6 +53,50 @@ final class VibeCacheTests: XCTestCase {
         XCTAssertNil(bumped)
     }
 
+    func testDifferentGeneratorVersionMisses() async {
+        let cache = VibeCache(cacheURL: cacheURL)
+        await cache.set(
+            sampleResult(),
+            trackPath: "/a.mp3",
+            stage1ModelVersion: "v1",
+            generatorVersion: "old-prompt"
+        )
+        let same = await cache.get(
+            trackPath: "/a.mp3",
+            stage1ModelVersion: "v1",
+            generatorVersion: "old-prompt"
+        )
+        let bumped = await cache.get(
+            trackPath: "/a.mp3",
+            stage1ModelVersion: "v1",
+            generatorVersion: "new-prompt"
+        )
+        XCTAssertNotNil(same)
+        XCTAssertNil(bumped)
+    }
+
+    func testDifferentAnthropicModelMisses() async {
+        let cache = VibeCache(cacheURL: cacheURL)
+        await cache.set(
+            sampleResult(),
+            trackPath: "/a.mp3",
+            stage1ModelVersion: "v1",
+            modelName: "model-a"
+        )
+        let same = await cache.get(
+            trackPath: "/a.mp3",
+            stage1ModelVersion: "v1",
+            modelName: "model-a"
+        )
+        let bumped = await cache.get(
+            trackPath: "/a.mp3",
+            stage1ModelVersion: "v1",
+            modelName: "model-b"
+        )
+        XCTAssertNotNil(same)
+        XCTAssertNil(bumped)
+    }
+
     func testPersistsAcrossInstances() async {
         let result = sampleResult(short: "Cross-Instance Vibe")
         let cacheA = VibeCache(cacheURL: cacheURL)

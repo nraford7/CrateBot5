@@ -862,6 +862,7 @@ struct TaggingView: View {
                             durationSeconds: result.durationSeconds,
                             title: extracted?.title,
                             artist: extracted?.artist,
+                            album: extracted?.album,
                             stage2Timing: result.timingPrediction,
                             cooccurrence: cooccurrence
                         )
