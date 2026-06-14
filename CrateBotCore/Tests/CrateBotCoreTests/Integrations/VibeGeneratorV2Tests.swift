@@ -158,8 +158,36 @@ final class VibeGeneratorV2Tests: XCTestCase {
 
     // MARK: - Tests
 
-    private static let validDescriptionReply =
-        #"{"short":"EMBER CLOCKWORK RISES BENEATH","long":"Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete."}"#
+    private struct DescriptionFixture: Encodable {
+        let weight_options: [String]
+        let density_options: [String]
+        let texture_options: [String]
+        let emotion_options: [String]
+        let signature_options: [String]
+        let long: String
+    }
+
+    private static func descriptionReply(
+        weight: [String] = ["HEAVY", "SOLID", "PUNCHY"],
+        density: [String] = ["DENSE", "TIGHT", "LAYERED"],
+        texture: [String] = ["RUBBERY", "METALLIC", "GLASSY"],
+        emotion: [String] = ["URGENT", "NASTY", "BRIGHT"],
+        signature: [String] = ["ENGINE", "WIRE", "EMBER"],
+        long: String = "Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete."
+    ) -> String {
+        let fixture = DescriptionFixture(
+            weight_options: weight,
+            density_options: density,
+            texture_options: texture,
+            emotion_options: emotion,
+            signature_options: signature,
+            long: long
+        )
+        let data = try! JSONEncoder().encode(fixture)
+        return String(data: data, encoding: .utf8)!
+    }
+
+    private static let validDescriptionReply = descriptionReply()
 
     private static let validMovementReply =
         #"{"mix_hint":"2AM bridge after rough drums before melodic release"}"#
@@ -170,7 +198,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
         )
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputsWithMixHintAllowed)
-        XCTAssertEqual(r.short, "EMBER CLOCKWORK RISES BENEATH")
+        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, "Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete.")
         XCTAssertEqual(r.mixHint, "2AM bridge after rough drums before melodic release")
         XCTAssertEqual(mock.calls, 2)
@@ -243,7 +271,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
         let mock = MockClient(replies: [reply, Self.validMovementReply])
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputs)
-        XCTAssertEqual(r.short, "EMBER CLOCKWORK RISES BENEATH")
+        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, "Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete.")
     }
 
@@ -254,13 +282,13 @@ final class VibeGeneratorV2Tests: XCTestCase {
         let long = "Velvet {pressure} hangs in a rainlit stairwell, metallic edges brushing warm concrete."
         let mock = MockClient(
             replies: [
-                #"{"short":"EMBER CLOCKWORK RISES BENEATH","long":"\#(long)"}"#,
+                Self.descriptionReply(long: long),
                 Self.validMovementReply
             ]
         )
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputs)
-        XCTAssertEqual(r.short, "EMBER CLOCKWORK RISES BENEATH")
+        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, long)
     }
 
@@ -271,13 +299,13 @@ final class VibeGeneratorV2Tests: XCTestCase {
         let long = #"Velvet "pressure" hangs in a rainlit stairwell, metallic edges brushing warm concrete }"#
         let mock = MockClient(
             replies: [
-                #"{"short":"EMBER CLOCKWORK RISES BENEATH","long":"Velvet \"pressure\" hangs in a rainlit stairwell, metallic edges brushing warm concrete }"}"#,
+                Self.descriptionReply(long: long),
                 Self.validMovementReply
             ]
         )
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputs)
-        XCTAssertEqual(r.short, "EMBER CLOCKWORK RISES BENEATH")
+        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, long)
     }
 
@@ -292,7 +320,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
         let mock = MockClient(replies: [reply, Self.validMovementReply])
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputsWithMixHintAllowed)
-        XCTAssertEqual(r.short, "EMBER CLOCKWORK RISES BENEATH")
+        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, "Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete.")
         XCTAssertEqual(r.mixHint, "2AM bridge after rough drums before melodic release")
     }
@@ -317,14 +345,13 @@ final class VibeGeneratorV2Tests: XCTestCase {
         let mock = MockClient(replies: [Self.validDescriptionReply, Self.validMovementReply])
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputsLowConfidence)
-        XCTAssertEqual(r.short, "EMBER CLOCKWORK RISES BENEATH")
+        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, "Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete.")
         XCTAssertEqual(r.mixHint, "2AM bridge after rough drums before melodic release")
     }
 
     func testShortRejectsSourceTagRepeats() async {
-        let badDescription =
-            #"{"short":"HOUSE CLOCKWORK RISES BENEATH","long":"Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete."}"#
+        let badDescription = Self.descriptionReply(weight: ["HOUSE"])
         let mock = MockClient(replies: [badDescription, badDescription])
         let gen = VibeGeneratorV2(client: mock)
         do {
@@ -341,8 +368,9 @@ final class VibeGeneratorV2Tests: XCTestCase {
     }
 
     func testLongRejectsSourceTagRepeats() async {
-        let badDescription =
-            #"{"short":"EMBER CLOCKWORK RISES BENEATH","long":"Dark pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete."}"#
+        let badDescription = Self.descriptionReply(
+            long: "Dark pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete."
+        )
         let mock = MockClient(replies: [badDescription, badDescription])
         let gen = VibeGeneratorV2(client: mock)
         do {
@@ -359,8 +387,9 @@ final class VibeGeneratorV2Tests: XCTestCase {
     }
 
     func testLongRejectsArticleLeadAndGenericTrackNoun() async {
-        let badDescription =
-            #"{"short":"EMBER CLOCKWORK RISES BENEATH","long":"A vibrant track glows with crowded heat and chrome sparks."}"#
+        let badDescription = Self.descriptionReply(
+            long: "A vibrant track glows with crowded heat and chrome sparks."
+        )
         let mock = MockClient(replies: [badDescription, badDescription])
         let gen = VibeGeneratorV2(client: mock)
         do {
@@ -377,20 +406,19 @@ final class VibeGeneratorV2Tests: XCTestCase {
     }
 
     func testValidationFailureRetriesDescriptionWithRepairHint() async throws {
-        let badDescription =
-            #"{"short":"EMBER CLOCKWORK","long":"Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete."}"#
+        let badDescription = Self.descriptionReply(weight: ["HOUSE"])
         let spy = SpyClient()
         spy.replies = [badDescription, Self.validDescriptionReply, Self.validMovementReply]
         let gen = VibeGeneratorV2(client: spy)
 
         let result = try await gen.generate(inputs: sampleInputs)
 
-        XCTAssertEqual(result.short, "EMBER CLOCKWORK RISES BENEATH")
+        XCTAssertEqual(result.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
         XCTAssertEqual(result.mixHint, "2AM bridge after rough drums before melodic release")
         XCTAssertEqual(spy.maxTokens, [600, 600, 300])
         XCTAssertEqual(spy.prompts.count, 3)
         XCTAssertTrue(spy.prompts[1].contains("Previous response failed validation"))
-        XCTAssertTrue(spy.prompts[1].contains("short must be 4 or 5 words"))
+        XCTAssertTrue(spy.prompts[1].contains("weight_options has no usable word candidates"))
     }
 
     func testMovementRejectsCompletedDescriptionRepeats() async {
@@ -410,6 +438,31 @@ final class VibeGeneratorV2Tests: XCTestCase {
         }
     }
 
+    func testBatchLedgerPenalizesRepeatedSlotWords() async throws {
+        let ledger = VibeBatchLedger()
+        await ledger.record(
+            VibeGenerationResult(
+                short: "HEAVY DENSE RUBBERY URGENT ENGINE",
+                long: "Copper stairs hum above moonlit rain.",
+                mixHint: "2AM bridge after rough drums before melodic release"
+            )
+        )
+        let reply = Self.descriptionReply(
+            weight: ["HEAVY", "MASSIVE"],
+            density: ["DENSE", "SPARSE"],
+            texture: ["RUBBERY", "GLASSY"],
+            emotion: ["URGENT", "TENDER"],
+            signature: ["ENGINE", "VEIL"],
+            long: "Glass sparks drift over cotton rooftops."
+        )
+        let mock = MockClient(replies: [reply, Self.validMovementReply])
+        let gen = VibeGeneratorV2(client: mock)
+
+        let result = try await gen.generate(inputs: sampleInputs, batchLedger: ledger)
+
+        XCTAssertEqual(result.short, "MASSIVE SPARSE GLASSY TENDER VEIL")
+    }
+
     func testTemperatureAndModelMatchSpec() async {
         let spy = SpyClient()
         let gen = VibeGeneratorV2(client: spy)
@@ -418,7 +471,9 @@ final class VibeGeneratorV2Tests: XCTestCase {
         XCTAssertEqual(spy.models, [AnthropicClient.defaultModel, AnthropicClient.defaultModel])
         XCTAssertEqual(spy.maxTokens, [600, 300])
         XCTAssertEqual(spy.prompts.count, 2)
-        XCTAssertTrue(spy.prompts[0].contains("Write `short` and `long`"))
+        XCTAssertTrue(spy.prompts[0].contains("Write slot candidate arrays and `long`"))
+        XCTAssertTrue(spy.systems[0].contains("weight_options"))
+        XCTAssertTrue(spy.systems[0].contains("Composer selector vocabulary"))
         XCTAssertTrue(spy.prompts[1].contains("Completed fields"))
     }
 }

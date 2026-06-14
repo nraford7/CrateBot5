@@ -719,6 +719,9 @@ struct TaggingView: View {
         let vibeGenerator: VibeGeneratorV2? = aiDescriptionsEnabled
             ? VibeGeneratorV2(client: AnthropicVibeChatClient(client: AnthropicClient()))
             : nil
+        let vibeBatchLedger: VibeBatchLedger? = aiDescriptionsEnabled
+            ? VibeBatchLedger()
+            : nil
         let cooccurrenceStats: Cooccurrence.Stats? = aiDescriptionsEnabled
             ? Cooccurrence.loadFromBundle()
             : nil
@@ -855,6 +858,13 @@ struct TaggingView: View {
                         tagsToWrite.vibeShort = cached.short
                         tagsToWrite.vibeDescription = cached.long
                         tagsToWrite.mixHint = cachedMixHint
+                        await vibeBatchLedger?.record(
+                            VibeGenerationResult(
+                                short: cached.short,
+                                long: cached.long,
+                                mixHint: cachedMixHint
+                            )
+                        )
                     } else {
                         let cooccurrence: CooccurrenceContext?
                         if let stats = cooccurrenceStats, let timing = result.timingPrediction?.label {
@@ -881,7 +891,10 @@ struct TaggingView: View {
                             cooccurrence: cooccurrence
                         )
                         do {
-                            let generated = try await generator.generate(inputs: inputs)
+                            let generated = try await generator.generate(
+                                inputs: inputs,
+                                batchLedger: vibeBatchLedger
+                            )
                             tagsToWrite.vibeShort = generated.short
                             tagsToWrite.vibeDescription = generated.long
                             tagsToWrite.mixHint = generated.mixHint

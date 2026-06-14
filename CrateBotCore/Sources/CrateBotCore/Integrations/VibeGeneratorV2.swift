@@ -28,7 +28,7 @@ public enum VibeGeneratorError: Error, LocalizedError, Sendable {
 
 /// Strict three-output result of vibe generation.
 ///
-/// - `short`: 4–5 word all-caps symbolic handle. TCOM target.
+/// - `short`: 5 word all-caps symbolic handle. TCOM target.
 /// - `long`: Additive sensory/atmospheric description. TIT3 target.
 /// - `mixHint`: DJ movement/placement guidance. MVNM target.
 public struct VibeGenerationResult: Sendable, Equatable, Codable {
@@ -40,6 +40,74 @@ public struct VibeGenerationResult: Sendable, Equatable, Codable {
         self.short = short
         self.long = long
         self.mixHint = mixHint
+    }
+}
+
+enum ShortSlot: String, CaseIterable, Sendable {
+    case weight
+    case density
+    case texture
+    case emotion
+    case signature
+
+    var index: Int {
+        switch self {
+        case .weight: return 0
+        case .density: return 1
+        case .texture: return 2
+        case .emotion: return 3
+        case .signature: return 4
+        }
+    }
+}
+
+public struct VibeBatchLedgerSnapshot: Sendable, Equatable {
+    public let usedWordsBySlot: [String: [String: Int]]
+    public let usedFamiliesBySlot: [String: [String: Int]]
+    public let longTokens: [String: Int]
+
+    public init(
+        usedWordsBySlot: [String: [String: Int]] = [:],
+        usedFamiliesBySlot: [String: [String: Int]] = [:],
+        longTokens: [String: Int] = [:]
+    ) {
+        self.usedWordsBySlot = usedWordsBySlot
+        self.usedFamiliesBySlot = usedFamiliesBySlot
+        self.longTokens = longTokens
+    }
+}
+
+/// Tracks words already committed in the current tagging batch.
+///
+/// The generator uses this as a soft diversity pressure: useful descriptors can
+/// repeat when they are genuinely the best fit, but repeated slot words and
+/// repeated semantic families become more expensive as the batch progresses.
+public actor VibeBatchLedger {
+    private var usedWordsBySlot: [String: [String: Int]] = [:]
+    private var usedFamiliesBySlot: [String: [String: Int]] = [:]
+    private var longTokens: [String: Int] = [:]
+
+    public init() {}
+
+    public func snapshot() -> VibeBatchLedgerSnapshot {
+        VibeBatchLedgerSnapshot(
+            usedWordsBySlot: usedWordsBySlot,
+            usedFamiliesBySlot: usedFamiliesBySlot,
+            longTokens: longTokens
+        )
+    }
+
+    public func record(_ result: VibeGenerationResult) {
+        let words = result.short.split(separator: " ").map { String($0).uppercased() }
+        for (slot, word) in ShortSlot.allCases.prefix(words.count).map({ ($0, words[$0.index]) }) {
+            usedWordsBySlot[slot.rawValue, default: [:]][word, default: 0] += 1
+            let family = VibeGeneratorV2.family(for: word, in: slot)
+            usedFamiliesBySlot[slot.rawValue, default: [:]][family, default: 0] += 1
+        }
+
+        for token in VibeGeneratorV2.significantTokens(in: result.long) {
+            longTokens[token, default: 0] += 1
+        }
     }
 }
 
@@ -104,7 +172,7 @@ public struct AnthropicVibeChatClient: VibeChatClient {
 public actor VibeGeneratorV2 {
     /// Bump whenever prompt semantics or validation rules change so stale cached
     /// generations cannot survive a behavior change.
-    public static let cacheVersion = "vibe-generator-v3-symbolic-atmosphere-movement-2026-06-14"
+    public static let cacheVersion = "vibe-generator-v4-slot-ledger-contrast-2026-06-14"
 
     private let client: VibeChatClient
     private let logger = Logger(subsystem: "com.cratebot", category: "VibeGeneratorV2")
@@ -119,13 +187,18 @@ public actor VibeGeneratorV2 {
     /// Short + long are generated and validated first. Movement (`mixHint`) is
     /// generated in a second pass that sees the completed fields, so its role is
     /// DJ placement/use rather than another description.
-    public func generate(inputs: VibeGenerationInputs) async throws -> VibeGenerationResult {
+    public func generate(
+        inputs: VibeGenerationInputs,
+        batchLedger: VibeBatchLedger? = nil
+    ) async throws -> VibeGenerationResult {
+        let batchSnapshot = await batchLedger?.snapshot()
         var descriptionRepair: String?
         var resolvedDescription: (short: String, long: String)?
         var lastDescriptionError: Error?
         for _ in 0..<Self.maxGenerationAttempts {
             let (descriptionSystem, descriptionPrompt) = Self.composeDescriptionPrompts(
                 inputs: inputs,
+                batchSnapshot: batchSnapshot,
                 repairHint: descriptionRepair
             )
             let descriptionRaw = try await complete(
@@ -134,11 +207,16 @@ public actor VibeGeneratorV2 {
                 maxTokens: 600
             )
             do {
-                let description = try Self.decodeJSONObject(ShortLongWireResponse.self, from: descriptionRaw)
-                let short = Self.normalizeSpaces(description.short)
+                let description = try Self.decodeJSONObject(DescriptionWireResponse.self, from: descriptionRaw)
                 let long = Self.normalizeSpaces(description.long)
-                try Self.validateShort(short, inputs: inputs, long: long)
-                try Self.validateLong(long, inputs: inputs, short: short)
+                let short = try Self.selectShort(
+                    from: description,
+                    inputs: inputs,
+                    long: long,
+                    batchSnapshot: batchSnapshot
+                )
+                try Self.validateShort(short, inputs: inputs, long: long, batchSnapshot: batchSnapshot)
+                try Self.validateLong(long, inputs: inputs, short: short, batchSnapshot: batchSnapshot)
                 resolvedDescription = (short, long)
                 break
             } catch let error as VibeGeneratorError {
@@ -184,11 +262,13 @@ public actor VibeGeneratorV2 {
             throw lastMovementError ?? VibeGeneratorError.generationFailed("movement generation did not produce valid output")
         }
 
-        return VibeGenerationResult(
+        let result = VibeGenerationResult(
             short: short,
             long: long,
             mixHint: mixHint
         )
+        await batchLedger?.record(result)
+        return result
     }
 
     private func complete(prompt: String, system: String, maxTokens: Int) async throws -> String {
@@ -220,9 +300,23 @@ public actor VibeGeneratorV2 {
     // MARK: - Wire types
 
     // swiftlint:disable identifier_name
-    private struct ShortLongWireResponse: Decodable {
-        let short: String
+    private struct DescriptionWireResponse: Decodable {
+        let weight_options: [String]
+        let density_options: [String]
+        let texture_options: [String]
+        let emotion_options: [String]
+        let signature_options: [String]
         let long: String
+
+        func options(for slot: ShortSlot) -> [String] {
+            switch slot {
+            case .weight: return weight_options
+            case .density: return density_options
+            case .texture: return texture_options
+            case .emotion: return emotion_options
+            case .signature: return signature_options
+            }
+        }
     }
 
     private struct MovementWireResponse: Decodable {
@@ -237,18 +331,182 @@ public actor VibeGeneratorV2 {
 
     // MARK: - Prompt composition
 
+    private static let curatedSlotVocabulary: [ShortSlot: [String]] = [
+        .weight: [
+            "HEAVY", "MASSIVE", "CHUNKY", "THICK", "SOLID", "WEIGHTY",
+            "PUNCHY", "BEEFY", "LEAN", "LIGHT", "AIRY", "FLOATING",
+            "WEIGHTLESS", "FEATHERY", "HOLLOW", "MUSCLED", "SLABBY",
+            "SOFT", "HARD", "HUGE", "TINY", "DEEP", "LOW", "BRIGHT"
+        ],
+        .density: [
+            "DENSE", "STACKED", "LAYERED", "BUSY", "FRANTIC", "CROWDED",
+            "MAXIMAL", "TIGHT", "SPARSE", "STRIPPED", "MINIMAL", "OPEN",
+            "ROOMY", "HOLLOW", "CLEAN", "PACKED", "ACTIVE", "RESTLESS",
+            "PARED", "BROAD", "THIN", "THICK"
+        ],
+        .texture: [
+            "RUBBERY", "GLASSY", "GRITTY", "DUSTY", "SILKY", "METALLIC",
+            "SMOKY", "WET", "DRY", "FUZZY", "CHROME", "WOODEN",
+            "PLASTIC", "VELVET", "RAW", "POLISHED", "CLIPPED", "JAGGED",
+            "WARM", "COLD", "SANDY", "LIQUID", "CRISP", "DIRTY",
+            "SWEATY", "GLOSSY"
+        ],
+        .emotion: [
+            "JOYFUL", "SWEET", "SPICY", "NASTY", "TENDER", "ANGRY",
+            "BRIGHT", "DARK", "WARM", "COOL", "SOUR", "PLAYFUL",
+            "URGENT", "MELANCHOLY", "EUPHORIC", "FUNNY", "FLIRTY",
+            "FIERCE", "SMUG", "LONELY", "HOPEFUL", "WEIRD", "SLY",
+            "SUNNY", "BITTER", "ROMANTIC"
+        ],
+        .signature: [
+            "ENGINE", "VEIL", "SUN", "WIRE", "SPARK", "SIREN", "DUST",
+            "GLOW", "MIRROR", "FLAME", "HONEY", "STEEL", "SUGAR",
+            "SMOKE", "RIBBON", "SWITCH", "SPRING", "NEEDLE", "HAMMER",
+            "BALLOON", "LASER", "GARDEN", "FEVER", "THUNDER", "GLITTER",
+            "SAND", "PEPPER", "SIGNAL", "MACHINE", "WINDOW", "ROPE",
+            "TORCH", "COMET", "SHADOW"
+        ]
+    ]
+
+    private static let curatedSlotSets: [ShortSlot: Set<String>] = {
+        Dictionary(
+            uniqueKeysWithValues: curatedSlotVocabulary.map { slot, words in
+                (slot, Set(words))
+            }
+        )
+    }()
+
+    private static let slotFamilyMap: [ShortSlot: [String: String]] = [
+        .weight: [
+            "HEAVY": "heavy", "MASSIVE": "heavy", "CHUNKY": "heavy",
+            "THICK": "heavy", "SOLID": "heavy", "WEIGHTY": "heavy",
+            "PUNCHY": "heavy", "BEEFY": "heavy", "HARD": "heavy",
+            "HUGE": "heavy", "DEEP": "heavy", "LOW": "heavy",
+            "MUSCLED": "heavy", "SLABBY": "heavy",
+            "LIGHT": "light", "AIRY": "light", "FLOATING": "light",
+            "WEIGHTLESS": "light", "FEATHERY": "light", "SOFT": "light",
+            "TINY": "light", "BRIGHT": "light",
+            "LEAN": "lean", "HOLLOW": "lean"
+        ],
+        .density: [
+            "DENSE": "full", "STACKED": "full", "LAYERED": "full",
+            "CROWDED": "full", "MAXIMAL": "full", "PACKED": "full",
+            "THICK": "full",
+            "BUSY": "active", "FRANTIC": "active", "ACTIVE": "active",
+            "RESTLESS": "active",
+            "SPARSE": "open", "STRIPPED": "open", "MINIMAL": "open",
+            "OPEN": "open", "ROOMY": "open", "HOLLOW": "open",
+            "CLEAN": "open", "PARED": "open", "BROAD": "open",
+            "THIN": "open",
+            "TIGHT": "tight"
+        ],
+        .texture: [
+            "RUBBERY": "elastic", "PLASTIC": "elastic",
+            "LIQUID": "elastic", "WET": "elastic",
+            "GLASSY": "shiny", "CHROME": "shiny", "METALLIC": "shiny",
+            "POLISHED": "shiny", "GLOSSY": "shiny",
+            "GRITTY": "rough", "DUSTY": "rough", "RAW": "rough",
+            "SANDY": "rough", "DIRTY": "rough", "SWEATY": "rough",
+            "FUZZY": "rough",
+            "SILKY": "soft", "VELVET": "soft", "SMOKY": "soft",
+            "CLIPPED": "sharp", "JAGGED": "sharp", "CRISP": "sharp",
+            "DRY": "sharp",
+            "WARM": "temperature", "COLD": "temperature", "WOODEN": "organic"
+        ],
+        .emotion: [
+            "JOYFUL": "joy", "PLAYFUL": "joy", "SUNNY": "joy",
+            "EUPHORIC": "joy", "FUNNY": "joy",
+            "SWEET": "warm", "TENDER": "warm", "ROMANTIC": "warm",
+            "HOPEFUL": "warm", "WARM": "warm", "BRIGHT": "warm",
+            "SPICY": "spice", "NASTY": "spice", "FLIRTY": "spice",
+            "SLY": "spice", "SMUG": "spice",
+            "ANGRY": "charge", "FIERCE": "charge", "URGENT": "charge",
+            "DARK": "shadow", "MELANCHOLY": "shadow", "LONELY": "shadow",
+            "BITTER": "shadow", "SOUR": "shadow", "COOL": "shadow",
+            "WEIRD": "shadow"
+        ],
+        .signature: [
+            "SUN": "light", "SPARK": "light", "GLOW": "light",
+            "FLAME": "light", "GLITTER": "light", "TORCH": "light",
+            "ENGINE": "machine", "WIRE": "machine", "SWITCH": "machine",
+            "NEEDLE": "machine", "LASER": "machine", "SIGNAL": "machine",
+            "MACHINE": "machine",
+            "MIRROR": "material", "STEEL": "material", "RIBBON": "material",
+            "VEIL": "material", "ROPE": "material", "WINDOW": "material",
+            "DUST": "air", "SMOKE": "air", "SAND": "air",
+            "SHADOW": "air", "COMET": "air",
+            "THUNDER": "force", "HAMMER": "force", "SIREN": "force",
+            "HONEY": "flavor", "SUGAR": "flavor", "PEPPER": "flavor",
+            "FEVER": "flavor",
+            "BALLOON": "play", "GARDEN": "place", "SPRING": "spring"
+        ]
+    ]
+
+    internal static func family(for word: String, in slot: ShortSlot) -> String {
+        let normalized = normalizeOptionWord(word) ?? word.uppercased()
+        return slotFamilyMap[slot]?[normalized] ?? normalized.lowercased()
+    }
+
+    private static func slotVocabularyPrompt() -> String {
+        ShortSlot.allCases.map { slot in
+            let words = curatedSlotVocabulary[slot, default: []].joined(separator: ", ")
+            return "- \(slot.rawValue)_options: \(words)"
+        }
+        .joined(separator: "\n")
+    }
+
+    private static func renderCounts(_ counts: [String: Int], limit: Int = 12) -> String {
+        let rendered = counts
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key < rhs.key
+            }
+            .prefix(limit)
+            .map { "\($0.key)(\($0.value))" }
+            .joined(separator: ", ")
+        return rendered.isEmpty ? "none" : rendered
+    }
+
+    private static func batchDiversityPrompt(_ snapshot: VibeBatchLedgerSnapshot?) -> String {
+        guard let snapshot else {
+            return "Current batch history: none yet."
+        }
+
+        let usedSlotWords = ShortSlot.allCases.map { slot -> String in
+            let counts = snapshot.usedWordsBySlot[slot.rawValue, default: [:]]
+            return "\(slot.rawValue): \(renderCounts(counts, limit: 8))"
+        }
+        .joined(separator: "; ")
+        let usedSlotFamilies = ShortSlot.allCases.map { slot -> String in
+            let counts = snapshot.usedFamiliesBySlot[slot.rawValue, default: [:]]
+            return "\(slot.rawValue): \(renderCounts(counts, limit: 8))"
+        }
+        .joined(separator: "; ")
+        let longTokens = renderCounts(snapshot.longTokens, limit: 16)
+
+        return """
+        Current batch diversity pressure:
+        - Used slot words: \(usedSlotWords)
+        - Used slot families: \(usedSlotFamilies)
+        - Already-used long-image tokens: \(longTokens)
+        Prefer unused words, unused semantic families, and fresh sensory images unless the audio evidence strongly demands a repeat.
+        """
+    }
+
     /// Compose the first-pass prompt for `short` + `long`.
     ///
     /// The movement hint is deliberately omitted here. It is generated in a
     /// second pass after these two fields exist.
     internal static func composeDescriptionPrompts(
         inputs: VibeGenerationInputs,
+        batchSnapshot: VibeBatchLedgerSnapshot? = nil,
         repairHint: String? = nil
     ) -> (system: String, user: String) {
         let forbidden = Self.forbiddenSourceTokens(inputs: inputs)
         let forbiddenLine = forbidden.isEmpty
             ? ""
             : " FORBIDDEN source words for THIS track: \(forbidden.joined(separator: ", "))."
+        let batchLine = Self.batchDiversityPrompt(batchSnapshot)
         let repairBlock = repairHint.map {
             """
 
@@ -264,30 +522,49 @@ public actor VibeGeneratorV2 {
         electronic music track, respond with JSON only — no prose, no markdown fences, \
         no preamble.
 
-        Write exactly two fields:
+        Write candidate words for a deterministic Composer selector plus one long \
+        description. Do not write the final Composer string yourself.
 
-          • `short` — a 4 or 5 word ALL-CAPS symbolic handle. It is the compressed \
-            memory hook for the whole tag stack: salient, interesting, different, \
-            glanceable. It must NOT repeat artist, album, title, genre, mood, timing, \
-            instruments, style, rhythm, vocal/bass labels, custom tags, or words from \
-            `long`. Use fresh symbolic words, not taxonomy words.
+          • `weight_options` — physical mass/heaviness of the track: heavy, light, \
+            floating, chunky, huge, lean, etc.
+
+          • `density_options` — busyness/layering/sparseness: frantic, packed, \
+            stripped, open, active, minimal, etc.
+
+          • `texture_options` — sonic surface/material: rubbery, glassy, gritty, \
+            silky, chrome, dusty, etc.
+
+          • `emotion_options` — taste/color/sentiment: joyful, spicy, tender, sour, \
+            fierce, lonely, etc.
+
+          • `signature_options` — one concrete symbolic image that makes THIS track \
+            memorable without repeating the tags.
 
           • `long` — additive sensory atmosphere. It describes the feeling, scene, \
             energy, texture, weather, pressure, color, smell, taste, and moment the \
             track creates. It must NOT restate the artist, album, title, genre, mood, \
             timing, instruments, style, rhythm, vocal/bass labels, custom tags, or \
-            `short`. It must NOT say how a DJ should play it.
+            any candidate option word. It must NOT say how a DJ should play it.
 
         Output schema:
-        {"short": "<4 OR 5 ALL-CAPS WORDS>", "long": "<one compact evocative description>"}
+        {"weight_options":["<WORD>"],"density_options":["<WORD>"],"texture_options":["<WORD>"],"emotion_options":["<WORD>"],"signature_options":["<WORD>"],"long":"<one compact evocative description>"}
+
+        Composer selector vocabulary:
+        \(slotVocabularyPrompt())
+
+        \(batchLine)
 
         Hard rules:
-        - `short`: 4 or 5 words, ALL CAPS, no punctuation, no numbers, no articles. \
-          Use short concrete/symbolic words. Do not use any source word or `long` word.\(forbiddenLine)
+        - Each *_options array: 3 to 6 candidate words, each one word, ALL CAPS, \
+          no punctuation, no numbers, no articles. Use the vocabulary above for \
+          weight/density/texture/emotion unless the audio strongly needs a better \
+          word. Signature can be more image-led, but keep it short and concrete. \
+          Do not use any source word or `long` word.\(forbiddenLine)
         - `long`: 6 to 32 words. Evocative and sensory, not a tag summary, not a \
           music-review inventory, and not DJ instructions. Do not start with \
           "This", "A", "An", or "The"; do not use "track", "song", or "tune". \
-          Do not use any source word or `short` word.\(forbiddenLine)
+          Avoid repeated sentence formulas such as "X while Y creating Z". Do not \
+          use any source word or candidate option word.\(forbiddenLine)
         - Respond with the JSON object only. No leading prose. No code fences.
         """
 
@@ -295,7 +572,7 @@ public actor VibeGeneratorV2 {
         Track analysis:
         \(inputs.promptPayload())
 
-        Write `short` and `long`.\(repairBlock)
+        Write slot candidate arrays and `long`.\(repairBlock)
         """
 
         return (system, user)
@@ -415,6 +692,112 @@ public actor VibeGeneratorV2 {
         return string
     }
 
+    // MARK: - Short selection
+
+    private static let shortAllowedCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+    private static func selectShort(
+        from description: DescriptionWireResponse,
+        inputs: VibeGenerationInputs,
+        long: String,
+        batchSnapshot: VibeBatchLedgerSnapshot?
+    ) throws -> String {
+        let forbidden = Set(forbiddenSourceTokens(inputs: inputs))
+        let longTokens = significantTokens(in: long)
+        var selected: [String] = []
+
+        for slot in ShortSlot.allCases {
+            let word = try selectWord(
+                for: slot,
+                rawOptions: description.options(for: slot),
+                forbidden: forbidden,
+                longTokens: longTokens,
+                selected: selected,
+                batchSnapshot: batchSnapshot
+            )
+            selected.append(word)
+        }
+
+        return selected.joined(separator: " ")
+    }
+
+    private static func selectWord(
+        for slot: ShortSlot,
+        rawOptions: [String],
+        forbidden: Set<String>,
+        longTokens: Set<String>,
+        selected: [String],
+        batchSnapshot: VibeBatchLedgerSnapshot?
+    ) throws -> String {
+        let curated = curatedSlotSets[slot, default: []]
+        let usedWords = batchSnapshot?.usedWordsBySlot[slot.rawValue] ?? [:]
+        let usedFamilies = batchSnapshot?.usedFamiliesBySlot[slot.rawValue] ?? [:]
+        let batchLongTokens = batchSnapshot?.longTokens ?? [:]
+        let alreadySelected = Set(selected)
+        var seen: Set<String> = []
+        var best: (word: String, score: Double, index: Int)?
+
+        for (index, raw) in rawOptions.enumerated() {
+            guard let word = normalizeOptionWord(raw), seen.insert(word).inserted else {
+                continue
+            }
+            let lower = word.lowercased()
+            guard !forbidden.contains(lower),
+                  !longTokens.contains(lower),
+                  !alreadySelected.contains(word) else {
+                continue
+            }
+
+            let family = family(for: word, in: slot)
+            var score = 0.0
+            if curated.contains(word) {
+                score += 6
+            } else if slot == .signature {
+                score += 2
+            } else {
+                score -= 3
+            }
+            score += Double(max(0, 12 - word.count)) * 0.05
+            score -= Double(index) * 0.2
+            score -= Double(usedWords[word] ?? 0) * 12
+            score -= Double(usedFamilies[family] ?? 0) * 5
+            score -= Double(batchLongTokens[lower] ?? 0) * 3
+            if slot == .signature {
+                score -= Double(usedWords[word] ?? 0) * 8
+            }
+
+            if let current = best {
+                if score > current.score
+                    || (score == current.score && index < current.index)
+                    || (score == current.score && index == current.index && word < current.word) {
+                    best = (word, score, index)
+                }
+            } else {
+                best = (word, score, index)
+            }
+        }
+
+        guard let best else {
+            throw VibeGeneratorError.validationFailed("\(slot.rawValue)_options has no usable word candidates; avoid source words, repeated slot words, and long-description words")
+        }
+        return best.word
+    }
+
+    private static func normalizeOptionWord(_ raw: String) -> String? {
+        let normalized = normalizeSpaces(raw)
+        let parts = normalized.split(separator: " ").map(String.init)
+        guard parts.count == 1 else { return nil }
+        let word = parts[0].uppercased()
+        guard (3...12).contains(word.count),
+              !articles.contains(word.lowercased()) else {
+            return nil
+        }
+        for scalar in word.unicodeScalars {
+            guard shortAllowedCharacters.contains(scalar) else { return nil }
+        }
+        return word
+    }
+
     // MARK: - Validation
 
     private static let articles: Set<String> = ["a", "an", "the"]
@@ -443,6 +826,10 @@ public actor VibeGeneratorV2 {
         "track", "song", "tune"
     ]
 
+    private static let longBannedFormulaTokens: Set<String> = [
+        "creating", "featuring"
+    ]
+
     private static let movementCueTokens: Set<String> = [
         "drop", "slot", "bridge", "open", "cut", "follow", "save", "pair",
         "hold", "stack", "after", "before", "between", "from", "into", "when",
@@ -454,14 +841,15 @@ public actor VibeGeneratorV2 {
     internal static func validateShort(
         _ short: String,
         inputs: VibeGenerationInputs,
-        long: String
+        long: String,
+        batchSnapshot: VibeBatchLedgerSnapshot? = nil
     ) throws {
         guard !short.isEmpty else {
             throw VibeGeneratorError.validationFailed("short is empty")
         }
         let words = short.split(separator: " ").map(String.init)
-        guard (4...5).contains(words.count) else {
-            throw VibeGeneratorError.validationFailed("short must be 4 or 5 words: \(short)")
+        guard words.count == ShortSlot.allCases.count else {
+            throw VibeGeneratorError.validationFailed("short must be 5 slot words: \(short)")
         }
         guard short == short.uppercased() else {
             throw VibeGeneratorError.validationFailed("short must be all caps: \(short)")
@@ -492,7 +880,8 @@ public actor VibeGeneratorV2 {
     internal static func validateLong(
         _ long: String,
         inputs: VibeGenerationInputs,
-        short: String
+        short: String,
+        batchSnapshot: VibeBatchLedgerSnapshot? = nil
     ) throws {
         guard !long.isEmpty else {
             throw VibeGeneratorError.validationFailed("long is empty")
@@ -513,6 +902,10 @@ public actor VibeGeneratorV2 {
         if let token = reviewOverlap.sorted().first {
             throw VibeGeneratorError.validationFailed("long uses generic review noun '\(token)'")
         }
+        let formulaOverlap = Set(words).intersection(longBannedFormulaTokens)
+        if let token = formulaOverlap.sorted().first {
+            throw VibeGeneratorError.validationFailed("long uses stale formula token '\(token)'")
+        }
         let instructionOverlap = Set(words).intersection(longInstructionTokens)
         if let token = instructionOverlap.sorted().first {
             throw VibeGeneratorError.validationFailed("long contains DJ-use token '\(token)'")
@@ -522,6 +915,14 @@ public actor VibeGeneratorV2 {
         let overlap = significantTokens(in: long).intersection(significantTokens(in: short))
         if let token = overlap.sorted().first {
             throw VibeGeneratorError.validationFailed("long repeats short token '\(token)'")
+        }
+        if let batchSnapshot {
+            let repeated = significantTokens(in: long)
+                .filter { (batchSnapshot.longTokens[$0] ?? 0) > 0 }
+                .sorted()
+            if repeated.count >= 2 {
+                throw VibeGeneratorError.validationFailed("long repeats batch image tokens \(repeated.prefix(4).joined(separator: ", "))")
+            }
         }
     }
 
@@ -587,7 +988,7 @@ public actor VibeGeneratorV2 {
             .map { $0.lowercased() }
     }
 
-    private static func significantTokens(in text: String) -> Set<String> {
+    internal static func significantTokens(in text: String) -> Set<String> {
         Set(lexicalTokens(in: text).filter { $0.count >= 3 && !semanticStopWords.contains($0) })
     }
 
