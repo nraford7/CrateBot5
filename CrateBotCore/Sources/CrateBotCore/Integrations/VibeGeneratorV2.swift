@@ -28,7 +28,7 @@ public enum VibeGeneratorError: Error, LocalizedError, Sendable {
 
 /// Strict three-output result of vibe generation.
 ///
-/// - `short`: 5 word all-caps symbolic handle. TCOM target.
+/// - `short`: 4 word all-caps symbolic handle. TCOM target.
 /// - `long`: Additive sensory/atmospheric description. TIT3 target.
 /// - `mixHint`: DJ movement/placement guidance. MVNM target.
 public struct VibeGenerationResult: Sendable, Equatable, Codable {
@@ -45,7 +45,6 @@ public struct VibeGenerationResult: Sendable, Equatable, Codable {
 
 enum ShortSlot: String, CaseIterable, Sendable {
     case weight
-    case density
     case texture
     case emotion
     case signature
@@ -53,10 +52,9 @@ enum ShortSlot: String, CaseIterable, Sendable {
     var index: Int {
         switch self {
         case .weight: return 0
-        case .density: return 1
-        case .texture: return 2
-        case .emotion: return 3
-        case .signature: return 4
+        case .texture: return 1
+        case .emotion: return 2
+        case .signature: return 3
         }
     }
 }
@@ -172,7 +170,7 @@ public struct AnthropicVibeChatClient: VibeChatClient {
 public actor VibeGeneratorV2 {
     /// Bump whenever prompt semantics or validation rules change so stale cached
     /// generations cannot survive a behavior change.
-    public static let cacheVersion = "vibe-generator-v4-slot-ledger-contrast-2026-06-14"
+    public static let cacheVersion = "vibe-generator-v5-compact-composer-fields-2026-06-14"
 
     private let client: VibeChatClient
     private let logger = Logger(subsystem: "com.cratebot", category: "VibeGeneratorV2")
@@ -302,7 +300,6 @@ public actor VibeGeneratorV2 {
     // swiftlint:disable identifier_name
     private struct DescriptionWireResponse: Decodable {
         let weight_options: [String]
-        let density_options: [String]
         let texture_options: [String]
         let emotion_options: [String]
         let signature_options: [String]
@@ -311,7 +308,6 @@ public actor VibeGeneratorV2 {
         func options(for slot: ShortSlot) -> [String] {
             switch slot {
             case .weight: return weight_options
-            case .density: return density_options
             case .texture: return texture_options
             case .emotion: return emotion_options
             case .signature: return signature_options
@@ -337,12 +333,6 @@ public actor VibeGeneratorV2 {
             "PUNCHY", "BEEFY", "LEAN", "LIGHT", "AIRY", "FLOATING",
             "WEIGHTLESS", "FEATHERY", "HOLLOW", "MUSCLED", "SLABBY",
             "SOFT", "HARD", "HUGE", "TINY", "DEEP", "LOW", "BRIGHT"
-        ],
-        .density: [
-            "DENSE", "STACKED", "LAYERED", "BUSY", "FRANTIC", "CROWDED",
-            "MAXIMAL", "TIGHT", "SPARSE", "STRIPPED", "MINIMAL", "OPEN",
-            "ROOMY", "HOLLOW", "CLEAN", "PACKED", "ACTIVE", "RESTLESS",
-            "PARED", "BROAD", "THIN", "THICK"
         ],
         .texture: [
             "RUBBERY", "GLASSY", "GRITTY", "DUSTY", "SILKY", "METALLIC",
@@ -387,18 +377,6 @@ public actor VibeGeneratorV2 {
             "WEIGHTLESS": "light", "FEATHERY": "light", "SOFT": "light",
             "TINY": "light", "BRIGHT": "light",
             "LEAN": "lean", "HOLLOW": "lean"
-        ],
-        .density: [
-            "DENSE": "full", "STACKED": "full", "LAYERED": "full",
-            "CROWDED": "full", "MAXIMAL": "full", "PACKED": "full",
-            "THICK": "full",
-            "BUSY": "active", "FRANTIC": "active", "ACTIVE": "active",
-            "RESTLESS": "active",
-            "SPARSE": "open", "STRIPPED": "open", "MINIMAL": "open",
-            "OPEN": "open", "ROOMY": "open", "HOLLOW": "open",
-            "CLEAN": "open", "PARED": "open", "BROAD": "open",
-            "THIN": "open",
-            "TIGHT": "tight"
         ],
         .texture: [
             "RUBBERY": "elastic", "PLASTIC": "elastic",
@@ -528,9 +506,6 @@ public actor VibeGeneratorV2 {
           • `weight_options` — physical mass/heaviness of the track: heavy, light, \
             floating, chunky, huge, lean, etc.
 
-          • `density_options` — busyness/layering/sparseness: frantic, packed, \
-            stripped, open, active, minimal, etc.
-
           • `texture_options` — sonic surface/material: rubbery, glassy, gritty, \
             silky, chrome, dusty, etc.
 
@@ -544,10 +519,11 @@ public actor VibeGeneratorV2 {
             energy, texture, weather, pressure, color, smell, taste, and moment the \
             track creates. It must NOT restate the artist, album, title, genre, mood, \
             timing, instruments, style, rhythm, vocal/bass labels, custom tags, or \
-            any candidate option word. It must NOT say how a DJ should play it.
+            any candidate option word. It must NOT say how a DJ should play it. Keep \
+            it compact enough to scan in a table column.
 
         Output schema:
-        {"weight_options":["<WORD>"],"density_options":["<WORD>"],"texture_options":["<WORD>"],"emotion_options":["<WORD>"],"signature_options":["<WORD>"],"long":"<one compact evocative description>"}
+        {"weight_options":["<WORD>"],"texture_options":["<WORD>"],"emotion_options":["<WORD>"],"signature_options":["<WORD>"],"long":"<one compact evocative description>"}
 
         Composer selector vocabulary:
         \(slotVocabularyPrompt())
@@ -557,10 +533,10 @@ public actor VibeGeneratorV2 {
         Hard rules:
         - Each *_options array: 3 to 6 candidate words, each one word, ALL CAPS, \
           no punctuation, no numbers, no articles. Use the vocabulary above for \
-          weight/density/texture/emotion unless the audio strongly needs a better \
-          word. Signature can be more image-led, but keep it short and concrete. \
+          weight/texture/emotion unless the audio strongly needs a better word. \
+          Signature can be more image-led, but keep it short and concrete. \
           Do not use any source word or `long` word.\(forbiddenLine)
-        - `long`: 6 to 32 words. Evocative and sensory, not a tag summary, not a \
+        - `long`: 10 to 16 words. Evocative and sensory, not a tag summary, not a \
           music-review inventory, and not DJ instructions. Do not start with \
           "This", "A", "An", or "The"; do not use "track", "song", or "tune". \
           Avoid repeated sentence formulas such as "X while Y creating Z". Do not \
@@ -610,8 +586,8 @@ public actor VibeGeneratorV2 {
 
         `mix_hint` is short-form DJ placement language: timing, slot, transition job, \
         what to put it after, what it can set up, what kind of energy shift it creates. \
-        Good shapes include: "2AM pressure lift after rough drums", "Bridge from \
-        dirty drop into brighter lift", "Save for toughness after a beautiful reset".
+        Good shapes include: "OPENING RESET INTO DARKER PRESSURE", "DEEP BRIDGE \
+        AFTER PEAK INTENSITY", "POST-DROP REIGNITE INTO FLOOR ENERGY".
 
         It must NOT describe the track's vibe, atmosphere, scene, sound, instruments, \
         texture, or sensory image. It must NOT reuse meaningful words from `short` or \
@@ -621,8 +597,8 @@ public actor VibeGeneratorV2 {
         {"mix_hint": "<short DJ-use phrase>"}
 
         Hard rules:
-        - `mix_hint`: 4 to 22 words. Fragment is fine. No "this is", "this track", \
-          "as a DJ", filler, explanation, or review prose.
+        - `mix_hint`: 5 to 10 words. Shorthand fragment is preferred. No "this is", \
+          "this track", "as a DJ", filler, explanation, or review prose.
         - Say when/how to use it: a time, set position, transition role, what to come \
           after, what to move into, or what energy job it performs.
         - Do not simply repeat Timing, Genre, Mood, or descriptive tags. Translate \
@@ -845,7 +821,7 @@ public actor VibeGeneratorV2 {
         }
         let words = short.split(separator: " ").map(String.init)
         guard words.count == ShortSlot.allCases.count else {
-            throw VibeGeneratorError.validationFailed("short must be 5 slot words: \(short)")
+            throw VibeGeneratorError.validationFailed("short must be 4 slot words: \(short)")
         }
         guard short == short.uppercased() else {
             throw VibeGeneratorError.validationFailed("short must be all caps: \(short)")
@@ -883,8 +859,8 @@ public actor VibeGeneratorV2 {
             throw VibeGeneratorError.validationFailed("long is empty")
         }
         let words = lexicalTokens(in: long)
-        guard (6...32).contains(words.count) else {
-            throw VibeGeneratorError.validationFailed("long must be 6 to 32 words: \(long)")
+        guard (10...16).contains(words.count) else {
+            throw VibeGeneratorError.validationFailed("long must be 10 to 16 words: \(long)")
         }
         let lower = long.lowercased()
         let badPrefixes = ["this is", "it is", "it's"]
@@ -920,8 +896,8 @@ public actor VibeGeneratorV2 {
             throw VibeGeneratorError.validationFailed("mix_hint is empty")
         }
         let words = lexicalTokens(in: movement)
-        guard (4...22).contains(words.count) else {
-            throw VibeGeneratorError.validationFailed("mix_hint must be 4 to 22 words: \(movement)")
+        guard (5...10).contains(words.count) else {
+            throw VibeGeneratorError.validationFailed("mix_hint must be 5 to 10 words: \(movement)")
         }
         let lower = movement.lowercased()
         let fillerPhrases = ["this track", "this is", "it is", "it's", "as a dj", "you know", " ah "]

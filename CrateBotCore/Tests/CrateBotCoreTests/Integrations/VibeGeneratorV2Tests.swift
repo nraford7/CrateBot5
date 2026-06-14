@@ -160,7 +160,6 @@ final class VibeGeneratorV2Tests: XCTestCase {
 
     private struct DescriptionFixture: Encodable {
         let weight_options: [String]
-        let density_options: [String]
         let texture_options: [String]
         let emotion_options: [String]
         let signature_options: [String]
@@ -169,7 +168,6 @@ final class VibeGeneratorV2Tests: XCTestCase {
 
     private static func descriptionReply(
         weight: [String] = ["HEAVY", "SOLID", "PUNCHY"],
-        density: [String] = ["DENSE", "TIGHT", "LAYERED"],
         texture: [String] = ["RUBBERY", "METALLIC", "GLASSY"],
         emotion: [String] = ["URGENT", "NASTY", "BRIGHT"],
         signature: [String] = ["ENGINE", "WIRE", "EMBER"],
@@ -177,7 +175,6 @@ final class VibeGeneratorV2Tests: XCTestCase {
     ) -> String {
         let fixture = DescriptionFixture(
             weight_options: weight,
-            density_options: density,
             texture_options: texture,
             emotion_options: emotion,
             signature_options: signature,
@@ -198,7 +195,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
         )
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputsWithMixHintAllowed)
-        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
+        XCTAssertEqual(r.short, "HEAVY RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, "Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete.")
         XCTAssertEqual(r.mixHint, "2AM bridge after rough drums before melodic release")
         XCTAssertEqual(mock.calls, 2)
@@ -271,7 +268,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
         let mock = MockClient(replies: [reply, Self.validMovementReply])
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputs)
-        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
+        XCTAssertEqual(r.short, "HEAVY RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, "Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete.")
     }
 
@@ -288,7 +285,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
         )
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputs)
-        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
+        XCTAssertEqual(r.short, "HEAVY RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, long)
     }
 
@@ -305,7 +302,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
         )
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputs)
-        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
+        XCTAssertEqual(r.short, "HEAVY RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, long)
     }
 
@@ -320,7 +317,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
         let mock = MockClient(replies: [reply, Self.validMovementReply])
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputsWithMixHintAllowed)
-        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
+        XCTAssertEqual(r.short, "HEAVY RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, "Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete.")
         XCTAssertEqual(r.mixHint, "2AM bridge after rough drums before melodic release")
     }
@@ -345,7 +342,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
         let mock = MockClient(replies: [Self.validDescriptionReply, Self.validMovementReply])
         let gen = VibeGeneratorV2(client: mock)
         let r = try await gen.generate(inputs: sampleInputsLowConfidence)
-        XCTAssertEqual(r.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
+        XCTAssertEqual(r.short, "HEAVY RUBBERY URGENT ENGINE")
         XCTAssertEqual(r.long, "Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete.")
         XCTAssertEqual(r.mixHint, "2AM bridge after rough drums before melodic release")
     }
@@ -413,7 +410,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
 
         let result = try await gen.generate(inputs: sampleInputs)
 
-        XCTAssertEqual(result.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
+        XCTAssertEqual(result.short, "HEAVY RUBBERY URGENT ENGINE")
         XCTAssertEqual(result.mixHint, "2AM bridge after rough drums before melodic release")
         XCTAssertEqual(spy.maxTokens, [600, 600, 300])
         XCTAssertEqual(spy.prompts.count, 3)
@@ -442,64 +439,62 @@ final class VibeGeneratorV2Tests: XCTestCase {
         let ledger = VibeBatchLedger()
         await ledger.record(
             VibeGenerationResult(
-                short: "HEAVY DENSE RUBBERY URGENT ENGINE",
-                long: "Copper stairs hum above moonlit rain.",
+                short: "HEAVY RUBBERY URGENT ENGINE",
+                long: "Copper stairs hum above moonlit rain and distant silver pressure.",
                 mixHint: "2AM bridge after rough drums before melodic release"
             )
         )
         let reply = Self.descriptionReply(
             weight: ["HEAVY", "MASSIVE"],
-            density: ["DENSE", "SPARSE"],
             texture: ["RUBBERY", "GLASSY"],
             emotion: ["URGENT", "TENDER"],
             signature: ["ENGINE", "VEIL"],
-            long: "Glass sparks drift over cotton rooftops."
+            long: "Glass sparks drift over cotton rooftops and soft mirror rain."
         )
         let mock = MockClient(replies: [reply, Self.validMovementReply])
         let gen = VibeGeneratorV2(client: mock)
 
         let result = try await gen.generate(inputs: sampleInputs, batchLedger: ledger)
 
-        XCTAssertEqual(result.short, "MASSIVE SPARSE GLASSY TENDER VEIL")
+        XCTAssertEqual(result.short, "MASSIVE GLASSY TENDER VEIL")
     }
 
     func testBatchImageRepeatsRemainSoftPressure() async throws {
         let ledger = VibeBatchLedger()
         await ledger.record(
             VibeGenerationResult(
-                short: "HEAVY DENSE RUBBERY URGENT ENGINE",
-                long: "Velvet midnight waves fold under copper rain.",
+                short: "HEAVY RUBBERY URGENT ENGINE",
+                long: "Velvet midnight waves fold under copper rain and distant stairs.",
                 mixHint: "2AM bridge after rough drums before melodic release"
             )
         )
         let reply = Self.descriptionReply(
             weight: ["MASSIVE"],
-            density: ["SPARSE"],
             texture: ["CRISP"],
             emotion: ["TENDER"],
             signature: ["VEIL"],
-            long: "Velvet midnight waves braid each silver doorway."
+            long: "Velvet midnight waves braid each silver doorway after warm rain."
         )
         let mock = MockClient(replies: [reply, Self.validMovementReply])
         let gen = VibeGeneratorV2(client: mock)
 
         let result = try await gen.generate(inputs: sampleInputs, batchLedger: ledger)
 
-        XCTAssertEqual(result.short, "MASSIVE SPARSE CRISP TENDER VEIL")
-        XCTAssertEqual(result.long, "Velvet midnight waves braid each silver doorway.")
+        XCTAssertEqual(result.short, "MASSIVE CRISP TENDER VEIL")
+        XCTAssertEqual(result.long, "Velvet midnight waves braid each silver doorway after warm rain.")
     }
 
     func testLongFormulaWordsRemainSoftPressure() async throws {
         let reply = Self.descriptionReply(
-            long: "Copper sparks keep creating a glass hallway after rain."
+            long: "Copper sparks keep creating a glass hallway after rain and velvet dusk."
         )
         let mock = MockClient(replies: [reply, Self.validMovementReply])
         let gen = VibeGeneratorV2(client: mock)
 
         let result = try await gen.generate(inputs: sampleInputs)
 
-        XCTAssertEqual(result.short, "HEAVY DENSE RUBBERY URGENT ENGINE")
-        XCTAssertEqual(result.long, "Copper sparks keep creating a glass hallway after rain.")
+        XCTAssertEqual(result.short, "HEAVY RUBBERY URGENT ENGINE")
+        XCTAssertEqual(result.long, "Copper sparks keep creating a glass hallway after rain and velvet dusk.")
     }
 
     func testTemperatureAndModelMatchSpec() async {
