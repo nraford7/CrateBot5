@@ -180,9 +180,9 @@ public actor VibeGeneratorV2 {
         inputs: VibeGenerationInputs,
         includeMixHint: Bool
     ) -> (system: String, user: String) {
-        let mixHintSchema = includeMixHint ? #", "mix_hint": "<single sentence DJ instruction>""# : ""
+        let mixHintSchema = includeMixHint ? #", "mix_hint": "<single sentence tactical mix instruction>""# : ""
         let mixHintLine = includeMixHint
-            ? "Include `mix_hint`: ONE sentence, max 14 words, ACTIONABLE DJ guidance — when in the night to play it, what to mix into it from, what to play after. Reference the Stage 2 Timing label when present. Example: \"Drop after 1am into the peak; follow with a deeper roller around 3am.\""
+            ? "Include `mix_hint`: ONE sentence, max 14 words, TACTICAL mix instruction — START with a verb (Drop, Slot, Bridge, Open, Follow, Cut). Name the slot in the night, what to mix in FROM, what to play AFTER. Reference the Stage 2 Timing label when present. FORBIDDEN words in `mix_hint`: vibe, atmosphere, feel, mood, dark, warm, deep, dreamy, soulful, dirty, hypnotic, lush, raw, woozy, hazy, ethereal, gritty — those belong in `long`, not here. Example: \"Slot at 2am; bridge from rolling tech-house into the warehouse peak.\""
             : "Do NOT include a `mix_hint` field."
 
         let system = """
@@ -190,10 +190,13 @@ public actor VibeGeneratorV2 {
         electronic music track, respond with JSON only — no prose, no markdown fences, \
         no preamble.
 
-        The three fields serve DIFFERENT purposes — never repeat content across them.
+        The three fields serve DIFFERENT purposes — never repeat content across them. \
+        `short` is a memorable nickname. `long` is what the track SOUNDS like. \
+        `mix_hint` is what the DJ DOES with it. If `long` and `mix_hint` could trade \
+        places, you have failed — they must read as different kinds of sentences.
 
         Output schema:
-        {"short": "<3-5 WORD VIBE TAG>", "long": "<single sentence vibe context>"\(mixHintSchema)}
+        {"short": "<3-5 WORD VIBE TAG>", "long": "<single sensory sentence>"\(mixHintSchema)}
 
         Hard rules:
         - `short`: 3-5 words, ALL CAPS, evocative, NO articles, NO punctuation. \
@@ -201,10 +204,13 @@ public actor VibeGeneratorV2 {
           DJ remember the track in a glance. \
           Example: "LATE NIGHT GROOVE CATHEDRAL", "PEAK HOUR ROLLER NEON", \
           "WAREHOUSE SUSTAIN HUSH", "MIDNIGHT BREAKER PRAYER".
-        - `long`: ONE sentence about where this track sits in a SET — the energy arc, \
-          the room it owns, the moment in the night. Max 14 words. \
+        - `long`: ONE SENSORY sentence — what you HEAR. The texture, the instruments \
+          that anchor it, what it does to the body. Max 14 words. \
           Begin with a noun or adjective (NEVER "This is", "A ", "An ", "Track ", "Song "). \
-          Example: "Late-night warehouse roller for the deep hour after the room has settled in."
+          FORBIDDEN words in `long`: set, mix, drop, play, DJ, night, peak, room, slot, \
+          club, dancefloor, hour, after, before, into, follow — those belong in \
+          `mix_hint`, not here. \
+          Example: "Cavernous low-end thuds against a frayed soprano sample reaching for the ceiling."
         - \(mixHintLine)
         - Respond with the JSON object only. No leading prose. No code fences.
         """
