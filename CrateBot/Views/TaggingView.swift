@@ -725,8 +725,13 @@ struct TaggingView: View {
             ? (await engine.stage1ModelVersion ?? "unknown")
             : "unused"
 
+        var wasCancelled = false
+
         for (index, file) in appState.queuedFiles.enumerated() {
-            if Task.isCancelled { break }
+            if Task.isCancelled {
+                wasCancelled = true
+                break
+            }
 
             // Wait while paused (check on MainActor since AppState is @Observable)
             var isPaused = await MainActor.run { appState.isTaggingPaused }
@@ -734,7 +739,10 @@ struct TaggingView: View {
                 try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
                 isPaused = await MainActor.run { appState.isTaggingPaused }
             }
-            if Task.isCancelled { break }
+            if Task.isCancelled {
+                wasCancelled = true
+                break
+            }
 
             await MainActor.run {
                 if index < appState.queuedFiles.count {
@@ -901,6 +909,16 @@ struct TaggingView: View {
                     lastTaggingResult = result
                 }
 
+            } catch is CancellationError {
+                wasCancelled = true
+                await MainActor.run {
+                    if index < appState.queuedFiles.count,
+                       appState.queuedFiles[index].status == .processing {
+                        appState.queuedFiles[index].status = .pending
+                        appState.queuedFiles[index].error = nil
+                    }
+                }
+                break
             } catch {
                 await MainActor.run {
                     if index < appState.queuedFiles.count {
@@ -915,8 +933,18 @@ struct TaggingView: View {
             }
         }
 
+        let cancelledBeforeSummary = wasCancelled || Task.isCancelled
         await MainActor.run {
             appState.isTagging = false
+            appState.isTaggingPaused = false
+            if cancelledBeforeSummary {
+                for index in appState.queuedFiles.indices where appState.queuedFiles[index].status == .processing {
+                    appState.queuedFiles[index].status = .pending
+                    appState.queuedFiles[index].error = nil
+                }
+                return
+            }
+
             let completedCount = appState.queuedFiles.filter { $0.status == .complete }.count
             let errorCount = appState.queuedFiles.filter { $0.status == .error }.count
 

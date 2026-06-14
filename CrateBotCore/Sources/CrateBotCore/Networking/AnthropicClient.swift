@@ -211,6 +211,8 @@ public actor AnthropicClient {
 
         do {
             (data, response) = try await session.data(for: urlRequest)
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             logger.error("Network error: \(error.localizedDescription)")
             throw AnthropicError.networkError(error.localizedDescription)

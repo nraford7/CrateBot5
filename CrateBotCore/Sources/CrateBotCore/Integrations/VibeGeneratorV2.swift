@@ -207,6 +207,8 @@ public actor VibeGeneratorV2 {
             default:
                 throw VibeGeneratorError.generationFailed(error.localizedDescription)
             }
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             throw VibeGeneratorError.generationFailed(error.localizedDescription)
         }

@@ -37,6 +37,7 @@ struct SettingsPanel: View {
                     aboutSection
                 }
                 .padding(Theme.Spacing.lg)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(Theme.Colors.bgWindow)
 
@@ -58,7 +59,7 @@ struct SettingsPanel: View {
             .padding(.vertical, Theme.Spacing.md)
             .background(Theme.Colors.bgWindow)
         }
-        .frame(minWidth: 550, idealWidth: 640, maxWidth: 760, minHeight: 500, idealHeight: 720)
+        .frame(minWidth: 620, idealWidth: 660, maxWidth: 720, minHeight: 560, idealHeight: 720)
         .background(Theme.Colors.bgWindow)
     }
 
@@ -71,13 +72,7 @@ struct SettingsPanel: View {
             sectionHeader("Tagging Strictness")
 
             VStack(spacing: Theme.Spacing.sm) {
-                Picker("Strictness", selection: $appState.taggingPreferences.strictness) {
-                    ForEach(TaggingStrictness.allCases, id: \.self) { level in
-                        Text(level.displayName).tag(level)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                strictnessControl
 
                 Text(appState.taggingPreferences.strictness.description)
                     .font(Theme.Fonts.body(12))
@@ -91,6 +86,52 @@ struct SettingsPanel: View {
             Text("Shifts each tag category's default confidence threshold up or down. Looser settings apply more tags but may include uncertain matches. Essentia predictions are used to validate low-confidence tags.")
                 .font(Theme.Fonts.body(12))
                 .foregroundColor(Theme.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var strictnessControl: some View {
+        @Bindable var appState = appState
+
+        return HStack(spacing: 2) {
+            ForEach(TaggingStrictness.allCases, id: \.self) { level in
+                let selected = appState.taggingPreferences.strictness == level
+                Button {
+                    appState.taggingPreferences.strictness = level
+                    Task {
+                        await appState.syncTaggingPreferences()
+                    }
+                } label: {
+                    Text(strictnessControlLabel(for: level))
+                        .font(Theme.Fonts.body(12))
+                        .fontWeight(selected ? .semibold : .regular)
+                        .foregroundColor(selected ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                        .fill(selected ? Theme.Colors.accentPrimary.opacity(0.85) : Color.clear)
+                )
+                .accessibilityLabel(level.displayName)
+            }
+        }
+        .padding(2)
+        .frame(maxWidth: .infinity)
+        .background(Theme.Colors.bgElevated)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+    }
+
+    private func strictnessControlLabel(for level: TaggingStrictness) -> String {
+        switch level {
+        case .loose: return "Loose -15%"
+        case .average: return "Balanced"
+        case .strict: return "Strict +15%"
+        case .veryStrict: return "Very Strict +25%"
         }
     }
 
@@ -197,6 +238,7 @@ struct SettingsPanel: View {
                 .font(Theme.Fonts.body(12))
                 .foregroundColor(Theme.Colors.textTertiary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Fallback Mappings Section
@@ -264,7 +306,9 @@ struct SettingsPanel: View {
             Text("Fallback mappings apply Essentia predictions when your trained classifiers have low confidence. Uses each tag's resolved threshold (category default plus strictness).")
                 .font(Theme.Fonts.body(12))
                 .foregroundColor(Theme.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(isPresented: $showFallbackEditor) {
             FallbackMappingsEditor()
                 .environment(appState)
@@ -317,13 +361,14 @@ struct SettingsPanel: View {
                 }
 
                 if hasKey {
-                    Text("Key stored in macOS Keychain.")
+                    Text("Key stored locally for this app.")
                         .font(Theme.Fonts.body(12))
                         .foregroundColor(Theme.Colors.textTertiary)
                 } else {
-                    Text("Required for the AI Descriptions toggle. Stored only in your local Keychain; never transmitted except to the Anthropic API.")
+                    Text("Required for AI Descriptions. Stored locally for this app; sent only to Anthropic.")
                         .font(Theme.Fonts.body(12))
                         .foregroundColor(Theme.Colors.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if let error = anthropicKeySaveError {
@@ -342,6 +387,7 @@ struct SettingsPanel: View {
         Text(title)
             .font(Theme.Fonts.heading(16))
             .foregroundColor(Theme.Colors.textPrimary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func fieldToggleRow(label: String, enabled: Binding<Bool>, targetField: String) -> some View {
@@ -356,6 +402,8 @@ struct SettingsPanel: View {
                 Text(targetField)
                     .font(Theme.Fonts.mono(11))
                     .foregroundColor(Theme.Colors.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                     .padding(.horizontal, Theme.Spacing.sm)
                     .padding(.vertical, Theme.Spacing.xs)
                     .background(Theme.Colors.bgElevated)
@@ -363,6 +411,7 @@ struct SettingsPanel: View {
             }
         }
         .padding(.vertical, Theme.Spacing.xs)
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Music Folders Section

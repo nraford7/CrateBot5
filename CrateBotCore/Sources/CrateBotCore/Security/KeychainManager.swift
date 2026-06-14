@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import os.log
 
 /// Storage for the Anthropic API key.
@@ -14,6 +15,7 @@ public final class KeychainManager: Sendable {
 
     private let logger = Logger(subsystem: "com.cratebot", category: "KeychainManager")
     private let defaultsKeyPrefix = "com.cratebot.credentials."
+    private let legacyKeychainService = "com.cratebot.credentials"
 
     public enum Key: String, Sendable {
         case anthropicAPIKey = "anthropic_api_key"
@@ -27,7 +29,17 @@ public final class KeychainManager: Sendable {
     }
 
     public func retrieve(key: Key) -> String? {
-        UserDefaults.standard.string(forKey: defaultsKeyPrefix + key.rawValue)
+        if let stored = UserDefaults.standard.string(forKey: defaultsKeyPrefix + key.rawValue) {
+            return stored
+        }
+
+        if let migrated = retrieveLegacyKeychainValue(for: key) {
+            UserDefaults.standard.set(migrated, forKey: defaultsKeyPrefix + key.rawValue)
+            logger.info("Migrated \(key.rawValue) from legacy Keychain storage")
+            return migrated
+        }
+
+        return nil
     }
 
     public func delete(key: Key) throws {
@@ -36,6 +48,42 @@ public final class KeychainManager: Sendable {
 
     public func exists(key: Key) -> Bool {
         retrieve(key: key) != nil
+    }
+
+    private func retrieveLegacyKeychainValue(for key: Key) -> String? {
+        if let value = retrieveLegacyKeychainValue(for: key, usesDataProtectionKeychain: true) {
+            return value
+        }
+        return retrieveLegacyKeychainValue(for: key, usesDataProtectionKeychain: false)
+    }
+
+    private func retrieveLegacyKeychainValue(
+        for key: Key,
+        usesDataProtectionKeychain: Bool
+    ) -> String? {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: legacyKeychainService,
+            kSecAttrAccount as String: key.rawValue,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        if usesDataProtectionKeychain {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let string = String(data: data, encoding: .utf8),
+              !string.isEmpty else {
+            return nil
+        }
+
+        return string
     }
 }
 

@@ -60,6 +60,25 @@ final class VibeGeneratorV2Tests: XCTestCase {
         }
     }
 
+    /// Throws the same error for every request.
+    private final class ThrowingClient: VibeChatClient, @unchecked Sendable {
+        let error: Error
+
+        init(error: Error) {
+            self.error = error
+        }
+
+        func complete(
+            prompt: String,
+            system: String,
+            maxTokens: Int,
+            temperature: Double,
+            model: String
+        ) async throws -> String {
+            throw error
+        }
+    }
+
     // MARK: - Fixtures
 
     private func makePredictions() -> UserTagPredictions {
@@ -155,6 +174,20 @@ final class VibeGeneratorV2Tests: XCTestCase {
         XCTAssertEqual(r.long, "Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete.")
         XCTAssertEqual(r.mixHint, "2AM bridge after rough drums before melodic release")
         XCTAssertEqual(mock.calls, 2)
+    }
+
+    func testCancellationIsPropagated() async {
+        let gen = VibeGeneratorV2(client: ThrowingClient(error: CancellationError()))
+
+        do {
+            _ = try await gen.generate(inputs: sampleInputs)
+            XCTFail("Expected CancellationError")
+        } catch is CancellationError {
+            // Expected: cancellation must stay cancellation, not become a
+            // VibeGeneratorError.generationFailed row message.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
     }
 
     func testNoJSONInResponseIsRejected() async {
