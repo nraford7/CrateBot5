@@ -5,6 +5,7 @@ import AppKit
 import os.log
 
 private let logger = Logger(subsystem: "com.cratebot", category: "TaggingView")
+private let maxVibeRegenerationPasses = 2
 
 struct TaggingView: View {
     @Environment(AppState.self) private var appState
@@ -185,7 +186,7 @@ struct TaggingView: View {
                 if let error = file.error {
                     Text(error)
                         .font(Theme.Fonts.body(11))
-                        .foregroundColor(Theme.Colors.statusError)
+                        .foregroundColor(file.status == .processing ? Theme.Colors.statusWarning : Theme.Colors.statusError)
                 } else if file.status == .complete, let summary = file.tagsSummary {
                     Text(summary)
                         .font(Theme.Fonts.body(11))
@@ -843,8 +844,9 @@ struct TaggingView: View {
                 // AI descriptions (VibeGeneratorV2). Cache-first when a stable
                 // Stage 1 model version is available; on miss call the LLM;
                 // on success populate all three vibe fields atomically.
-                // On error, clear stale AI frames and mark the row as errored so
-                // legacy Composer/Description values cannot look freshly generated.
+                // Malformed/invalid vibe responses are regenerated before the row
+                // is allowed to fail, so one bad model response does not poison
+                // the completed tag write.
                 if aiDescriptionsEnabled, let generator = vibeGenerator {
                     tagsToWrite.clearVibeFields = true
                     let trackPath = file.url.path
@@ -891,9 +893,12 @@ struct TaggingView: View {
                             cooccurrence: cooccurrence
                         )
                         do {
-                            let generated = try await generator.generate(
+                            let generated = try await generateVibesWithRegeneration(
+                                generator: generator,
                                 inputs: inputs,
-                                batchLedger: vibeBatchLedger
+                                batchLedger: vibeBatchLedger,
+                                fileName: file.url.lastPathComponent,
+                                queueIndex: index
                             )
                             tagsToWrite.vibeShort = generated.short
                             tagsToWrite.vibeDescription = generated.long
@@ -906,7 +911,10 @@ struct TaggingView: View {
                                 )
                             }
                         } catch {
-                            aiDescriptionError = "AI descriptions failed; stale AI fields cleared. \(error.localizedDescription)"
+                            let prefix = isRegenerableVibeError(error)
+                                ? "AI descriptions failed after regeneration"
+                                : "AI descriptions failed"
+                            aiDescriptionError = "\(prefix); stale AI fields cleared. \(error.localizedDescription)"
                             logger.warning("Vibe generation failed for \(file.url.lastPathComponent): \(error.localizedDescription) — stale vibe fields cleared")
                         }
                     }
@@ -967,6 +975,54 @@ struct TaggingView: View {
             } else {
                 appState.showToast("Tagged \(completedCount) file\(completedCount == 1 ? "" : "s"), \(errorCount) failed", kind: .error)
             }
+        }
+    }
+
+    private func generateVibesWithRegeneration(
+        generator: VibeGeneratorV2,
+        inputs: VibeGenerationInputs,
+        batchLedger: VibeBatchLedger?,
+        fileName: String,
+        queueIndex: Int
+    ) async throws -> VibeGenerationResult {
+        var lastError: Error?
+
+        for attempt in 1...maxVibeRegenerationPasses {
+            do {
+                return try await generator.generate(
+                    inputs: inputs,
+                    batchLedger: batchLedger
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                lastError = error
+                guard isRegenerableVibeError(error), attempt < maxVibeRegenerationPasses else {
+                    throw error
+                }
+
+                let nextAttempt = attempt + 1
+                let message = "AI descriptions need regeneration; retrying \(nextAttempt)/\(maxVibeRegenerationPasses)..."
+                logger.warning("Vibe generation needs regeneration for \(fileName): \(error.localizedDescription)")
+                await MainActor.run {
+                    guard queueIndex < appState.queuedFiles.count else { return }
+                    appState.queuedFiles[queueIndex].status = .processing
+                    appState.queuedFiles[queueIndex].error = message
+                }
+                try await Task.sleep(nanoseconds: 250_000_000)
+            }
+        }
+
+        throw lastError ?? VibeGeneratorError.generationFailed("AI descriptions did not produce valid output")
+    }
+
+    private func isRegenerableVibeError(_ error: Error) -> Bool {
+        guard let vibeError = error as? VibeGeneratorError else { return false }
+        switch vibeError {
+        case .parsingFailed, .validationFailed:
+            return true
+        case .apiKeyNotConfigured, .generationFailed:
+            return false
         }
     }
 

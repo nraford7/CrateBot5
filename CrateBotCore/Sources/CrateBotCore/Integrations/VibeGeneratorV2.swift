@@ -174,7 +174,7 @@ public actor VibeGeneratorV2 {
 
     private let client: VibeChatClient
     private let logger = Logger(subsystem: "com.cratebot", category: "VibeGeneratorV2")
-    private static let maxGenerationAttempts = 2
+    private static let maxGenerationAttempts = 3
 
     public init(client: VibeChatClient) {
         self.client = client
@@ -219,8 +219,8 @@ public actor VibeGeneratorV2 {
                 break
             } catch let error as VibeGeneratorError {
                 lastDescriptionError = error
-                guard case .validationFailed(let detail) = error else { throw error }
-                descriptionRepair = detail
+                guard let repairHint = Self.repairHint(for: error) else { throw error }
+                descriptionRepair = repairHint
             }
         }
         guard let resolvedDescription else {
@@ -252,8 +252,8 @@ public actor VibeGeneratorV2 {
                 break
             } catch let error as VibeGeneratorError {
                 lastMovementError = error
-                guard case .validationFailed(let detail) = error else { throw error }
-                movementRepair = detail
+                guard let repairHint = Self.repairHint(for: error) else { throw error }
+                movementRepair = repairHint
             }
         }
         guard let mixHint = resolvedMixHint else {
@@ -292,6 +292,17 @@ public actor VibeGeneratorV2 {
             throw CancellationError()
         } catch {
             throw VibeGeneratorError.generationFailed(error.localizedDescription)
+        }
+    }
+
+    private static func repairHint(for error: VibeGeneratorError) -> String? {
+        switch error {
+        case .validationFailed(let detail):
+            return detail
+        case .parsingFailed(let detail):
+            return "Parsing failed. Return only the required JSON object. Bad response snippet: \(detail)"
+        case .apiKeyNotConfigured, .generationFailed:
+            return nil
         }
     }
 

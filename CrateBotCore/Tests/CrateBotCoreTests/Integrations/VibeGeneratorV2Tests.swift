@@ -418,6 +418,48 @@ final class VibeGeneratorV2Tests: XCTestCase {
         XCTAssertTrue(spy.prompts[1].contains("weight_options has no usable word candidates"))
     }
 
+    func testParsingFailureRetriesDescriptionWithRepairHint() async throws {
+        let spy = SpyClient()
+        spy.replies = [
+            "LOOKING AT THIS TRACK ANALYSIS: no JSON object here",
+            Self.validDescriptionReply,
+            Self.validMovementReply
+        ]
+        let gen = VibeGeneratorV2(client: spy)
+
+        let result = try await gen.generate(inputs: sampleInputs)
+
+        XCTAssertEqual(result.short, "HEAVY RUBBERY URGENT ENGINE")
+        XCTAssertEqual(result.mixHint, "2AM bridge after rough drums before melodic release")
+        XCTAssertEqual(spy.maxTokens, [600, 600, 300])
+        XCTAssertEqual(spy.prompts.count, 3)
+        XCTAssertTrue(spy.prompts[1].contains("Previous response failed validation"))
+        XCTAssertTrue(spy.prompts[1].contains("Parsing failed"))
+    }
+
+    func testDescriptionCanRegenerateThroughMultipleValidationFailures() async throws {
+        let tooLongDescription = Self.descriptionReply(
+            long: "Undulating waves roll beneath ornate patterns, creating hypnotic chambers that pulse with ancient rhythms and modern electronics."
+        )
+        let spy = SpyClient()
+        spy.replies = [
+            tooLongDescription,
+            tooLongDescription,
+            Self.validDescriptionReply,
+            Self.validMovementReply
+        ]
+        let gen = VibeGeneratorV2(client: spy)
+
+        let result = try await gen.generate(inputs: sampleInputs)
+
+        XCTAssertEqual(result.short, "HEAVY RUBBERY URGENT ENGINE")
+        XCTAssertEqual(result.long, "Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete.")
+        XCTAssertEqual(result.mixHint, "2AM bridge after rough drums before melodic release")
+        XCTAssertEqual(spy.maxTokens, [600, 600, 600, 300])
+        XCTAssertTrue(spy.prompts[1].contains("long must be 10 to 16 words"))
+        XCTAssertTrue(spy.prompts[2].contains("long must be 10 to 16 words"))
+    }
+
     func testMovementRejectsCompletedDescriptionRepeats() async {
         let badMovement = #"{"mix_hint":"2AM bridge after velvet drums before melodic release"}"#
         let mock = MockClient(replies: [Self.validDescriptionReply, badMovement])
