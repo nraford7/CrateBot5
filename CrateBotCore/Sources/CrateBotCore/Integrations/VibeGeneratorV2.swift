@@ -180,37 +180,58 @@ public actor VibeGeneratorV2 {
         inputs: VibeGenerationInputs,
         includeMixHint: Bool
     ) -> (system: String, user: String) {
-        let mixHintSchema = includeMixHint ? #", "mix_hint": "<single sentence tactical mix instruction>""# : ""
+        let shortForbidden = Self.forbiddenShortTokens(inputs: inputs)
+        let shortForbiddenLine = shortForbidden.isEmpty
+            ? ""
+            : " FORBIDDEN words in `short` for THIS track (do not use, do not pluralize, do not rhyme on): \(shortForbidden.joined(separator: ", "))."
+
+        let mixHintSchema = includeMixHint ? #", "mix_hint": "<verb-first tactical instruction>""# : ""
         let mixHintLine = includeMixHint
-            ? "Include `mix_hint`: ONE sentence, max 14 words, TACTICAL mix instruction — START with a verb (Drop, Slot, Bridge, Open, Follow, Cut). Name the slot in the night, what to mix in FROM, what to play AFTER. Reference the Stage 2 Timing label when present. FORBIDDEN words in `mix_hint`: vibe, atmosphere, feel, mood, dark, warm, deep, dreamy, soulful, dirty, hypnotic, lush, raw, woozy, hazy, ethereal, gritty — those belong in `long`, not here. Example: \"Slot at 2am; bridge from rolling tech-house into the warehouse peak.\""
+            ? "Include `mix_hint`: ONE sentence, max 14 words. FIRST WORD MUST BE one of: Drop, Slot, Bridge, Open, Cut, Follow, Save, Pair. Then name when in the set, what to bridge from, what to follow with. Reference the Stage 2 Timing label when present. FORBIDDEN words in `mix_hint`: vibe, atmosphere, feel, mood, dark, warm, deep, dreamy, soulful, dirty, hypnotic, lush, raw, woozy, hazy, ethereal, gritty, drift, glow, shimmer, pulse, thud, hum. The mix_hint must NEVER read as a description of the track — it is an ORDER to the DJ. Example: \"Slot at 2am; bridge from rolling tech-house into the warehouse peak.\""
             : "Do NOT include a `mix_hint` field."
+
+        let exampleBlock = includeMixHint
+            ? "{\"short\": \"WAREHOUSE PRAYER HUSH\", \"long\": \"Cavernous low-end thuds against a frayed soprano sample reaching for the ceiling.\", \"mix_hint\": \"Slot at 2am; bridge from rolling tech-house into the warehouse peak.\"}"
+            : "{\"short\": \"WAREHOUSE PRAYER HUSH\", \"long\": \"Cavernous low-end thuds against a frayed soprano sample reaching for the ceiling.\"}"
 
         let system = """
         You are a veteran DJ tagging a record crate. Given a JSON analysis of one \
         electronic music track, respond with JSON only — no prose, no markdown fences, \
         no preamble.
 
-        The three fields serve DIFFERENT purposes — never repeat content across them. \
-        `short` is a memorable nickname. `long` is what the track SOUNDS like. \
-        `mix_hint` is what the DJ DOES with it. If `long` and `mix_hint` could trade \
-        places, you have failed — they must read as different kinds of sentences.
+        The fields are NOT three flavors of the same description. They are three \
+        DIFFERENT kinds of sentence:
+          • `short` — a poetic NICKNAME the DJ can remember in a glance. NEVER repeats \
+            the title, artist, genre, mood, or any tag — it distills the track in \
+            fresh language.
+          • `long` — a SENSORY snapshot of what the track SOUNDS like, as if reviewing \
+            the record blind. Noun-first. No DJ verbs. No time-of-night.
+          • `mix_hint` — a TACTICAL ORDER to the DJ. Verb-first. Says when to play it \
+            and what to play around it. No sensory adjectives.
+
+        If `long` and `mix_hint` could swap fields without changing meaning, you have failed.
 
         Output schema:
-        {"short": "<3-5 WORD VIBE TAG>", "long": "<single sensory sentence>"\(mixHintSchema)}
+        {"short": "<3-5 CAPS WORD NICKNAME>", "long": "<sensory sentence>"\(mixHintSchema)}
+
+        Reference example for a DIFFERENT track (DO NOT copy these specific words):
+        \(exampleBlock)
 
         Hard rules:
         - `short`: 3-5 words, ALL CAPS, evocative, NO articles, NO punctuation. \
-          Mix a concrete vibe descriptor with a POETIC or unexpected word that helps the \
-          DJ remember the track in a glance. \
-          Example: "LATE NIGHT GROOVE CATHEDRAL", "PEAK HOUR ROLLER NEON", \
-          "WAREHOUSE SUSTAIN HUSH", "MIDNIGHT BREAKER PRAYER".
+          A distillation in FRESH words — never echo the track title, artist, genre, \
+          mood, or any predicted tag.\(shortForbiddenLine) \
+          Pair a concrete vibe descriptor with a POETIC or unexpected word. \
+          Good shape: "LATE NIGHT GROOVE CATHEDRAL", "MIDNIGHT BREAKER PRAYER", \
+          "WAREHOUSE SUSTAIN HUSH".
         - `long`: ONE SENSORY sentence — what you HEAR. The texture, the instruments \
           that anchor it, what it does to the body. Max 14 words. \
-          Begin with a noun or adjective (NEVER "This is", "A ", "An ", "Track ", "Song "). \
+          Begin with a noun or adjective (NEVER "This is", "A ", "An ", "Track ", "Song ", \
+          "Opener", "Anthem", "Banger"). \
           FORBIDDEN words in `long`: set, mix, drop, play, DJ, night, peak, room, slot, \
-          club, dancefloor, hour, after, before, into, follow — those belong in \
-          `mix_hint`, not here. \
-          Example: "Cavernous low-end thuds against a frayed soprano sample reaching for the ceiling."
+          club, dancefloor, hour, opener, anthem, opening, prime, after, before, into, \
+          follow, builds, owns, lifts, banger — those are placement words and belong \
+          in `mix_hint`, not here.
         - \(mixHintLine)
         - Respond with the JSON object only. No leading prose. No code fences.
         """
@@ -223,6 +244,49 @@ public actor VibeGeneratorV2 {
         """
 
         return (system, user)
+    }
+
+    /// Build the per-track forbidden-token list for `short`.
+    ///
+    /// Pulls every word from title, artist, genre, mood, vibes, style, instruments,
+    /// rhythm, bassType, vocalType, and customTags, then strips punctuation, lowercases,
+    /// drops common stop-words, drops single characters, and dedupes. The result is
+    /// injected into the `short` rule so the model sees the literal tokens it must
+    /// avoid for this specific track — much harder to ignore than abstract categories.
+    internal static func forbiddenShortTokens(inputs: VibeGenerationInputs) -> [String] {
+        let stopWords: Set<String> = [
+            "the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "by",
+            "for", "with", "is", "it", "as", "feat", "ft", "vs", "remix", "mix",
+            "edit", "version", "original", "extended", "club", "radio",
+            "instrumental", "vocal", "dub"
+        ]
+        var sources: [String] = []
+        if let t = inputs.title { sources.append(t) }
+        if let a = inputs.artist { sources.append(a) }
+        let tags = inputs.predictedTags
+        if let g = tags.genre { sources.append(g) }
+        if let m = tags.mood { sources.append(m) }
+        if let b = tags.bassType { sources.append(b) }
+        if let v = tags.vocalType { sources.append(v) }
+        sources.append(contentsOf: tags.vibes)
+        sources.append(contentsOf: tags.style)
+        sources.append(contentsOf: tags.instruments)
+        sources.append(contentsOf: tags.rhythm)
+        sources.append(contentsOf: tags.customTags)
+
+        var seen: Set<String> = []
+        var out: [String] = []
+        for raw in sources {
+            let cleaned = raw.unicodeScalars
+                .map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }
+            let parts = String(cleaned).split(separator: " ")
+            for part in parts {
+                let token = part.lowercased()
+                guard token.count >= 2, !stopWords.contains(token), seen.insert(token).inserted else { continue }
+                out.append(token)
+            }
+        }
+        return out
     }
 
     // MARK: - Parsing helpers
