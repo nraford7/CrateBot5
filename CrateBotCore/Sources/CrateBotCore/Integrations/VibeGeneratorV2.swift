@@ -826,10 +826,6 @@ public actor VibeGeneratorV2 {
         "track", "song", "tune"
     ]
 
-    private static let longBannedFormulaTokens: Set<String> = [
-        "creating", "featuring"
-    ]
-
     private static let movementCueTokens: Set<String> = [
         "drop", "slot", "bridge", "open", "cut", "follow", "save", "pair",
         "hold", "stack", "after", "before", "between", "from", "into", "when",
@@ -902,10 +898,6 @@ public actor VibeGeneratorV2 {
         if let token = reviewOverlap.sorted().first {
             throw VibeGeneratorError.validationFailed("long uses generic review noun '\(token)'")
         }
-        let formulaOverlap = Set(words).intersection(longBannedFormulaTokens)
-        if let token = formulaOverlap.sorted().first {
-            throw VibeGeneratorError.validationFailed("long uses stale formula token '\(token)'")
-        }
         let instructionOverlap = Set(words).intersection(longInstructionTokens)
         if let token = instructionOverlap.sorted().first {
             throw VibeGeneratorError.validationFailed("long contains DJ-use token '\(token)'")
@@ -915,14 +907,6 @@ public actor VibeGeneratorV2 {
         let overlap = significantTokens(in: long).intersection(significantTokens(in: short))
         if let token = overlap.sorted().first {
             throw VibeGeneratorError.validationFailed("long repeats short token '\(token)'")
-        }
-        if let batchSnapshot {
-            let repeated = significantTokens(in: long)
-                .filter { (batchSnapshot.longTokens[$0] ?? 0) > 0 }
-                .sorted()
-            if repeated.count >= 2 {
-                throw VibeGeneratorError.validationFailed("long repeats batch image tokens \(repeated.prefix(4).joined(separator: ", "))")
-            }
         }
     }
 
