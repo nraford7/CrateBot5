@@ -61,6 +61,9 @@ struct SettingsPanel: View {
         }
         .frame(minWidth: 620, idealWidth: 660, maxWidth: 720, minHeight: 560, idealHeight: 720)
         .background(Theme.Colors.bgWindow)
+        .onAppear {
+            appState.disableAIDescriptionsIfKeyUnavailable()
+        }
     }
 
     // MARK: - Strictness Section
@@ -192,10 +195,10 @@ struct SettingsPanel: View {
                     targetField: appState.taggingPreferences.vibesLong.targetField
                 )
 
-                let hasAnthropicKey = KeychainManager.shared.exists(key: .anthropicAPIKey)
+                let hasAnthropicKey = appState.canUseAnthropicAPI
                 fieldToggleRow(
                     label: "AI Descriptions",
-                    enabled: $appState.taggingPreferences.aiDescriptions.enabled,
+                    enabled: aiDescriptionsEnabledBinding,
                     targetField: appState.taggingPreferences.aiDescriptions.targetField
                 )
                 .disabled(!hasAnthropicKey)
@@ -329,7 +332,7 @@ struct SettingsPanel: View {
                     .font(Theme.Fonts.body(13))
                     .foregroundColor(Theme.Colors.textPrimary)
 
-                let hasKey = KeychainManager.shared.exists(key: .anthropicAPIKey)
+                let hasKey = appState.canUseAnthropicAPI
 
                 HStack(spacing: Theme.Spacing.sm) {
                     SecureField(hasKey ? "Stored — enter a new value to replace" : "sk-ant-...", text: $anthropicKeyDraft)
@@ -353,6 +356,7 @@ struct SettingsPanel: View {
                             anthropicKeySaveError = nil
                             do {
                                 try appState.setAnthropicAPIKey(nil)
+                                appState.disableAIDescriptionsIfKeyUnavailable()
                             } catch {
                                 anthropicKeySaveError = error.localizedDescription
                             }
@@ -411,7 +415,18 @@ struct SettingsPanel: View {
             }
         }
         .padding(.vertical, Theme.Spacing.xs)
-        .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity)
+    }
+
+    private var aiDescriptionsEnabledBinding: Binding<Bool> {
+        Binding(
+            get: {
+                appState.canUseAnthropicAPI && appState.taggingPreferences.aiDescriptions.enabled
+            },
+            set: { enabled in
+                appState.setAIDescriptionsEnabled(enabled)
+            }
+        )
     }
 
     // MARK: - Music Folders Section

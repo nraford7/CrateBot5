@@ -24,7 +24,7 @@ public final class KeychainManager: Sendable {
     private init() {}
 
     public func save(_ value: String, for key: Key) throws {
-        let normalized = normalizeCredential(value)
+        let normalized = Self.normalizedCredential(value)
         guard !normalized.isEmpty else {
             throw KeychainError.emptyCredential
         }
@@ -35,7 +35,7 @@ public final class KeychainManager: Sendable {
 
     public func retrieve(key: Key) -> String? {
         if let stored = UserDefaults.standard.string(forKey: defaultsKeyPrefix + key.rawValue) {
-            let normalized = normalizeCredential(stored)
+            let normalized = Self.normalizedCredential(stored)
             guard !normalized.isEmpty else {
                 UserDefaults.standard.removeObject(forKey: defaultsKeyPrefix + key.rawValue)
                 logger.warning("Removed empty \(key.rawValue) from UserDefaults")
@@ -97,11 +97,11 @@ public final class KeychainManager: Sendable {
             return nil
         }
 
-        let normalized = normalizeCredential(string)
+        let normalized = Self.normalizedCredential(string)
         return normalized.isEmpty ? nil : normalized
     }
 
-    private func normalizeCredential(_ value: String) -> String {
+    static func normalizedCredential(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

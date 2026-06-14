@@ -653,6 +653,7 @@ struct TaggingView: View {
     }
 
     private func startTagging() {
+        appState.disableAIDescriptionsIfKeyUnavailable()
         appState.isTagging = true
         appState.taggingProgress = 0.0
         appState.isTaggingPaused = false
@@ -713,7 +714,7 @@ struct TaggingView: View {
         // when off, the rest of the pass behaves exactly as before.
         let aiDescriptionsEnabled =
             appState.taggingPreferences.aiDescriptions.enabled
-            && KeychainManager.shared.exists(key: .anthropicAPIKey)
+            && appState.canUseAnthropicAPI
         let vibeCache: VibeCache? = aiDescriptionsEnabled ? VibeCache() : nil
         let vibeGenerator: VibeGeneratorV2? = aiDescriptionsEnabled
             ? VibeGeneratorV2(client: AnthropicVibeChatClient(client: AnthropicClient()))

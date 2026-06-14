@@ -66,7 +66,23 @@ final class AppState {
 
     /// Check if API key is configured
     var hasAnthropicAPIKey: Bool {
-        KeychainManager.shared.exists(key: .anthropicAPIKey)
+        canUseAnthropicAPI
+    }
+
+    /// True only when the app can retrieve a non-empty Anthropic key right now.
+    var canUseAnthropicAPI: Bool {
+        KeychainManager.shared.retrieve(key: .anthropicAPIKey) != nil
+    }
+
+    /// AI descriptions are not allowed to remain enabled without key access.
+    func setAIDescriptionsEnabled(_ enabled: Bool) {
+        taggingPreferences.aiDescriptions.enabled = enabled && canUseAnthropicAPI
+    }
+
+    func disableAIDescriptionsIfKeyUnavailable() {
+        if !canUseAnthropicAPI {
+            taggingPreferences.aiDescriptions.enabled = false
+        }
     }
 
     // MARK: - Model Loading

@@ -93,10 +93,10 @@ struct TaggingSettingsSheet: View {
                             targetField: $appState.taggingPreferences.vibesLong.targetField
                         )
 
-                        let hasAnthropicKey = KeychainManager.shared.exists(key: .anthropicAPIKey)
+                        let hasAnthropicKey = appState.canUseAnthropicAPI
                         tagFieldRow(
                             label: "AI Descriptions",
-                            enabled: $appState.taggingPreferences.aiDescriptions.enabled,
+                            enabled: aiDescriptionsEnabledBinding,
                             targetField: $appState.taggingPreferences.aiDescriptions.targetField
                         )
                         .disabled(!hasAnthropicKey)
@@ -182,6 +182,9 @@ struct TaggingSettingsSheet: View {
             .background(Theme.Colors.bgElevated)
         }
         .frame(width: 500, height: 620)
+        .onAppear {
+            appState.disableAIDescriptionsIfKeyUnavailable()
+        }
     }
 
     // MARK: - Fallback Mappings Card
@@ -261,6 +264,17 @@ struct TaggingSettingsSheet: View {
     }
 
     // MARK: - Tag Field Row
+
+    private var aiDescriptionsEnabledBinding: Binding<Bool> {
+        Binding(
+            get: {
+                appState.canUseAnthropicAPI && appState.taggingPreferences.aiDescriptions.enabled
+            },
+            set: { enabled in
+                appState.setAIDescriptionsEnabled(enabled)
+            }
+        )
+    }
 
     private func tagFieldRow(
         label: String,
