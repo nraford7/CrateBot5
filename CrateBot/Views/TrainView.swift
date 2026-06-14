@@ -32,6 +32,10 @@ enum ID3Field: String, CaseIterable, Identifiable, Codable {
 
     var shortName: String { rawValue }
 
+    static var generatedTagTargets: [ID3Field] {
+        allCases.filter { $0 != .artist }
+    }
+
     var iTunesDescription: String {
         switch self {
         case .genre: return "Main genre classification"
@@ -147,16 +151,28 @@ extension ID3Field {
 /// Configuration for mapping ID3 fields to training categories
 struct TagMappingConfiguration: Equatable, Codable {
     var genreField: ID3Field = .genre
-    var timingField: ID3Field = .album
+    var timingField: ID3Field = .albumArtist
     var moodField: ID3Field = .grouping
     var descriptiveField: ID3Field = .comments
 
     static let `default` = TagMappingConfiguration()
 
+    init(
+        genreField: ID3Field = .genre,
+        timingField: ID3Field = .albumArtist,
+        moodField: ID3Field = .grouping,
+        descriptiveField: ID3Field = .comments
+    ) {
+        self.genreField = Self.nonArtistField(genreField, fallback: .genre)
+        self.timingField = Self.nonArtistField(timingField, fallback: .albumArtist)
+        self.moodField = Self.nonArtistField(moodField, fallback: .grouping)
+        self.descriptiveField = Self.nonArtistField(descriptiveField, fallback: .comments)
+    }
+
     var coreMapping: TrainingDataCollector.TagFieldMapping {
         .init(
             genreField: genreField.coreFieldType ?? .genre,
-            timingField: timingField.coreFieldType ?? .album,
+            timingField: timingField.coreFieldType ?? .albumArtist,
             moodField: moodField.coreFieldType ?? .contentGroup,
             descriptiveField: descriptiveField.coreFieldType ?? .comments
         )
@@ -174,7 +190,21 @@ struct TagMappingConfiguration: Equatable, Codable {
 
     // MARK: - Persistence
 
+    private enum CodingKeys: String, CodingKey {
+        case genreField, timingField, moodField, descriptiveField
+    }
+
     private static let userDefaultsKey = "CrateBot.TagMappingConfiguration"
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            genreField: try container.decodeIfPresent(ID3Field.self, forKey: .genreField) ?? .genre,
+            timingField: try container.decodeIfPresent(ID3Field.self, forKey: .timingField) ?? .albumArtist,
+            moodField: try container.decodeIfPresent(ID3Field.self, forKey: .moodField) ?? .grouping,
+            descriptiveField: try container.decodeIfPresent(ID3Field.self, forKey: .descriptiveField) ?? .comments
+        )
+    }
 
     /// Save to UserDefaults
     func save() {
@@ -189,11 +219,25 @@ struct TagMappingConfiguration: Equatable, Codable {
               let config = try? JSONDecoder().decode(TagMappingConfiguration.self, from: data) else {
             return .default
         }
+        let sanitized = config.sanitized
         // Re-save in current bare-rawValue format. Cheap; migrates legacy "(TPE2)" suffixes.
-        if let current = try? JSONEncoder().encode(config) {
+        if let current = try? JSONEncoder().encode(sanitized) {
             UserDefaults.standard.set(current, forKey: userDefaultsKey)
         }
-        return config
+        return sanitized
+    }
+
+    private var sanitized: TagMappingConfiguration {
+        .init(
+            genreField: genreField,
+            timingField: timingField,
+            moodField: moodField,
+            descriptiveField: descriptiveField
+        )
+    }
+
+    private static func nonArtistField(_ field: ID3Field, fallback: ID3Field) -> ID3Field {
+        field == .artist ? fallback : field
     }
 }
 
@@ -1316,7 +1360,7 @@ struct TagSelectionSheet: View {
             .frame(width: 120, alignment: .leading)
 
             Picker("", selection: selection) {
-                ForEach(ID3Field.allCases) { field in
+                ForEach(ID3Field.generatedTagTargets) { field in
                     Text(field.shortName).tag(field)
                 }
             }

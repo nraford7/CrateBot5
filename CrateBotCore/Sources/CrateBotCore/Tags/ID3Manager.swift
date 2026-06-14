@@ -568,7 +568,9 @@ public actor ID3Manager {
         case .title:
             return builder.title(frame: ID3FrameWithStringContent(content: value))
         case .artist:
-            return builder.artist(frame: ID3FrameWithStringContent(content: value))
+            // Generated CrateBot tags must never write TPE1/Artist. Existing
+            // artist values are preserved separately when rebuilding a tag.
+            return builder
         case .albumArtist:
             return builder.albumArtist(frame: ID3FrameWithStringContent(content: value))
         case .album:

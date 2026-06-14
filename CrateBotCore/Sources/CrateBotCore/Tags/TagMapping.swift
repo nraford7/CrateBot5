@@ -208,7 +208,7 @@ public struct WriteFieldMapping: Sendable, Equatable, Codable {
     /// Frame to write genre to (default: TCON)
     public var genreFrame: ID3FrameType
 
-    /// Frame to write timing to (default: TALB)
+    /// Frame to write timing to (default: TPE2 / Album Artist)
     public var timingFrame: ID3FrameType
 
     /// Frame to write mood to (default: TIT1)
@@ -219,18 +219,36 @@ public struct WriteFieldMapping: Sendable, Equatable, Codable {
 
     public init(
         genreFrame: ID3FrameType = .genre,
-        timingFrame: ID3FrameType = .album,
+        timingFrame: ID3FrameType = .albumArtist,
         moodFrame: ID3FrameType = .contentGroup,
         descriptiveFrame: ID3FrameType = .comments
     ) {
-        self.genreFrame = genreFrame
-        self.timingFrame = timingFrame
-        self.moodFrame = moodFrame
-        self.descriptiveFrame = descriptiveFrame
+        self.genreFrame = Self.nonArtistFrame(genreFrame, fallback: .genre)
+        self.timingFrame = Self.nonArtistFrame(timingFrame, fallback: .albumArtist)
+        self.moodFrame = Self.nonArtistFrame(moodFrame, fallback: .contentGroup)
+        self.descriptiveFrame = Self.nonArtistFrame(descriptiveFrame, fallback: .comments)
     }
 
-    /// Default field mapping (legacy behavior)
+    /// Default field mapping for generated CrateBot tags.
     public static let `default` = WriteFieldMapping()
+
+    private enum CodingKeys: String, CodingKey {
+        case genreFrame, timingFrame, moodFrame, descriptiveFrame
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            genreFrame: try container.decodeIfPresent(ID3FrameType.self, forKey: .genreFrame) ?? .genre,
+            timingFrame: try container.decodeIfPresent(ID3FrameType.self, forKey: .timingFrame) ?? .albumArtist,
+            moodFrame: try container.decodeIfPresent(ID3FrameType.self, forKey: .moodFrame) ?? .contentGroup,
+            descriptiveFrame: try container.decodeIfPresent(ID3FrameType.self, forKey: .descriptiveFrame) ?? .comments
+        )
+    }
+
+    private static func nonArtistFrame(_ frame: ID3FrameType, fallback: ID3FrameType) -> ID3FrameType {
+        frame == .artist ? fallback : frame
+    }
 }
 
 /// ID3 frame types for configurable field mapping

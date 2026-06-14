@@ -292,7 +292,7 @@ struct TaggingSettingsSheet: View {
             if enabled.wrappedValue {
                 Menu {
                     // Standard ID3 fields
-                    ForEach(ID3Field.allCases) { field in
+                    ForEach(ID3Field.generatedTagTargets) { field in
                         Button {
                             targetField.wrappedValue = field.frameID
                         } label: {

@@ -205,6 +205,38 @@ final class ID3ManagerTests: XCTestCase {
         XCTAssertFalse(tags.overwrite)
     }
 
+    func testWriteFieldMappingSanitizesArtistTargets() {
+        let mapping = WriteFieldMapping(
+            genreFrame: .artist,
+            timingFrame: .artist,
+            moodFrame: .artist,
+            descriptiveFrame: .artist
+        )
+
+        XCTAssertEqual(mapping.genreFrame, .genre)
+        XCTAssertEqual(mapping.timingFrame, .albumArtist)
+        XCTAssertEqual(mapping.moodFrame, .contentGroup)
+        XCTAssertEqual(mapping.descriptiveFrame, .comments)
+    }
+
+    func testWriteFieldMappingDecodingSanitizesArtistTargets() throws {
+        let data = """
+        {
+          "genreFrame": "artist",
+          "timingFrame": "artist",
+          "moodFrame": "artist",
+          "descriptiveFrame": "artist"
+        }
+        """.data(using: .utf8)!
+
+        let mapping = try JSONDecoder().decode(WriteFieldMapping.self, from: data)
+
+        XCTAssertEqual(mapping.genreFrame, .genre)
+        XCTAssertEqual(mapping.timingFrame, .albumArtist)
+        XCTAssertEqual(mapping.moodFrame, .contentGroup)
+        XCTAssertEqual(mapping.descriptiveFrame, .comments)
+    }
+
     func testTagsToWriteEquatable() {
         let tags1 = TagsToWrite(genre: "House", mood: "Energetic")
         let tags2 = TagsToWrite(genre: "House", mood: "Energetic")
@@ -606,6 +638,39 @@ final class ID3ManagerTests: XCTestCase {
         XCTAssertEqual(readTags.publisher, "New Genre")
         XCTAssertEqual(readTags.conductor, "New Mood")
         XCTAssertEqual(readTags.encodedBy, "New Instruments")
+    }
+
+    func testID3ManagerNeverWritesGeneratedTagsToArtistFrame() async throws {
+        let manager = ID3Manager()
+
+        let (tempURL, cleanup) = try createWritableTestMP3()
+        defer { cleanup() }
+
+        let originalArtist = try await manager.readTags(from: tempURL).artist
+        let artistTargetMapping = WriteFieldMapping(
+            genreFrame: .artist,
+            timingFrame: .artist,
+            moodFrame: .artist,
+            descriptiveFrame: .artist
+        )
+
+        try await manager.writeTags(
+            TagsToWrite(
+                genre: "House",
+                timing: "Peak",
+                mood: "Dark",
+                comments: "Generated comments",
+                fieldMapping: artistTargetMapping
+            ),
+            to: tempURL
+        )
+
+        let readTags = try await manager.readTags(from: tempURL)
+        XCTAssertEqual(readTags.artist, originalArtist)
+        XCTAssertNotEqual(readTags.artist, "House")
+        XCTAssertNotEqual(readTags.artist, "Peak")
+        XCTAssertNotEqual(readTags.artist, "Dark")
+        XCTAssertNotEqual(readTags.artist, "Generated comments")
     }
 
     func testID3ManagerWriteAndReadVibeFieldsIncludingMovement() async throws {

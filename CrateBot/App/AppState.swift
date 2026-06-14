@@ -484,7 +484,7 @@ enum TaggingStrictness: String, Codable, CaseIterable {
 struct TaggingPreferences: Codable {
     var genre = FieldPreference(enabled: true, targetField: "TCON")
     var subGenre = FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_SUBGENRE")
-    var album = FieldPreference(enabled: true, targetField: "TALB")
+    var album = FieldPreference(enabled: true, targetField: "TPE2")
     var mood = FieldPreference(enabled: true, targetField: "TIT1")
     var comments = FieldPreference(enabled: true, targetField: "COMM")
     var likeness = FieldPreference(enabled: true, targetField: "TIT1")
@@ -512,7 +512,7 @@ struct TaggingPreferences: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         genre = try container.decodeIfPresent(FieldPreference.self, forKey: .genre) ?? FieldPreference(enabled: true, targetField: "TCON")
         subGenre = try container.decodeIfPresent(FieldPreference.self, forKey: .subGenre) ?? FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_SUBGENRE")
-        album = try container.decodeIfPresent(FieldPreference.self, forKey: .album) ?? FieldPreference(enabled: true, targetField: "TALB")
+        album = try container.decodeIfPresent(FieldPreference.self, forKey: .album) ?? FieldPreference(enabled: true, targetField: "TPE2")
         mood = try container.decodeIfPresent(FieldPreference.self, forKey: .mood) ?? FieldPreference(enabled: true, targetField: "TIT1")
         comments = try container.decodeIfPresent(FieldPreference.self, forKey: .comments) ?? FieldPreference(enabled: true, targetField: "COMM")
         likeness = try container.decodeIfPresent(FieldPreference.self, forKey: .likeness) ?? FieldPreference(enabled: true, targetField: "TIT1")
@@ -536,12 +536,36 @@ struct TaggingPreferences: Codable {
             vibesShort = FieldPreference(enabled: false, targetField: "TXXX:CRATEBOT_VIBE_SHORT")
             vibesLong = FieldPreference(enabled: false, targetField: "COMM")
         }
+
+        sanitizeArtistTargets()
     }
 
     private struct LegacyVibesPreference: Codable {
         var enabled: Bool
         var shortTargetField: String
         var longTargetField: String
+    }
+
+    private mutating func sanitizeArtistTargets() {
+        genre = Self.nonArtistPreference(genre, fallback: "TCON")
+        subGenre = Self.nonArtistPreference(subGenre, fallback: "TIT1")
+        album = Self.nonArtistPreference(album, fallback: "TPE2")
+        mood = Self.nonArtistPreference(mood, fallback: "TIT1")
+        comments = Self.nonArtistPreference(comments, fallback: "COMM")
+        likeness = Self.nonArtistPreference(likeness, fallback: "TIT1")
+        vibesShort = Self.nonArtistPreference(vibesShort, fallback: "TCOM")
+        vibesLong = Self.nonArtistPreference(vibesLong, fallback: "TIT3")
+        aiDescriptions = Self.nonArtistPreference(aiDescriptions, fallback: "TCOM/TIT3/MVNM")
+        hooks = Self.nonArtistPreference(hooks, fallback: "TXXX:WORK")
+    }
+
+    private static func nonArtistPreference(_ preference: FieldPreference, fallback: String) -> FieldPreference {
+        let target = preference.targetField.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard target.caseInsensitiveCompare("TPE1") == .orderedSame
+            || target.caseInsensitiveCompare("Artist") == .orderedSame else {
+            return preference
+        }
+        return FieldPreference(enabled: preference.enabled, targetField: fallback)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -567,6 +591,7 @@ struct TaggingPreferences: Codable {
               let prefs = try? JSONDecoder().decode(TaggingPreferences.self, from: data) else {
             return TaggingPreferences()
         }
+        prefs.save()
         return prefs
     }
 
