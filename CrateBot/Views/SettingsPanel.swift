@@ -346,7 +346,7 @@ struct SettingsPanel: View {
                         }
                     }
                     .buttonStyle(PrimaryButtonStyle())
-                    .disabled(anthropicKeyDraft.isEmpty)
+                    .disabled(anthropicKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     if hasKey {
                         Button("Remove") {

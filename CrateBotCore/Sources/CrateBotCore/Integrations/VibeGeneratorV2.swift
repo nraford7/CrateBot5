@@ -204,6 +204,9 @@ public actor VibeGeneratorV2 {
             switch error {
             case .apiKeyNotConfigured:
                 throw VibeGeneratorError.apiKeyNotConfigured
+            case .requestFailed(let statusCode, let message)
+                where statusCode == 401 && message.localizedCaseInsensitiveContains("x-api-key"):
+                throw VibeGeneratorError.apiKeyNotConfigured
             default:
                 throw VibeGeneratorError.generationFailed(error.localizedDescription)
             }

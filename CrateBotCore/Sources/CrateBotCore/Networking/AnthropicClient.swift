@@ -188,7 +188,8 @@ public actor AnthropicClient {
 
     /// Send a message request to the API
     public func sendMessage(_ request: MessageRequest) async throws -> MessageResponse {
-        guard let apiKey = KeychainManager.shared.retrieve(key: .anthropicAPIKey) else {
+        guard let apiKey = KeychainManager.shared.retrieve(key: .anthropicAPIKey),
+              !apiKey.isEmpty else {
             logger.error("API key not configured")
             throw AnthropicError.apiKeyNotConfigured
         }

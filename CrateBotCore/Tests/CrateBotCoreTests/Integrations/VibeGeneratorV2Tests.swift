@@ -190,6 +190,29 @@ final class VibeGeneratorV2Tests: XCTestCase {
         }
     }
 
+    func testMissingAPIKeyHeaderMapsToAPIKeyNotConfigured() async {
+        let gen = VibeGeneratorV2(
+            client: ThrowingClient(
+                error: AnthropicError.requestFailed(
+                    statusCode: 401,
+                    message: "x-api-key header is required"
+                )
+            )
+        )
+
+        do {
+            _ = try await gen.generate(inputs: sampleInputs)
+            XCTFail("Expected apiKeyNotConfigured")
+        } catch let error as VibeGeneratorError {
+            switch error {
+            case .apiKeyNotConfigured: break
+            default: XCTFail("Expected apiKeyNotConfigured, got \(error)")
+            }
+        } catch {
+            XCTFail("Expected VibeGeneratorError.apiKeyNotConfigured, got \(error)")
+        }
+    }
+
     func testNoJSONInResponseIsRejected() async {
         // Reply contains no `{` at all — the brace extractor returns nil and
         // the generator must throw `parsingFailed`. This is the actual contract

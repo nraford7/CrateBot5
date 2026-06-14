@@ -56,8 +56,9 @@ final class AppState {
 
     /// Set the Anthropic API key in Keychain
     func setAnthropicAPIKey(_ key: String?) throws {
-        if let key = key, !key.isEmpty {
-            try KeychainManager.shared.save(key, for: .anthropicAPIKey)
+        let normalized = key?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !normalized.isEmpty {
+            try KeychainManager.shared.save(normalized, for: .anthropicAPIKey)
         } else {
             try KeychainManager.shared.delete(key: .anthropicAPIKey)
         }

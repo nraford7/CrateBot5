@@ -24,22 +24,37 @@ public final class KeychainManager: Sendable {
     private init() {}
 
     public func save(_ value: String, for key: Key) throws {
-        UserDefaults.standard.set(value, forKey: defaultsKeyPrefix + key.rawValue)
+        let normalized = normalizeCredential(value)
+        guard !normalized.isEmpty else {
+            throw KeychainError.emptyCredential
+        }
+
+        UserDefaults.standard.set(normalized, forKey: defaultsKeyPrefix + key.rawValue)
         logger.info("Saved \(key.rawValue) to UserDefaults")
     }
 
     public func retrieve(key: Key) -> String? {
         if let stored = UserDefaults.standard.string(forKey: defaultsKeyPrefix + key.rawValue) {
-            return stored
+            let normalized = normalizeCredential(stored)
+            guard !normalized.isEmpty else {
+                UserDefaults.standard.removeObject(forKey: defaultsKeyPrefix + key.rawValue)
+                logger.warning("Removed empty \(key.rawValue) from UserDefaults")
+                return retrieveMigratedLegacyValue(for: key)
+            }
+            return normalized
         }
 
-        if let migrated = retrieveLegacyKeychainValue(for: key) {
-            UserDefaults.standard.set(migrated, forKey: defaultsKeyPrefix + key.rawValue)
-            logger.info("Migrated \(key.rawValue) from legacy Keychain storage")
-            return migrated
+        return retrieveMigratedLegacyValue(for: key)
+    }
+
+    private func retrieveMigratedLegacyValue(for key: Key) -> String? {
+        guard let migrated = retrieveLegacyKeychainValue(for: key) else {
+            return nil
         }
 
-        return nil
+        UserDefaults.standard.set(migrated, forKey: defaultsKeyPrefix + key.rawValue)
+        logger.info("Migrated \(key.rawValue) from legacy Keychain storage")
+        return migrated
     }
 
     public func delete(key: Key) throws {
@@ -78,17 +93,22 @@ public final class KeychainManager: Sendable {
 
         guard status == errSecSuccess,
               let data = result as? Data,
-              let string = String(data: data, encoding: .utf8),
-              !string.isEmpty else {
+              let string = String(data: data, encoding: .utf8) else {
             return nil
         }
 
-        return string
+        let normalized = normalizeCredential(string)
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func normalizeCredential(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
 public enum KeychainError: Error, LocalizedError {
     case encodingFailed
+    case emptyCredential
     case saveFailed(OSStatus)
     case deleteFailed(OSStatus)
 
@@ -96,6 +116,8 @@ public enum KeychainError: Error, LocalizedError {
         switch self {
         case .encodingFailed:
             return "Failed to encode credential"
+        case .emptyCredential:
+            return "API key cannot be empty"
         case .saveFailed(let status):
             return "Failed to save credential (status: \(status))"
         case .deleteFailed(let status):
