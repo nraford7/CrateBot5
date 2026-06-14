@@ -136,6 +136,33 @@ final class TaggingEngineTests: XCTestCase {
         XCTAssertTrue(allDescriptive.contains("Euphoric"))
     }
 
+    func testAcapellaBlockedByNonVocalEssentiaInstrumentSignal() async throws {
+        let engine = try TaggingEngine()
+        let detected = await engine.musicDetectedForAcapellaExclusion(
+            predictedTags: ["Acapella"],
+            essentiaTags: EssentiaTags(instruments: ["synthesizer"])
+        )
+        XCTAssertTrue(detected)
+    }
+
+    func testAcapellaNotBlockedByVocalOnlySignal() async throws {
+        let engine = try TaggingEngine()
+        let detected = await engine.musicDetectedForAcapellaExclusion(
+            predictedTags: ["Acapella"],
+            essentiaTags: EssentiaTags(instruments: ["voice"])
+        )
+        XCTAssertFalse(detected)
+    }
+
+    func testAcapellaBlockedByMusicClassifierTags() async throws {
+        let engine = try TaggingEngine()
+        let detected = await engine.musicDetectedForAcapellaExclusion(
+            predictedTags: ["Acapella", "Broken", "Guitar"],
+            essentiaTags: EssentiaTags()
+        )
+        XCTAssertTrue(detected)
+    }
+
     // MARK: - Model loading with modelName parameter
 
     func testLoadModelWithModelName() async throws {

@@ -789,17 +789,20 @@ struct TaggingView: View {
                 // Load user's field mapping configuration to write tags to correct ID3 frames
                 let tagMappingConfig = TagMappingConfiguration.load()
                 var tagsToWrite = TagsToWrite(overwrite: overwrite, fieldMapping: tagMappingConfig.writeMapping)
+                tagsToWrite.preventAcapellaGenre = shouldPreventAcapellaGenre(result: result)
                 var writtenTags = AppState.WrittenTags()
+                var aiDescriptionError: String?
 
                 if let user = result.userPredictions {
-                    tagsToWrite.genre = user.genre
+                    let genre = allowedGenre(user.genre, preventAcapellaGenre: tagsToWrite.preventAcapellaGenre)
+                    tagsToWrite.genre = genre
                     tagsToWrite.timing = user.timing
                     tagsToWrite.mood = user.mood
                     if !user.descriptive.isEmpty {
                         tagsToWrite.comments = user.descriptive.joined(separator: ", ")
                     }
 
-                    writtenTags.userGenre = user.genre
+                    writtenTags.userGenre = genre
                     writtenTags.userTiming = user.timing
                     writtenTags.userMood = user.mood
                     writtenTags.userDescriptive = user.descriptive
@@ -828,19 +831,21 @@ struct TaggingView: View {
                 // AI descriptions (VibeGeneratorV2). Cache-first when a stable
                 // Stage 1 model version is available; on miss call the LLM;
                 // on success populate all three vibe fields atomically.
-                // On error log + continue with all three fields nil — never
-                // write a partial vibe and never block the rest of the tag pass.
+                // On error, clear stale AI frames and mark the row as errored so
+                // legacy Composer/Description values cannot look freshly generated.
                 if aiDescriptionsEnabled, let generator = vibeGenerator {
+                    tagsToWrite.clearVibeFields = true
                     let trackPath = file.url.path
                     // Skip the cache when stage1ModelVersion is unknown — bucketing
                     // distinct loaded models under a sentinel string would leak
                     // stale vibes across model swaps. The LLM call still runs.
                     let cacheUsable = vibeCache != nil && !stage1Version.isEmpty && stage1Version != "unknown"
                     if cacheUsable, let cache = vibeCache,
-                       let cached = await cache.get(trackPath: trackPath, stage1ModelVersion: stage1Version) {
+                       let cached = await cache.get(trackPath: trackPath, stage1ModelVersion: stage1Version),
+                       let cachedMixHint = cached.mixHint {
                         tagsToWrite.vibeShort = cached.short
                         tagsToWrite.vibeDescription = cached.long
-                        tagsToWrite.mixHint = cached.mixHint
+                        tagsToWrite.mixHint = cachedMixHint
                     } else {
                         let cooccurrence: CooccurrenceContext?
                         if let stats = cooccurrenceStats, let timing = result.timingPrediction?.label {
@@ -879,7 +884,8 @@ struct TaggingView: View {
                                 )
                             }
                         } catch {
-                            logger.warning("Vibe generation failed for \(file.url.lastPathComponent): \(error.localizedDescription) — vibe fields left empty")
+                            aiDescriptionError = "AI descriptions failed; stale AI fields cleared. \(error.localizedDescription)"
+                            logger.warning("Vibe generation failed for \(file.url.lastPathComponent): \(error.localizedDescription) — stale vibe fields cleared")
                         }
                     }
                 }
@@ -888,7 +894,8 @@ struct TaggingView: View {
 
                 await MainActor.run {
                     if index < appState.queuedFiles.count {
-                        appState.queuedFiles[index].status = .complete
+                        appState.queuedFiles[index].status = aiDescriptionError == nil ? .complete : .error
+                        appState.queuedFiles[index].error = aiDescriptionError
                         appState.queuedFiles[index].writtenTags = writtenTags
                     }
                     lastTaggingResult = result
@@ -919,6 +926,42 @@ struct TaggingView: View {
                 appState.showToast("Tagged \(completedCount) file\(completedCount == 1 ? "" : "s"), \(errorCount) failed", kind: .error)
             }
         }
+    }
+
+    private func shouldPreventAcapellaGenre(result: TaggingResult) -> Bool {
+        if result.essentiaTags.instruments.contains(where: isNonVocalMusicSignal) {
+            return true
+        }
+        guard let user = result.userPredictions else {
+            return false
+        }
+        if let genre = user.genre, !isAcapellaGenre(genre) {
+            return true
+        }
+        return user.bassType != nil
+            || !user.rhythm.isEmpty
+            || !user.style.isEmpty
+            || !user.instruments.isEmpty
+    }
+
+    private func allowedGenre(_ genre: String?, preventAcapellaGenre: Bool) -> String? {
+        guard let genre else { return nil }
+        if preventAcapellaGenre && isAcapellaGenre(genre) {
+            return nil
+        }
+        return genre
+    }
+
+    private func isAcapellaGenre(_ value: String) -> Bool {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare("Acapella") == .orderedSame
+    }
+
+    private func isNonVocalMusicSignal(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return !lower.contains("voice")
+            && !lower.contains("vocal")
+            && !lower.contains("acapella")
     }
 }
 

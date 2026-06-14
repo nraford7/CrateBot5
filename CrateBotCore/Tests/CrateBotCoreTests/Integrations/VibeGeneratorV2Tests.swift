@@ -269,7 +269,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
     func testShortRejectsSourceTagRepeats() async {
         let badDescription =
             #"{"short":"HOUSE CLOCKWORK RISES BENEATH","long":"Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete."}"#
-        let mock = MockClient(replies: [badDescription, Self.validMovementReply])
+        let mock = MockClient(replies: [badDescription, badDescription])
         let gen = VibeGeneratorV2(client: mock)
         do {
             _ = try await gen.generate(inputs: sampleInputs)
@@ -287,7 +287,7 @@ final class VibeGeneratorV2Tests: XCTestCase {
     func testLongRejectsSourceTagRepeats() async {
         let badDescription =
             #"{"short":"EMBER CLOCKWORK RISES BENEATH","long":"Dark pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete."}"#
-        let mock = MockClient(replies: [badDescription, Self.validMovementReply])
+        let mock = MockClient(replies: [badDescription, badDescription])
         let gen = VibeGeneratorV2(client: mock)
         do {
             _ = try await gen.generate(inputs: sampleInputs)
@@ -300,6 +300,41 @@ final class VibeGeneratorV2Tests: XCTestCase {
         } catch {
             XCTFail("Expected VibeGeneratorError.validationFailed, got \(error)")
         }
+    }
+
+    func testLongRejectsArticleLeadAndGenericTrackNoun() async {
+        let badDescription =
+            #"{"short":"EMBER CLOCKWORK RISES BENEATH","long":"A vibrant track glows with crowded heat and chrome sparks."}"#
+        let mock = MockClient(replies: [badDescription, badDescription])
+        let gen = VibeGeneratorV2(client: mock)
+        do {
+            _ = try await gen.generate(inputs: sampleInputs)
+            XCTFail("Expected validationFailed error")
+        } catch let error as VibeGeneratorError {
+            switch error {
+            case .validationFailed: break
+            default: XCTFail("Expected validationFailed, got \(error)")
+            }
+        } catch {
+            XCTFail("Expected VibeGeneratorError.validationFailed, got \(error)")
+        }
+    }
+
+    func testValidationFailureRetriesDescriptionWithRepairHint() async throws {
+        let badDescription =
+            #"{"short":"EMBER CLOCKWORK","long":"Velvet pressure hangs in a rainlit stairwell, metallic edges brushing warm concrete."}"#
+        let spy = SpyClient()
+        spy.replies = [badDescription, Self.validDescriptionReply, Self.validMovementReply]
+        let gen = VibeGeneratorV2(client: spy)
+
+        let result = try await gen.generate(inputs: sampleInputs)
+
+        XCTAssertEqual(result.short, "EMBER CLOCKWORK RISES BENEATH")
+        XCTAssertEqual(result.mixHint, "2AM bridge after rough drums before melodic release")
+        XCTAssertEqual(spy.maxTokens, [600, 600, 300])
+        XCTAssertEqual(spy.prompts.count, 3)
+        XCTAssertTrue(spy.prompts[1].contains("Previous response failed validation"))
+        XCTAssertTrue(spy.prompts[1].contains("short must be 4 or 5 words"))
     }
 
     func testMovementRejectsCompletedDescriptionRepeats() async {

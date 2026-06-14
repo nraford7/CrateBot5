@@ -149,6 +149,9 @@ public actor ID3Manager {
             // Read vibe description from subtitle frame (TIT3)
             let vibeDescription = reader.subtitle()
 
+            // Read mix hint from iTunes Movement Name frame (MVNM)
+            let mixHint = reader.iTunesMovementName()
+
             // Read scene from file owner frame (TOWN)
             let extractedScene = reader.fileOwner()
 
@@ -192,6 +195,7 @@ public actor ID3Manager {
                 comments: comments,
                 vibeShort: vibeShort,
                 vibeDescription: vibeDescription,
+                mixHint: mixHint,
                 scene: extractedScene,
                 hook: extractedHook,
                 bpm: bpm.map { String($0) },
@@ -269,9 +273,11 @@ public actor ID3Manager {
 
                 // Handle genre - write to configured frame (default: TCON)
                 let existingGenre = reader.genre()
-                if let genre = tags.genre, tags.overwrite || existingGenre == nil {
+                let genreToWrite = allowedGenre(tags.genre, preventAcapellaGenre: tags.preventAcapellaGenre)
+                if let genre = genreToWrite, tags.overwrite || existingGenre == nil {
                     builder = writeStringToFrame(builder, value: genre, frame: mapping.genreFrame, asGenre: true)
-                } else if let existingGenre {
+                } else if let existingGenre,
+                          !shouldDropExistingGenre(existingGenre.description, tags: tags) {
                     builder = builder.genre(frame: ID3FrameGenre(
                         genre: existingGenre.identifier,
                         description: existingGenre.description
@@ -334,14 +340,16 @@ public actor ID3Manager {
                 // (artist/album/etc.) — when the user re-runs vibe generation, they
                 // want the new output, not the previous one preserved.
                 //
-                // When the new value is nil (e.g. generation skipped or failed), the
-                // existing frame is preserved so the column doesn't suddenly blank.
+                // When the new value is nil and `clearVibeFields` is false (e.g.
+                // generation skipped), the existing frame is preserved so the column
+                // doesn't suddenly blank. When `clearVibeFields` is true, nil means
+                // generation was enabled but failed, so stale legacy values are removed.
 
                 // vibe short → composer frame (TCOM, "Composer" column)
                 let existingComposer = reader.composer()
                 if let vibeShort = tags.vibeShort {
                     builder = builder.composer(frame: ID3FrameWithStringContent(content: vibeShort))
-                } else if let existingComposer {
+                } else if !tags.clearVibeFields, let existingComposer {
                     builder = builder.composer(frame: ID3FrameWithStringContent(content: existingComposer))
                 }
 
@@ -349,7 +357,7 @@ public actor ID3Manager {
                 let existingSubtitle = reader.subtitle()
                 if let vibeDescription = tags.vibeDescription {
                     builder = builder.subtitle(frame: ID3FrameWithStringContent(content: vibeDescription))
-                } else if let existingSubtitle {
+                } else if !tags.clearVibeFields, let existingSubtitle {
                     builder = builder.subtitle(frame: ID3FrameWithStringContent(content: existingSubtitle))
                 }
 
@@ -359,7 +367,7 @@ public actor ID3Manager {
                 let existingMovement = reader.iTunesMovementName()
                 if let mixHint = tags.mixHint {
                     builder = builder.iTunesMovementName(frame: ID3FrameWithStringContent(content: mixHint))
-                } else if let existingMovement {
+                } else if !tags.clearVibeFields, let existingMovement {
                     builder = builder.iTunesMovementName(frame: ID3FrameWithStringContent(content: existingMovement))
                 }
 
@@ -424,7 +432,7 @@ public actor ID3Manager {
                 }
             } else {
                 // No existing tag - just write new values using configured mapping
-                if let genre = tags.genre {
+                if let genre = allowedGenre(tags.genre, preventAcapellaGenre: tags.preventAcapellaGenre) {
                     builder = writeStringToFrame(builder, value: genre, frame: mapping.genreFrame, asGenre: true)
                 }
                 if let subGenre = tags.subGenre {
@@ -529,6 +537,25 @@ public actor ID3Manager {
     }
 
     // MARK: - Private Helpers for Configurable Field Mapping
+
+    private func allowedGenre(_ value: String?, preventAcapellaGenre: Bool) -> String? {
+        guard let value else { return nil }
+        if preventAcapellaGenre && Self.isAcapellaGenre(value) {
+            return nil
+        }
+        return value
+    }
+
+    private func shouldDropExistingGenre(_ value: String?, tags: TagsToWrite) -> Bool {
+        tags.preventAcapellaGenre && Self.isAcapellaGenre(value)
+    }
+
+    private static func isAcapellaGenre(_ value: String?) -> Bool {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return false
+        }
+        return value.caseInsensitiveCompare("Acapella") == .orderedSame
+    }
 
     /// Writes a string value to the specified frame type
     private func writeStringToFrame(

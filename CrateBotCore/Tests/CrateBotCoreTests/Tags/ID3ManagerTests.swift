@@ -53,6 +53,7 @@ final class ID3ManagerTests: XCTestCase {
         XCTAssertEqual(TagMapping.comments, "COMM")
         XCTAssertEqual(TagMapping.vibeShort, "TCOM")
         XCTAssertEqual(TagMapping.vibeDescription, "TIT3")
+        XCTAssertEqual(TagMapping.mixHint, "MVNM")
         XCTAssertEqual(TagMapping.scene, "TOWN")
         XCTAssertEqual(TagMapping.hook, "TEXT")
     }
@@ -70,6 +71,7 @@ final class ID3ManagerTests: XCTestCase {
         XCTAssertNil(tags.comments)
         XCTAssertNil(tags.vibeShort)
         XCTAssertNil(tags.vibeDescription)
+        XCTAssertNil(tags.mixHint)
         XCTAssertNil(tags.scene)
         XCTAssertNil(tags.hook)
     }
@@ -84,6 +86,7 @@ final class ID3ManagerTests: XCTestCase {
             comments: "Great track",
             vibeShort: "Uplifting",
             vibeDescription: "Perfect for summer parties",
+            mixHint: "After a rough drop",
             scene: "Club",
             hook: "Catchy melody"
         )
@@ -96,6 +99,7 @@ final class ID3ManagerTests: XCTestCase {
         XCTAssertEqual(tags.comments, "Great track")
         XCTAssertEqual(tags.vibeShort, "Uplifting")
         XCTAssertEqual(tags.vibeDescription, "Perfect for summer parties")
+        XCTAssertEqual(tags.mixHint, "After a rough drop")
         XCTAssertEqual(tags.scene, "Club")
         XCTAssertEqual(tags.hook, "Catchy melody")
     }
@@ -120,11 +124,14 @@ final class ID3ManagerTests: XCTestCase {
         XCTAssertNil(tags.comments)
         XCTAssertNil(tags.vibeShort)
         XCTAssertNil(tags.vibeDescription)
+        XCTAssertNil(tags.mixHint)
         XCTAssertNil(tags.scene)
         XCTAssertNil(tags.hook)
         XCTAssertNil(tags.essentiaGenres)
         XCTAssertNil(tags.essentiaMoods)
         XCTAssertNil(tags.essentiaInstruments)
+        XCTAssertFalse(tags.clearVibeFields)
+        XCTAssertFalse(tags.preventAcapellaGenre)
         XCTAssertTrue(tags.overwrite)
     }
 
@@ -160,6 +167,21 @@ final class ID3ManagerTests: XCTestCase {
 
     func testTagsToWriteIsNotEmptyWhenVibeDescriptionSet() {
         let tags = TagsToWrite(vibeDescription: "Perfect for parties")
+        XCTAssertFalse(tags.isEmpty)
+    }
+
+    func testTagsToWriteIsNotEmptyWhenMixHintSet() {
+        let tags = TagsToWrite(mixHint: "2AM bridge after rough drums")
+        XCTAssertFalse(tags.isEmpty)
+    }
+
+    func testTagsToWriteIsNotEmptyWhenClearVibeFieldsSet() {
+        let tags = TagsToWrite(clearVibeFields: true)
+        XCTAssertFalse(tags.isEmpty)
+    }
+
+    func testTagsToWriteIsNotEmptyWhenPreventAcapellaGenreSet() {
+        let tags = TagsToWrite(preventAcapellaGenre: true)
         XCTAssertFalse(tags.isEmpty)
     }
 
@@ -584,6 +606,82 @@ final class ID3ManagerTests: XCTestCase {
         XCTAssertEqual(readTags.publisher, "New Genre")
         XCTAssertEqual(readTags.conductor, "New Mood")
         XCTAssertEqual(readTags.encodedBy, "New Instruments")
+    }
+
+    func testID3ManagerWriteAndReadVibeFieldsIncludingMovement() async throws {
+        let manager = ID3Manager()
+
+        let (tempURL, cleanup) = try createWritableTestMP3()
+        defer { cleanup() }
+
+        let tagsToWrite = TagsToWrite(
+            vibeShort: "EMBER CLOCKWORK RISES BENEATH",
+            vibeDescription: "Velvet pressure hangs in a rainlit stairwell.",
+            mixHint: "2AM bridge after rough drums"
+        )
+
+        try await manager.writeTags(tagsToWrite, to: tempURL)
+
+        let readTags = try await manager.readTags(from: tempURL)
+        XCTAssertEqual(readTags.vibeShort, "EMBER CLOCKWORK RISES BENEATH")
+        XCTAssertEqual(readTags.vibeDescription, "Velvet pressure hangs in a rainlit stairwell.")
+        XCTAssertEqual(readTags.mixHint, "2AM bridge after rough drums")
+    }
+
+    func testID3ManagerClearVibeFieldsRemovesStaleComposerSubtitleAndMovement() async throws {
+        let manager = ID3Manager()
+
+        let (tempURL, cleanup) = try createWritableTestMP3()
+        defer { cleanup() }
+
+        try await manager.writeTags(
+            TagsToWrite(
+                vibeShort: "OLD THREE WORDS",
+                vibeDescription: "This stale track description should disappear.",
+                mixHint: "old movement"
+            ),
+            to: tempURL
+        )
+
+        try await manager.writeTags(TagsToWrite(clearVibeFields: true), to: tempURL)
+
+        let readTags = try await manager.readTags(from: tempURL)
+        XCTAssertNil(readTags.vibeShort)
+        XCTAssertNil(readTags.vibeDescription)
+        XCTAssertNil(readTags.mixHint)
+    }
+
+    func testID3ManagerPreventAcapellaGenreRemovesExistingAcapella() async throws {
+        let manager = ID3Manager()
+
+        let (tempURL, cleanup) = try createWritableTestMP3()
+        defer { cleanup() }
+
+        try await manager.writeTags(TagsToWrite(genre: "Acapella"), to: tempURL)
+        let initialTags = try await manager.readTags(from: tempURL)
+        XCTAssertEqual(initialTags.genre, "Acapella")
+
+        try await manager.writeTags(TagsToWrite(preventAcapellaGenre: true), to: tempURL)
+
+        let readTags = try await manager.readTags(from: tempURL)
+        XCTAssertNil(readTags.genre)
+    }
+
+    func testID3ManagerPreventAcapellaGenreSkipsIncomingAcapella() async throws {
+        let manager = ID3Manager()
+
+        let (tempURL, cleanup) = try createWritableTestMP3()
+        defer { cleanup() }
+        let originalGenre = try await manager.readTags(from: tempURL).genre
+
+        try await manager.writeTags(
+            TagsToWrite(genre: "Acapella", preventAcapellaGenre: true),
+            to: tempURL
+        )
+
+        let readTags = try await manager.readTags(from: tempURL)
+        XCTAssertEqual(readTags.genre, originalGenre)
+        XCTAssertNotEqual(readTags.genre, "Acapella")
     }
 
     // MARK: - Atomic Write Safety Tests

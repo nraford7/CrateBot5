@@ -123,6 +123,9 @@ public struct ExtractedTags: Sendable, Equatable {
     /// Detailed vibe description (from subtitle frame TIT3)
     public var vibeDescription: String?
 
+    /// DJ mix-context hint (from iTunes Movement Name frame MVNM)
+    public var mixHint: String?
+
     /// Scene tag for track classification (TOWN)
     public var scene: String?
 
@@ -162,6 +165,7 @@ public struct ExtractedTags: Sendable, Equatable {
         comments: String? = nil,
         vibeShort: String? = nil,
         vibeDescription: String? = nil,
+        mixHint: String? = nil,
         scene: String? = nil,
         hook: String? = nil,
         bpm: String? = nil,
@@ -182,6 +186,7 @@ public struct ExtractedTags: Sendable, Equatable {
         self.comments = comments
         self.vibeShort = vibeShort
         self.vibeDescription = vibeDescription
+        self.mixHint = mixHint
         self.scene = scene
         self.hook = hook
         self.bpm = bpm
@@ -308,6 +313,16 @@ public struct TagsToWrite: Sendable, Equatable {
     /// DJ mix-context hint (to iTunes Movement Name frame MVNM)
     public var mixHint: String?
 
+    /// When true, nil AI vibe fields mean "clear any existing AI frames" rather
+    /// than "preserve existing frames". Used when AI generation was enabled for
+    /// a pass but failed validation/API, so stale legacy descriptions cannot
+    /// masquerade as fresh output.
+    public var clearVibeFields: Bool
+
+    /// When true, the writer must not write or preserve `Acapella` in the genre
+    /// frame. Set when any non-vocal music signal was detected for the track.
+    public var preventAcapellaGenre: Bool
+
     /// Scene tag for track classification
     public var scene: String?
 
@@ -342,6 +357,8 @@ public struct TagsToWrite: Sendable, Equatable {
         vibeShort: String? = nil,
         vibeDescription: String? = nil,
         mixHint: String? = nil,
+        clearVibeFields: Bool = false,
+        preventAcapellaGenre: Bool = false,
         scene: String? = nil,
         hook: String? = nil,
         essentiaGenres: String? = nil,
@@ -358,6 +375,8 @@ public struct TagsToWrite: Sendable, Equatable {
         self.vibeShort = vibeShort
         self.vibeDescription = vibeDescription
         self.mixHint = mixHint
+        self.clearVibeFields = clearVibeFields
+        self.preventAcapellaGenre = preventAcapellaGenre
         self.scene = scene
         self.hook = hook
         self.essentiaGenres = essentiaGenres
@@ -377,6 +396,8 @@ public struct TagsToWrite: Sendable, Equatable {
         vibeShort == nil &&
         vibeDescription == nil &&
         mixHint == nil &&
+        !clearVibeFields &&
+        !preventAcapellaGenre &&
         scene == nil &&
         hook == nil &&
         essentiaGenres == nil &&

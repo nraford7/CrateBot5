@@ -894,15 +894,9 @@ public actor TaggingEngine {
         }
 
         // Acapella sanity gate: a track is only an acapella when it carries
-        // vocals AND no instrumentation. If Essentia detected any instruments
-        // (vocal classifiers excluded), drop "Acapella" from the predicted
-        // set so it cannot win the Genre slot. This is a precision floor — a
-        // misfire here is more visible to the user than a missed acapella.
-        let essentiaInstrumentSignals = essentiaTags.instruments.filter { name in
-            let lower = name.lowercased()
-            return !lower.contains("voice") && !lower.contains("vocal") && !lower.contains("acapella")
-        }
-        if !essentiaInstrumentSignals.isEmpty {
+        // vocals and no detected music. Any non-vocal instrument, bass/rhythm/
+        // style/instrument classifier, or non-Acapella genre blocks Acapella.
+        if musicDetectedForAcapellaExclusion(predictedTags: predictedTags, essentiaTags: essentiaTags) {
             predictedTags.removeAll { $0.lowercased() == "acapella" }
         }
 
@@ -1142,6 +1136,32 @@ public actor TaggingEngine {
     }
 
     // MARK: - Private Helpers
+
+    func musicDetectedForAcapellaExclusion(predictedTags: [String], essentiaTags: EssentiaTags) -> Bool {
+        if essentiaTags.instruments.contains(where: Self.isNonVocalMusicSignal) {
+            return true
+        }
+
+        if predictedTags.contains(where: { tag in
+            let lower = tag.lowercased()
+            return lower != "acapella" && tagCategoryLookup[lower] == "genre"
+        }) {
+            return true
+        }
+
+        let organized = DescriptiveTagMapping.organize(predictedTags)
+        let musicBuckets: [DescriptiveSubCategory] = [
+            .bassType, .rhythm, .style, .instruments
+        ]
+        return musicBuckets.contains { !(organized[$0] ?? []).isEmpty }
+    }
+
+    static func isNonVocalMusicSignal(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return !lower.contains("voice")
+            && !lower.contains("vocal")
+            && !lower.contains("acapella")
+    }
 
     /// Categorize predicted tags into genre, timing, mood, and structured descriptive based on model metadata
     private func categorizePredictions(_ tags: [String]) -> UserTagPredictions {

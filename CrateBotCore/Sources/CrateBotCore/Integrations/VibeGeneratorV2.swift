@@ -108,6 +108,7 @@ public actor VibeGeneratorV2 {
 
     private let client: VibeChatClient
     private let logger = Logger(subsystem: "com.cratebot", category: "VibeGeneratorV2")
+    private static let maxGenerationAttempts = 2
 
     public init(client: VibeChatClient) {
         self.client = client
@@ -119,31 +120,69 @@ public actor VibeGeneratorV2 {
     /// generated in a second pass that sees the completed fields, so its role is
     /// DJ placement/use rather than another description.
     public func generate(inputs: VibeGenerationInputs) async throws -> VibeGenerationResult {
-        let (descriptionSystem, descriptionPrompt) = Self.composeDescriptionPrompts(inputs: inputs)
-        let descriptionRaw = try await complete(
-            prompt: descriptionPrompt,
-            system: descriptionSystem,
-            maxTokens: 600
-        )
-        let description = try Self.decodeJSONObject(ShortLongWireResponse.self, from: descriptionRaw)
-        let short = Self.normalizeSpaces(description.short)
-        let long = Self.normalizeSpaces(description.long)
-        try Self.validateShort(short, inputs: inputs, long: long)
-        try Self.validateLong(long, inputs: inputs, short: short)
+        var descriptionRepair: String?
+        var resolvedDescription: (short: String, long: String)?
+        var lastDescriptionError: Error?
+        for _ in 0..<Self.maxGenerationAttempts {
+            let (descriptionSystem, descriptionPrompt) = Self.composeDescriptionPrompts(
+                inputs: inputs,
+                repairHint: descriptionRepair
+            )
+            let descriptionRaw = try await complete(
+                prompt: descriptionPrompt,
+                system: descriptionSystem,
+                maxTokens: 600
+            )
+            do {
+                let description = try Self.decodeJSONObject(ShortLongWireResponse.self, from: descriptionRaw)
+                let short = Self.normalizeSpaces(description.short)
+                let long = Self.normalizeSpaces(description.long)
+                try Self.validateShort(short, inputs: inputs, long: long)
+                try Self.validateLong(long, inputs: inputs, short: short)
+                resolvedDescription = (short, long)
+                break
+            } catch let error as VibeGeneratorError {
+                lastDescriptionError = error
+                guard case .validationFailed(let detail) = error else { throw error }
+                descriptionRepair = detail
+            }
+        }
+        guard let resolvedDescription else {
+            throw lastDescriptionError ?? VibeGeneratorError.generationFailed("description generation did not produce valid output")
+        }
+        let short = resolvedDescription.short
+        let long = resolvedDescription.long
 
-        let (movementSystem, movementPrompt) = Self.composeMovementPrompts(
-            inputs: inputs,
-            short: short,
-            long: long
-        )
-        let movementRaw = try await complete(
-            prompt: movementPrompt,
-            system: movementSystem,
-            maxTokens: 300
-        )
-        let movement = try Self.decodeJSONObject(MovementWireResponse.self, from: movementRaw)
-        let mixHint = Self.normalizeSpaces(movement.mix_hint)
-        try Self.validateMovement(mixHint, inputs: inputs, short: short, long: long)
+        var movementRepair: String?
+        var resolvedMixHint: String?
+        var lastMovementError: Error?
+        for _ in 0..<Self.maxGenerationAttempts {
+            let (movementSystem, movementPrompt) = Self.composeMovementPrompts(
+                inputs: inputs,
+                short: short,
+                long: long,
+                repairHint: movementRepair
+            )
+            let movementRaw = try await complete(
+                prompt: movementPrompt,
+                system: movementSystem,
+                maxTokens: 300
+            )
+            do {
+                let movement = try Self.decodeJSONObject(MovementWireResponse.self, from: movementRaw)
+                let mixHint = Self.normalizeSpaces(movement.mix_hint)
+                try Self.validateMovement(mixHint, inputs: inputs, short: short, long: long)
+                resolvedMixHint = mixHint
+                break
+            } catch let error as VibeGeneratorError {
+                lastMovementError = error
+                guard case .validationFailed(let detail) = error else { throw error }
+                movementRepair = detail
+            }
+        }
+        guard let mixHint = resolvedMixHint else {
+            throw lastMovementError ?? VibeGeneratorError.generationFailed("movement generation did not produce valid output")
+        }
 
         return VibeGenerationResult(
             short: short,
@@ -198,12 +237,22 @@ public actor VibeGeneratorV2 {
     /// The movement hint is deliberately omitted here. It is generated in a
     /// second pass after these two fields exist.
     internal static func composeDescriptionPrompts(
-        inputs: VibeGenerationInputs
+        inputs: VibeGenerationInputs,
+        repairHint: String? = nil
     ) -> (system: String, user: String) {
         let forbidden = Self.forbiddenSourceTokens(inputs: inputs)
         let forbiddenLine = forbidden.isEmpty
             ? ""
             : " FORBIDDEN source words for THIS track: \(forbidden.joined(separator: ", "))."
+        let repairBlock = repairHint.map {
+            """
+
+            Previous response failed validation:
+            \($0)
+
+            Return corrected JSON only.
+            """
+        } ?? ""
 
         let system = """
         You are a veteran DJ tagging a record crate. Given a JSON analysis of one \
@@ -231,7 +280,8 @@ public actor VibeGeneratorV2 {
         - `short`: 4 or 5 words, ALL CAPS, no punctuation, no numbers, no articles. \
           Use short concrete/symbolic words. Do not use any source word or `long` word.\(forbiddenLine)
         - `long`: 6 to 32 words. Evocative and sensory, not a tag summary, not a \
-          music-review inventory, and not DJ instructions. No "this track is" phrasing. \
+          music-review inventory, and not DJ instructions. Do not start with \
+          "This", "A", "An", or "The"; do not use "track", "song", or "tune". \
           Do not use any source word or `short` word.\(forbiddenLine)
         - Respond with the JSON object only. No leading prose. No code fences.
         """
@@ -240,7 +290,7 @@ public actor VibeGeneratorV2 {
         Track analysis:
         \(inputs.promptPayload())
 
-        Write `short` and `long`.
+        Write `short` and `long`.\(repairBlock)
         """
 
         return (system, user)
@@ -250,13 +300,23 @@ public actor VibeGeneratorV2 {
     internal static func composeMovementPrompts(
         inputs: VibeGenerationInputs,
         short: String,
-        long: String
+        long: String,
+        repairHint: String? = nil
     ) -> (system: String, user: String) {
         let forbidden = Self.forbiddenSourceTokens(inputs: inputs)
         let completed = Self.completedDescriptionsPayload(short: short, long: long)
         let forbiddenLine = forbidden.isEmpty
             ? ""
             : " Also avoid these source words: \(forbidden.joined(separator: ", "))."
+        let repairBlock = repairHint.map {
+            """
+
+            Previous response failed validation:
+            \($0)
+
+            Return corrected JSON only.
+            """
+        } ?? ""
 
         let system = """
         You are writing the Movement Name / DJ-use field for one electronic track. \
@@ -295,7 +355,7 @@ public actor VibeGeneratorV2 {
         Completed fields:
         \(completed)
 
-        Write `mix_hint`.
+        Write `mix_hint`.\(repairBlock)
         """
 
         return (system, user)
@@ -370,6 +430,14 @@ public actor VibeGeneratorV2 {
         "prime", "peak-time"
     ]
 
+    private static let longBannedLeadingTokens: Set<String> = [
+        "this", "that", "these", "those", "a", "an", "the"
+    ]
+
+    private static let longBannedReviewTokens: Set<String> = [
+        "track", "song", "tune"
+    ]
+
     private static let movementCueTokens: Set<String> = [
         "drop", "slot", "bridge", "open", "cut", "follow", "save", "pair",
         "hold", "stack", "after", "before", "between", "from", "into", "when",
@@ -429,9 +497,16 @@ public actor VibeGeneratorV2 {
             throw VibeGeneratorError.validationFailed("long must be 6 to 32 words: \(long)")
         }
         let lower = long.lowercased()
-        let badPrefixes = ["this track", "this is", "it is", "it's", "a track", "the track"]
+        let badPrefixes = ["this is", "it is", "it's"]
         if badPrefixes.contains(where: { lower.hasPrefix($0) }) {
             throw VibeGeneratorError.validationFailed("long uses summary/prose filler: \(long)")
+        }
+        if let first = words.first, longBannedLeadingTokens.contains(first) {
+            throw VibeGeneratorError.validationFailed("long starts with banned article/demonstrative '\(first)'")
+        }
+        let reviewOverlap = Set(words).intersection(longBannedReviewTokens)
+        if let token = reviewOverlap.sorted().first {
+            throw VibeGeneratorError.validationFailed("long uses generic review noun '\(token)'")
         }
         let instructionOverlap = Set(words).intersection(longInstructionTokens)
         if let token = instructionOverlap.sorted().first {
